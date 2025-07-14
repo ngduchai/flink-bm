@@ -1,0 +1,29 @@
+taskmanager:
+  memory:
+    process:
+      size: 8192m
+  bind-host: 0.0.0.0
+  rpc:
+    port: 3216
+  numberOfTaskSlots: 1
+jobmanager:
+  bind-host: 0.0.0.0
+  execution:
+    failover-strategy: region
+  rpc:
+    address: x3006c0s1b1n0
+    port: 6123
+  memory:
+    process:
+      size: 8192m
+restart-strategy: fixed-delay
+restart-strategy.fixed-delay.attempts: 1000
+restart-strategy.fixed-delay.delay: 10s
+parallelism:
+  default: 1
+rest:
+  address: x3006c0s1b1n0
+env:
+  java:
+    opts:
+      all: --add-exports=java.base/sun.net.util=ALL-UNNAMED --add-exports=java.rmi/sun.rmi.registry=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED --add-exports=java.security.jgss/sun.security.krb5=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.text=ALL-UNNAMED --add-opens=java.base/java.time=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.locks=ALL-UNNAMED
