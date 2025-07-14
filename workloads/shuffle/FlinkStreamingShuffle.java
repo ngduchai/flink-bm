@@ -5,6 +5,7 @@ import org.apache.flink.api.common.serialization.SimpleStringEncoder;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.util.ParameterTool;
 import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.api.common.typeinfo.Types;
 
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -44,6 +45,7 @@ public class FlinkStreamingShuffle {
                 Thread.sleep(rateMs); // throttle generation
                 return Tuple2.of(key, val);
             })
+            .returns(Types.TUPLE(Types.STRING, Types.INT))
             .setParallelism(sourceParallelism);
 
         // Sink operator: compute CRC32 checksum and write to file
