@@ -17,13 +17,13 @@ public class FlinkStreamingShuffle {
     public static void main(String[] args) throws Exception {
         // parse named parameters
         final ParameterTool params = ParameterTool.fromArgs(args);
-        if (!params.has("rateMs") || !params.has("sourceParallelism") || !params.has("sinkParallelism")) {
-            System.err.println("Usage: --rateMs <ms> --sourceParallelism <int> --sinkParallelism <int> [--maxRecords <long>]");
+        if (!params.has("rateMs") || !params.has("sourceParallelism") || !params.has("downstreamParallelism")) {
+            System.err.println("Usage: --rateMs <ms> --sourceParallelism <int> --downstreamParallelism <int> [--maxRecords <long>]");
             return;
         }
         final long rateMs = params.getLong("rateMs");
         final int sourceParallelism = params.getInt("sourceParallelism");
-        final int sinkParallelism = params.getInt("sinkParallelism");
+        final int sinkParallelism = params.getInt("downstreamParallelism");
         final long maxRecords = params.getLong("maxRecords", Long.MAX_VALUE);
 
         // ensure output directory exists
