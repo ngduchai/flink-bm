@@ -4,6 +4,7 @@ import org.apache.flink.connector.file.sink.FileSink;
 import org.apache.flink.api.common.serialization.SimpleStringEncoder;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.util.ParameterTool;
+import org.apache.flink.streaming.api.datastream.DataStream;
 
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -51,7 +52,11 @@ public class FlinkStreamingShuffle {
             .build();
 
         source
-            .shuffle(value -> {
+            .partitionCustom((key, numPartitions) -> {
+                int k = key.hashCode();
+                Random rand = new Random(System.nanoTime() * k);
+                return Math.abs(rand.nextInt(numPartitions));
+            }, value -> {
                 CRC32 crc = new CRC32();
                 crc.update(value.f0.getBytes(StandardCharsets.UTF_8));
                 long checksum = crc.getValue();
@@ -59,8 +64,9 @@ public class FlinkStreamingShuffle {
                 for (int i = 0; i < 1000; i++) {
                     checksum = (checksum << 1) ^ (checksum >> 3);
                 }
-                return value.f0 + "," + value.f1 + "," + checksum;
+                return (int)checksum;  // Fixed cast syntax
             })
+            .map(value -> value.toString())
             .setParallelism(sinkParallelism)
             .sinkTo(sink)
             .setParallelism(1);
