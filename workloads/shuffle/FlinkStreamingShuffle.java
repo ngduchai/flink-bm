@@ -91,6 +91,7 @@ public class FlinkStreamingShuffle {
         // final int numKeys = 20 * sourceParallelism;
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.disableOperatorChaining();
 
         // compute total events/sec from rateMs
         RateLimiterStrategy rateLimiterStrategy = RateLimiterStrategy.perSecond(ratePerSecond * sourceParallelism);
@@ -144,9 +145,11 @@ public class FlinkStreamingShuffle {
         env
             .fromSource(sourceGen, WatermarkStrategy.noWatermarks(), "Custom Key-Value Source")
             .setParallelism(sourceParallelism)
+            .slotSharingGroup("source-group")
             .shuffle()
             .sinkTo(sink)
-            .setParallelism(sinkParallelism);
+            .setParallelism(sinkParallelism)
+            .slotSharingGroup("sink-group");
 
 
         env.execute("Source-to-Sink: Shuffle");
