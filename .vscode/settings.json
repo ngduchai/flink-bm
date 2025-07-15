@@ -1,0 +1,10 @@
+{
+    "java.project.sourcePaths": [
+        "workloads/broadcast",
+        "workloads/join",
+        "workloads/shuffle",
+    ],
+    "java.project.referencedLibraries": [
+        "flink-2.0.0/lib/**/*.jar"
+    ]
+}
