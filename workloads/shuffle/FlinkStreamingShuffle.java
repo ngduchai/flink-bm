@@ -149,6 +149,6 @@ public class FlinkStreamingShuffle {
             .setParallelism(sinkParallelism);
 
 
-        env.execute("Source-to-Sink Workflow with Integrated Computation");
+        env.execute("Source-to-Sink: Shuffle");
     }
 }
