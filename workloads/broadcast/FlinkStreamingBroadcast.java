@@ -19,16 +19,16 @@ public class FlinkStreamingBroadcast {
     public static void main(String[] args) throws Exception {
         // parse named parameters
         final ParameterTool params = ParameterTool.fromArgs(args);
-        if (!params.has("rateMs") || !params.has("sourceParallelism") 
-            || !params.has("downstreamParallelism") || !params.has("downstreamDelayMs")) {
-            System.err.println("Usage: --rateMs <ms> --sourceParallelism <int>"
-                + " --downstreamParallelism <int> --downstreamDelayMs <ms> [--maxRecords <long>]");
+        if (!params.has("ratePerSecond") || !params.has("sourceParallelism") 
+            || !params.has("sinkParallelism") || !params.has("sinkDelayMs")) {
+            System.err.println("Usage: --ratePerSecond <ms> --sourceParallelism <int>"
+                + " --sinkParallelism <int> --sinkDelayMs <ms> [--maxRecords <long>]");
             return;
         }
-        final long rateMs = params.getLong("rateMs");
+        final long ratePerSecond = params.getLong("ratePerSecond");
         final int sourceParallelism = params.getInt("sourceParallelism");
-        final int downstreamParallelism = params.getInt("downstreamParallelism");
-        final long downstreamDelayMs = params.getLong("downstreamDelayMs");
+        final int sinkParallelism = params.getInt("sinkParallelism");
+        final long sinkDelayMs = params.getLong("sinkDelayMs");
         final long maxRecords = params.getLong("maxRecords", Long.MAX_VALUE);
 
         // ensure output directory exists
@@ -52,7 +52,7 @@ public class FlinkStreamingBroadcast {
                 }
                 @Override
                 public Tuple2<String,Integer> map(Long value) throws Exception {
-                    Thread.sleep(rateMs);
+                    Thread.sleep(ratePerSecond);
                     String key = "key" + rand.nextInt(numKeys);
                     int val = rand.nextInt(10);
                     return Tuple2.of(key, val);
@@ -60,7 +60,7 @@ public class FlinkStreamingBroadcast {
             })
             .setParallelism(sourceParallelism);
 
-        // Broadcast: each record to all downstream subtasks
+        // Broadcast: each record to all sink subtasks
         DataStream<Tuple2<String,Integer>> broadcasted = source.broadcast();
 
         // Combine slowdown and checksum formatting
@@ -74,7 +74,7 @@ public class FlinkStreamingBroadcast {
                 @Override
                 public String map(Tuple2<String,Integer> v) throws Exception {
                     if (subtask == 0) {
-                        Thread.sleep(downstreamDelayMs);
+                        Thread.sleep(sinkDelayMs);
                     }
                     CRC32 crc = new CRC32();
                     crc.update(v.f0.getBytes());
@@ -85,7 +85,7 @@ public class FlinkStreamingBroadcast {
                     return v.f0 + "," + v.f1 + "," + c;
                 }
             })
-            .setParallelism(downstreamParallelism);
+            .setParallelism(sinkParallelism);
 
         // Sink: write to single file
         FileSink<String> sink = FileSink

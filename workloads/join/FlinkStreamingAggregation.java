@@ -19,14 +19,14 @@ public class FlinkStreamingAggregation {
     public static void main(String[] args) throws Exception {
         // parse named parameters
         final ParameterTool params = ParameterTool.fromArgs(args);
-        if (!params.has("rateMs") || !params.has("sourceParallelism") || !params.has("downstreamParallelism") || !params.has("downstreamDelayMs")) {
-            System.err.println("Usage: --rateMs <ms> --sourceParallelism <int> --downstreamParallelism <int> --downstreamDelayMs <ms> [--maxRecords <long>]");
+        if (!params.has("ratePerSecond") || !params.has("sourceParallelism") || !params.has("sinkParallelism") || !params.has("sinkDelayMs")) {
+            System.err.println("Usage: --ratePerSecond <ms> --sourceParallelism <int> --sinkParallelism <int> --sinkDelayMs <ms> [--maxRecords <long>]");
             return;
         }
-        final long rateMs = params.getLong("rateMs");
+        final long ratePerSecond = params.getLong("ratePerSecond");
         final int sourceParallelism = params.getInt("sourceParallelism");
-        final int aggParallelism = params.getInt("downstreamParallelism");
-        final long aggDelayMs = params.getLong("downstreamDelayMs");
+        final int aggParallelism = params.getInt("sinkParallelism");
+        final long aggDelayMs = params.getLong("sinkDelayMs");
         final long maxRecords = params.getLong("maxRecords", Long.MAX_VALUE);
 
         // ensure output directory exists
@@ -53,7 +53,7 @@ public class FlinkStreamingAggregation {
 
                 @Override
                 public Tuple2<String, Integer> map(Long value) throws Exception {
-                    Thread.sleep(rateMs);
+                    Thread.sleep(ratePerSecond);
                     String key = "key" + rand.nextInt(numKeys);
                     int val = rand.nextInt(10);
                     return Tuple2.of(key, val);
@@ -74,7 +74,7 @@ public class FlinkStreamingAggregation {
                 @Override
                 public Tuple2<String, Integer> reduce(Tuple2<String, Integer> t1, Tuple2<String, Integer> t2) throws Exception {
                     if (subtaskIndex == 0) {
-                        Thread.sleep(params.getLong("downstreamDelayMs"));
+                        Thread.sleep(params.getLong("sinkDelayMs"));
                     }
                     return Tuple2.of(t1.f0, t1.f1 + t2.f1);
                 }
