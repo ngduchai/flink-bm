@@ -11,6 +11,9 @@ NODENAME=`hostname`
 BASE_RPC_PORT=3216
 BASE_REST_PORT=8180
 
+echo $RPC_PORT > "$ACTIVE_DIR/configs/tmp/$NODENAME.rpc-port"
+echo $NUM_INST > "$ACTIVE_DIR/configs/tmp/$NODENAME.count"
+
 for i in $(seq 1 $NUM_INST); do
   INSTANCE_NAME="$NODENAME-$i"
   CFG_FILE="$ACTIVE_DIR/configs/tmp/$INSTANCE_NAME.yaml"
@@ -30,18 +33,19 @@ for i in $(seq 1 $NUM_INST); do
 
   echo "Starting instance $INSTANCE_NAME: rpc=$RPC_PORT, rest=$REST_PORT"
 
-#  apptainer instance start --cleanenv --fakeroot \
-#	--bind $LOG_DIR:/opt/flink/log \
-#	--bind $CFG_FILE:/opt/flink/conf/config.yaml \
-#	--bind /soft/xalt/:/soft/xalt/ \
-#	flink:latest flink-taskmanager-$INSTANCE_NAME
-#
-#  apptainer exec \
-#        --fakeroot --cleanenv \
-#	instance://flink-taskmanager-$INSTANCE_NAME /opt/flink/bin/taskmanager.sh start-foreground \
-#	> /dev/null 2> /dev/null &
+  #  apptainer instance start --cleanenv --fakeroot \
+  #	--bind $LOG_DIR:/opt/flink/log \
+  #	--bind $CFG_FILE:/opt/flink/conf/config.yaml \
+  #	--bind /soft/xalt/:/soft/xalt/ \
+  #	flink:latest flink-taskmanager-$INSTANCE_NAME
+  #
+  #  apptainer exec \
+  #        --fakeroot --cleanenv \
+  #	instance://flink-taskmanager-$INSTANCE_NAME /opt/flink/bin/taskmanager.sh start-foreground \
+  #	> /dev/null 2> /dev/null &
   bash $ACTIVE_DIR/start-taskmanager-instance.sh $LOG_DIR $CFG_FILE $INSTANCE_NAME
   sleep 5
+
 
 done
 
