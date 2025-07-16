@@ -11,7 +11,7 @@ NODENAME=`hostname`
 BASE_RPC_PORT=3216
 BASE_REST_PORT=8180
 
-echo $RPC_PORT > "$ACTIVE_DIR/configs/tmp/$NODENAME.rpc-port"
+echo $BASE_RPC_PORT > "$ACTIVE_DIR/configs/tmp/$NODENAME.rpc-port"
 echo $NUM_INST > "$ACTIVE_DIR/configs/tmp/$NODENAME.count"
 
 for i in $(seq 1 $NUM_INST); do
