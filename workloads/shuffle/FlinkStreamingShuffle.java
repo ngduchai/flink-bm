@@ -75,7 +75,7 @@ public class FlinkStreamingShuffle {
         // parse named parameters
         final ParameterTool params = ParameterTool.fromArgs(args);
         if (!params.has("ratePerSecond") || !params.has("sourceParallelism") || !params.has("sinkParallelism")) {
-            System.err.println("Usage: --rateMs <ms> --sourceParallelism <int> --sinkParallelism <int> [--maxRecords <long>]");
+            System.err.println("Usage: --rateMs <ms> --sourceParallelism <int> --sinkParallelism <int> [--maxRecords <long> --ckptDuration <ms>");
             return;
         }
         final long ratePerSecond = params.getLong("ratePerSecond");
@@ -83,6 +83,7 @@ public class FlinkStreamingShuffle {
         final int sinkParallelism = params.getInt("sinkParallelism");
         final long sinkDelayMs        = params.getLong("sinkDelayMs", 0L);
         final long maxRecords = params.getLong("maxRecords", Long.MAX_VALUE);  // optional
+        final long ckptDuration = params.getLong("ckptDuration", 0L); // optional
 
         // ensure output directory exists
         Files.createDirectories(Paths.get("outdata"));
@@ -92,6 +93,13 @@ public class FlinkStreamingShuffle {
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.disableOperatorChaining();
+        
+        if (ckptDuration > 0) {
+            System.out.println("Enabling checkpointing with duration: " + ckptDuration + " ms");
+            env.enableCheckpointing(ckptDuration);
+        }else{
+            System.out.println("Checkpointing is disabled");
+        }
 
         // compute total events/sec from rateMs
         RateLimiterStrategy rateLimiterStrategy = RateLimiterStrategy.perSecond(ratePerSecond * sourceParallelism);
