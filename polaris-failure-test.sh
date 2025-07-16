@@ -14,27 +14,28 @@
 DIR=$HOME/diaspora/src/flink
 echo $DIR
 
-taskmanager_per_node=2
-#workload=workloads/shuffle/FlinkStreamingShuffle.jar
+taskmanager_per_node=1
+workload=workloads/shuffle/FlinkStreamingShuffle.jar
 #workload=workloads/join/FlinkStreamingAggregation.jar
-workload=workloads/broadcast/FlinkStreamingBroadcast.jar
-rateMs=100
-sourceParallelism=6
-downstreamParallelism=6
-downstreamDelayMs=0
-maxRecords=12000
+#workload=workloads/broadcast/FlinkStreamingBroadcast.jar
+ratePerSecond=100
+sourceParallelism=1
+sinkParallelism=1
+sinkDelayMs=0
+maxRecords=20000
 
-failure_rates=(100 50)
-recovery_delay=5
+failure_rates=(50 50)
+recovery_delay=0
 
 TOP=`cat $DIR/recent-run`
 
 # Load apptainer for container execution
 source $HOME/load-apptainer.sh
+count=0
 
 for failure_rate in "${failure_rates[@]}"
 do
-    WORKSPACE=$TOP/$failure_rate
+    WORKSPACE=$TOP/$failure_rate-$count
     mkdir -p $WORKSPACE
     cd $WORKSPACE
     echo FAILURE_RATE: $failure_rate =====================================
@@ -43,14 +44,15 @@ do
     echo Start Flink cluster
     bash start-all.sh $taskmanager_per_node
     echo Run the test
-    bash test-failure.sh $failure_rate $recovery_delay $workload \
-    	--rateMs $rateMs \
+    bash test-single-failure.sh $failure_rate $recovery_delay $workload \
+    	--ratePerSecond $ratePerSecond \
 	--sourceParallelism $sourceParallelism \
-	--downstreamParallelism $downstreamParallelism \
-	--downstreamDelayMs $downstreamDelayMs \
+	--sinkParallelism $sinkParallelism \
+	--sinkDelayMs $sinkDelayMs \
 	--maxRecords $maxRecords \
 	> test-log.out 2> test-log.err
     echo Stop Flink cluster
     bash stop-all.sh
     sleep 1
+    count=$((count + 1))
 done
