@@ -29,7 +29,7 @@ restart_task() {
 
   CFG_FILE=$ACTIVE_DIR/configs/tmp/$NEW_INSTANCE_NAME.yaml
   LOG_DIR=$ACTIVE_DIR/log/$NEW_INSTANCE_NAME
-  echo "[${inst}] replace instance $OLD_INSTANCE_NAME with $NEW_INSTANCE_NAME"
+  echo "[${NODENAME}] replace instance $OLD_INSTANCE_NAME with $NEW_INSTANCE_NAME"
 
   cp "$ACTIVE_DIR/configs/tmp/$OLD_INSTANCE_NAME.yaml" "$CFG_FILE"
   RPC_PORT=$(cat "$ACTIVE_DIR/configs/tmp/$NEW_INSTANCE_NAME.rpc-port")
@@ -59,7 +59,7 @@ if (( ${#INSTANCES[@]} > 0 )); then
   apptainer instance stop "$inst"
 
   # Wait  before restart (0 to INTERVAL)
-  OLD_INSTANCE_NAME=${INST_NMS[$idx]}
+  INSTANCE_NAME=${INST_NMS[$idx]}
   restart_task $RECOVER_INTERVAL $INSTANCE_NAME
 else
   echo "[$(date '+%F %T')] No running Apptainer TM instances found"
