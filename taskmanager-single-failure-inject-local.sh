@@ -16,7 +16,6 @@ restart_task() {
   
   delay=$1
   OLD_INSTANCE_NAME=$2
-  NEW_INSTANCE_NAME=$3
   NODENAME=`hostname`
   echo "[${INSTANCE_NAME}] waiting ${delay}s before restart"
   sleep "$delay"
@@ -26,6 +25,7 @@ restart_task() {
   COUNT=$(( COUNT + 1 ))
   RPC_PORT=$(( RPC_PORT + COUNT - 1 ))
   echo $COUNT > "$ACTIVE_DIR/configs/tmp/$NODENAME.count"
+  NEW_INSTANCE_NAME=$NODENAME-$COUNT
 
   CFG_FILE=$ACTIVE_DIR/configs/tmp/$NEW_INSTANCE_NAME.yaml
   LOG_DIR=$ACTIVE_DIR/log/$NEW_INSTANCE_NAME
@@ -60,7 +60,6 @@ if (( ${#INSTANCES[@]} > 0 )); then
 
   # Wait  before restart (0 to INTERVAL)
   OLD_INSTANCE_NAME=${INST_NMS[$idx]}
-  NEW_INSTANCE_NAME=`hostna
   restart_task $RECOVER_INTERVAL $INSTANCE_NAME
 else
   echo "[$(date '+%F %T')] No running Apptainer TM instances found"
