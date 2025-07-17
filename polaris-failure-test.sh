@@ -23,9 +23,9 @@ sourceParallelism=1
 sinkParallelism=1
 sinkDelayMs=0
 maxRecords=20000
-ckptDuration=10000
 
 failure_rates=(100000 50 100 150)
+ckptDurations=(10000 20000 50000)
 recovery_delay=0
 
 TOP=`cat $DIR/recent-run`
@@ -36,25 +36,28 @@ count=0
 
 for failure_rate in "${failure_rates[@]}"
 do
-    WORKSPACE=$TOP/$failure_rate-$count
-    mkdir -p $WORKSPACE
-    cd $WORKSPACE
-    echo FAILURE_RATE: $failure_rate =====================================
-    echo Copy execution scripts from $DIR to workspace $WORKSPACE
-    rsync -av --filter='- /flink*' --filter='- /flink*/**' $DIR/* $WORKSPACE > /dev/null
-    echo Start Flink cluster
-    bash start-all.sh $taskmanager_per_node
-    echo Run the test
-    bash test-single-failure.sh $failure_rate $recovery_delay $workload \
-    	--ratePerSecond $ratePerSecond \
-	--sourceParallelism $sourceParallelism \
-	--sinkParallelism $sinkParallelism \
-	--sinkDelayMs $sinkDelayMs \
-	--maxRecords $maxRecords \
-	--ckptDuration $ckptDuration \
-	> test-log.out 2> test-log.err
-    echo Stop Flink cluster
-    bash stop-all.sh
-    sleep 1
-    count=$((count + 1))
+    for ckptDuration in "${ckptDurations[@]}"
+    do
+        WORKSPACE=$TOP/$failure_rate-$count
+        mkdir -p $WORKSPACE
+        cd $WORKSPACE
+        echo FAILURE_RATE: $failure_rate CKPT_DURATION: $ckptDuration =====================================
+        echo Copy execution scripts from $DIR to workspace $WORKSPACE
+        rsync -av --filter='- /flink*' --filter='- /flink*/**' $DIR/* $WORKSPACE > /dev/null
+        echo Start Flink cluster
+        bash start-all.sh $taskmanager_per_node
+        echo Run the test
+        bash test-single-failure.sh $failure_rate $recovery_delay $workload \
+            --ratePerSecond $ratePerSecond \
+        --sourceParallelism $sourceParallelism \
+        --sinkParallelism $sinkParallelism \
+        --sinkDelayMs $sinkDelayMs \
+        --maxRecords $maxRecords \
+        --ckptDuration $ckptDuration \
+        > test-log.out 2> test-log.err
+        echo Stop Flink cluster
+        bash stop-all.sh
+        sleep 1
+        count=$((count + 1))
+    done
 done
