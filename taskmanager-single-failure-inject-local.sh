@@ -17,11 +17,11 @@ restart_task() {
   delay=$1
   OLD_INSTANCE_NAME=$2
   NODENAME=`hostname`
-  echo "[${INSTANCE_NAME}] waiting ${delay}s before restart"
+  echo "[${NODENAME}] waiting ${delay}s before restart"
   sleep "$delay"
 
-  read $RPC_PORT < "$ACTIVE_DIR/configs/tmp/$NODENAME.rpc-port"
-  read $COUNT < "$ACTIVE_DIR/configs/tmp/$NODENAME.count"
+  read RPC_PORT < "$ACTIVE_DIR/configs/tmp/$NODENAME.rpc-port"
+  read COUNT < "$ACTIVE_DIR/configs/tmp/$NODENAME.count"
   COUNT=$(( COUNT + 1 ))
   RPC_PORT=$(( RPC_PORT + COUNT - 1 ))
   echo $COUNT > "$ACTIVE_DIR/configs/tmp/$NODENAME.count"
