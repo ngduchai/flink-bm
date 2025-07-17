@@ -38,7 +38,7 @@ for failure_rate in "${failure_rates[@]}"
 do
     for ckptDuration in "${ckptDurations[@]}"
     do
-        WORKSPACE=$TOP/$failure_rate-$count
+        WORKSPACE=$TOP/$failure_rate-$ckptDuration-$count
         mkdir -p $WORKSPACE
         cd $WORKSPACE
         echo FAILURE_RATE: $failure_rate CKPT_DURATION: $ckptDuration =====================================
