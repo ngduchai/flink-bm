@@ -23,8 +23,9 @@ sourceParallelism=1
 sinkParallelism=1
 sinkDelayMs=0
 maxRecords=20000
+ckptDuration=10000
 
-failure_rates=(50 50)
+failure_rates=(100000 50 100 150)
 recovery_delay=0
 
 TOP=`cat $DIR/recent-run`
@@ -50,6 +51,7 @@ do
 	--sinkParallelism $sinkParallelism \
 	--sinkDelayMs $sinkDelayMs \
 	--maxRecords $maxRecords \
+	--ckptDuration $ckptDuration \
 	> test-log.out 2> test-log.err
     echo Stop Flink cluster
     bash stop-all.sh
