@@ -25,7 +25,7 @@ sinkDelayMs=0
 maxRecords=20000
 
 failure_rates=(100000 50 100 150)
-ckptDurations=(10000 20000 50000)
+ckptDurations=(0 10000 20000 50000)
 recovery_delay=0
 
 TOP=`cat $DIR/recent-run`
