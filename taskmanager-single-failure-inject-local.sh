@@ -30,14 +30,14 @@ restart_task() {
   CFG_FILE=$ACTIVE_DIR/configs/tmp/$NEW_INSTANCE_NAME.yaml
   LOG_DIR=$ACTIVE_DIR/log/$NEW_INSTANCE_NAME
   echo "[${NODENAME}] replace instance $OLD_INSTANCE_NAME with $NEW_INSTANCE_NAME"
+  mkdir -p "$LOG_DIR"
 
   cp "$ACTIVE_DIR/configs/tmp/$OLD_INSTANCE_NAME.yaml" "$CFG_FILE"
-  RPC_PORT=$(cat "$ACTIVE_DIR/configs/tmp/$NEW_INSTANCE_NAME.rpc-port")
   sed -i '/^taskmanager:/,/^[^ ]/ {
     /^\s\{4\}port:/ s/\(port:\s*\)[0-9]\+/\1'"$RPC_PORT"'/
   }' "$CFG_FILE"
 
-  ssh "$NODENAME" "cd $HOME && source load-apptainer.sh && cd $ACTIVE_DIR && bash start-taskmanager-instance.sh $LOG_DIR $CFG_FILE $INSTANCE_NAME"
+  ssh "$NODENAME" "cd $HOME && source load-apptainer.sh && cd $ACTIVE_DIR && bash start-taskmanager-instance.sh $LOG_DIR $CFG_FILE $NEW_INSTANCE_NAME"
 
 }
 
