@@ -44,11 +44,16 @@ public class FlinkStreamingShuffle {
             SinkWriter<IN> writer = delegate.createWriter(initContext);
 
             return new SinkWriter<IN>() {
+                
+                int recordCount = 0;
+
                 @Override
                 public void write(IN element, Context context) throws IOException, InterruptedException {
                     // only delay in subtask 0
-                    if (thisSubtask == 0) {
+                    recordCount++;
+                    if (thisSubtask == 0 && recordCount % 1000 == 0) {
                         Thread.sleep(delayMs);
+                        recordCount = 0; // reset count after delay
                     }
                     writer.write(element, context);
                 }
@@ -75,7 +80,7 @@ public class FlinkStreamingShuffle {
         // parse named parameters
         final ParameterTool params = ParameterTool.fromArgs(args);
         if (!params.has("ratePerSecond") || !params.has("sourceParallelism") || !params.has("sinkParallelism")) {
-            System.err.println("Usage: --rateMs <ms> --sourceParallelism <int> --sinkParallelism <int> [--maxRecords <long> --ckptDuration <ms>");
+            System.err.println("Usage: --ratePerSecond <ms> --sourceParallelism <int> --sinkParallelism <int> [--maxRecords <long> --ckptDuration <ms>");
             return;
         }
         final long ratePerSecond = params.getLong("ratePerSecond");
