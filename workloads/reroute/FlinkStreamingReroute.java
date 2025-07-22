@@ -26,7 +26,7 @@ import java.nio.file.Paths;
 import java.util.Random;
 import java.util.zip.CRC32;
 
-public class FlinkStreamingCustomReroute {
+public class FlinkStreamingReroute {
 
     /** Delay‐only‐subtask‐0 sink, unchanged. */
     public static class DelayingSink<IN> implements Sink<IN> {
