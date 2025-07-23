@@ -52,7 +52,7 @@ public class FlinkStreamingShuffle {
                     // only delay in subtask 0
                     recordCount++;
                     if (thisSubtask == 0 && recordCount % 1000 == 0) {
-                        Thread.sleep(delayMs);
+                        Thread.sleep(Math.max(delayMs, 1));
                         recordCount = 0; // reset count after delay
                     }else{
                         Thread.sleep(1);

@@ -48,7 +48,7 @@ public class FlinkStreamingReroute {
                 public void write(IN element, Context c) throws IOException, InterruptedException {
                     recordCount++;
                     if (idx == 0 && recordCount % 1000 == 0) {
-                        Thread.sleep(delayMs);
+                        Thread.sleep(Math.max(delayMs, 1));
                         recordCount = 0; // reset count after delay
                     }else{
                         Thread.sleep(1);
