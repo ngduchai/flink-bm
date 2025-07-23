@@ -38,21 +38,19 @@ public class FlinkStreamingReroute {
         }
         @Override
         public SinkWriter<IN> createWriter(WriterInitContext ctx) throws IOException {
-            final int idx = ctx.getTaskInfo().getIndexOfThisSubtask();
+            final int thisSubtask = ctx.getTaskInfo().getIndexOfThisSubtask();
             final SinkWriter<IN> writer = delegate.createWriter(ctx);
             return new SinkWriter<IN>() {
 
-                int recordCount = 0;
+                final int minDelay = 1; // minimum delay in ms
 
                 @Override
                 public void write(IN element, Context c) throws IOException, InterruptedException {
-                    recordCount++;
-                    if (idx == 0 && recordCount % 1000 == 0) {
-                        Thread.sleep(Math.max(delayMs, 1));
-                        recordCount = 0; // reset count after delay
-                    }else{
-                        Thread.sleep(1);
+                    // add delay if subtask is 0
+                    if (thisSubtask == 0) {
+                        Thread.sleep(delayMs);
                     }
+                    Thread.sleep(minDelay);
                     writer.write(element, c);
                 }
                 @Override public void flush(boolean end) throws IOException, InterruptedException {

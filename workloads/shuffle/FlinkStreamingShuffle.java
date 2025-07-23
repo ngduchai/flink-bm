@@ -44,19 +44,16 @@ public class FlinkStreamingShuffle {
             SinkWriter<IN> writer = delegate.createWriter(initContext);
 
             return new SinkWriter<IN>() {
-                
-                int recordCount = 0;
+
+                final int minDelay = 1; // minimum delay in ms
 
                 @Override
                 public void write(IN element, Context context) throws IOException, InterruptedException {
-                    // only delay in subtask 0
-                    recordCount++;
-                    if (thisSubtask == 0 && recordCount % 1000 == 0) {
-                        Thread.sleep(Math.max(delayMs, 1));
-                        recordCount = 0; // reset count after delay
-                    }else{
-                        Thread.sleep(1);
+                    // add delay if subtask is 0
+                    if (thisSubtask == 0) {
+                        Thread.sleep(delayMs);
                     }
+                    Thread.sleep(minDelay);
                     writer.write(element, context);
                 }
 
