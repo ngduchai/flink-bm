@@ -8,7 +8,6 @@ import TraceSerializer
 import h5py as h5
 import dxchange
 import tomopy as tp
-from pymargo.core import Engine
 import csv
 import math
 import logging
@@ -17,6 +16,7 @@ from pyflink.common import WatermarkStrategy, Encoder, Types
 from pyflink.datastream import StreamExecutionEnvironment, RuntimeExecutionMode
 from pyflink.datastream.functions import SourceFunction, FlatMapFunction
 
+import sirt_ops
 
 def parse_arguments():
   parser = argparse.ArgumentParser(
@@ -251,12 +251,13 @@ class DistOperator(FlatMapFunction):
     self.serializer = TraceSerializer.ImageSerializer()
     self.args = args
 
-  def prepare_data_rep_msg(self, seq: int, projection_id: int, theta: float,
+  def prepare_data_rep_msg(self, task_id: int, seq: int, projection_id: int, theta: float,
                           center: float, data_size: int,
                           data: np.ndarray) -> list:
       """Prepare the data reply message similar to the C function."""
       # Create the metadata/data part of the message
       msg_metadata = {"Type": "MSG_DATA_REP",
+                      "task_id": task_id,
                       "seq_n": seq,
                       "data_size": data_size,
                       "projection_id": projection_id,
@@ -277,7 +278,7 @@ class DistOperator(FlatMapFunction):
         remaining -= 1
         data_size = data.dtype.itemsize*(nsin + r) * dims[1]
         # Prepare the message for the worker
-        msg = self.prepare_data_rep_msg(seq,
+        msg = self.prepare_data_rep_msg(i, seq,
                                    projection_id,
                                    theta,
                                    center,
@@ -404,14 +405,91 @@ class DistOperator(FlatMapFunction):
     seq+=1
 
 
+class SirtOperator(MapFunction, CheckpointedFunction):
+    def __init__(self):
+      self.cfg = {
+        "thread_count": cfg.thread_count,
+        "window_step": cfg.window_step,
+        "center": cfg.center,
+        "write_freq": cfg.write_freq,
+        "window_iter": cfg.window_iter,
+      }
+
+    def open(self, ctx: RuntimeContext):
+        self.engine = sirt_ops.SirtEngine()
+        self.state = ctx.get_list_state(
+            ListStateDescriptor("sirt_state", Types.PRIMITIVE_ARRAY(Types.BYTE()))
+        )
+        saved = list(self.state.get())
+        if saved:
+            self.engine.restore(bytes(saved[0]))
+
+    def snapshot_state(self, context):
+        snap = self.engine.snapshot()
+        self.state.clear()
+        self.state.add(list(snap))  # store as byte[] in operator state
+
+    def map(self, value):
+        cfg, meta_in, payload = value  # dict, dict, bytes/bytearray/memoryview
+        out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
+        return [dict(out_meta), bytes(out_bytes)]
+
+
+class DenoiserOperator(SinkFunction):
+  def __init__(self, args):
+    self.args = args
+    self.serializer = TraceSerializer.ImageSerializer()
+    metadata = {}
+    data = {}
+    self.running = True
+
+  def invoke(self, value, context):
+    metadata = value[0]
+    data = value[1]
+    if metadata["Type"] == "FIN":
+      self.running = False
+    
+    if not self.running: return
+
+    nproc_sirt = self.args.ntask_sirt
+    recon_path = self.args.logdir
+
+    
+    dd = np.frombuffer(dd, dtype=np.float32)
+    dd = dd.reshape(metadata[i]["rank_dims"])
+    data.append(dd)
+
+    if len(metadata) > 0:
+        correct_order_meta = [
+            d for _, d in sorted(
+                zip([(m["iteration_stream"], m["rank"]) for m in metadata], metadata),
+                key=lambda d: (d[0][0], d[0][1])  # Sort by iteration_stream first, then by rank
+            )
+        ]
+        correct_order = [
+            d for _, d in sorted(
+                zip([(m["iteration_stream"], m["rank"]) for m in metadata], data),
+                key=lambda d: (d[0][0], d[0][1])  # Sort by iteration_stream first, then by rank
+            )
+        ]
+        for j in range(len(correct_order_meta)//nproc_sirt):
+            batch_data = correct_order[j*nproc_sirt:nproc_sirt+j*nproc_sirt]
+            batch_meta = correct_order_meta[j*nproc_sirt:nproc_sirt+j*nproc_sirt]
+            print(batch_meta)
+            data = np.concatenate(batch_data, axis=0)
+            #process_stream(model, data, metadata)
+            output_path = recon_path + "/" + batch_meta[0]["iteration_stream"]+'-denoised.h5'
+            with h5py.File(output_path, 'w') as h5_output:
+                h5_output.create_dataset('/data', data=data)
+
 def main():
   args = parse_arguments()
 
   logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 
   env = StreamExecutionEnvironment.get_execution_environment()
-  env.set_runtime_mode(RuntimeExecutionMode.BATCH)
-  env.set_parallelism(1)
+  env.enable_checkpointing(10_000, CheckpointingMode.EXACTLY_ONCE)
+  env.add_python_file("./dist/sirt_ops-0.2.0-*.whl")
 
   # define DAQ source
   daq = env.add_source(
@@ -436,75 +514,23 @@ def main():
   ).name("Data Distributor")
 
   # define reconstruction tasks
-  
+  sirt = dist.key_by(lambda x: x[0]["task_id"], key_type=Types.INT())
+    .map(
+      SirtOperator(cfg=args),
+      output_type=Types.TUPLE([
+        Types.PRIMITIVE_ARRAY(Types.BYTE()),
+        Types.MAP(Types.STRING(), Types.STRING())
+      ])
+    ).name("SIRT Operator").set_parallelism(args.ntask_sirt)
 
-  # create a topic
-  topic_name = "daq_dist"
-  topic = driver.open_topic(topic_name)
-  producer_name = "daq_producer"
-  batchsize = args.batchsize #mofka.AdaptiveBatchSize
-  thread_pool = mofka.ThreadPool(1)
-  ordering = mofka.Ordering.Strict
-  producer = topic.producer(producer_name, batch_size=batchsize, thread_pool=thread_pool, ordering=ordering)
+  # define denoiser as sink
+  sirt.add_sink(
+    DenoiserOperator(args),
+    "Denoiser Sink"
+  ).set_parallelism(1)
 
-  time0 = time.time()
-  if args.mode == 0: # Read data from PV
+  env.execute("APS Mini-Apps Pipeline")
 
-    # Setup zmq context
-    context = zmq.Context()#(io_threads=2)
 
-    # Publisher setup
-    publisher_socket = context.socket(zmq.PUB)
-    publisher_socket.set_hwm(args.publisher_hwm)
-    publisher_socket.bind(args.publisher_addr)
-
-     # 1. Synchronize/handshake with remote
-    if args.synch_addr is not None:
-      synchronize_subs(context, args.synch_count, args.synch_addr)
-
-    with TImageTransfer(publisher_socket=publisher_socket,
-                        pv_image=args.image_pv,
-                        beg_sinogram=args.beg_sinogram,
-                        num_sinograms=args.num_sinograms, seq=0) as tdet:
-      tdet.start_monitor()  # Infinite loop
-
-  elif args.mode == 1: # Simulate data acquisition with a file
-    print("Simulating data acquisition on file: {}; iteration: {} num_sinograms: {}".format(args.simulation_file, args.d_iteration, args.num_sinograms))
-    time.sleep(10)
-    simulate_daq( producer=producer,
-                  batchsize=args.batchsize,
-                  input_f=args.simulation_file,
-                  beg_sinogram=args.beg_sinogram,
-                  num_sinograms=args.num_sinograms,
-                  iteration=args.d_iteration,
-                  slp=args.iteration_sleep,
-                  prj_slp=args.proj_sleep,
-                  logdir=args.logdir)
-  elif args.mode == 2: # Test data acquisition
-    test_daq( producer=producer,
-              num_sinograms=args.num_sinograms,                       # Y
-              num_sinogram_columns=args.num_sinogram_columns,         # X
-              num_sinogram_projections=args.num_sinogram_projections, # Z
-              slp=args.iteration_sleep)
-  else:
-    print("Unknown mode: {}".format(args.mode))
-  producer.push({"Type": "FIN"}, bytearray(1))
-  producer.flush()
-  time1 = time.time()
-  print("Total time (s): {:.2f}".format(time1-time0))
-
-  print("del threadpool")
-  del thread_pool
-  print("del batchsze")
-  del batchsize
-  print("del ordering")
-  del ordering
-  print("del producer")
-  del producer
-  print("del topic")
-  del topic
-  print("del driver")
-  del driver
-  print("Exiting ...")
 if __name__ == '__main__':
     main()
