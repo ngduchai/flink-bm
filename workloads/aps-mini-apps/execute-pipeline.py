@@ -1,11 +1,12 @@
 import sys
+import os
 sys.path.append(os.path.join(os.path.dirname(__file__), 'common'))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'common/local'))
 import argparse
 import numpy as np
 import time
 import TraceSerializer
-import h5py as h5
+import h5py
 import dxchange
 import tomopy as tp
 import csv
@@ -13,8 +14,10 @@ import math
 import logging
 
 from pyflink.common import WatermarkStrategy, Encoder, Types
+from pyflink.datastream.state import ListStateDescriptor
+from pyflink.common import CheckpointingMode
 from pyflink.datastream import StreamExecutionEnvironment, RuntimeExecutionMode
-from pyflink.datastream.functions import SourceFunction, FlatMapFunction
+from pyflink.datastream.functions import SourceFunction, FlatMapFunction, MapFunction, SinkFunction, RuntimeContext, CheckpointedFunction
 
 import sirt_ops
 
@@ -372,7 +375,7 @@ class DistOperator(FlatMapFunction):
       
       for i in range(self.args.ntask_sirt):
         metadata = msgs[i][0]
-        print(f"Task {i}: seq_id {metadata['seq_n']} proj_id {metadata['projection_id']}, theta: {metadata['theta']} center: {metadata['center']}")")
+        print(f"Task {i}: seq_id {metadata['seq_n']} proj_id {metadata['projection_id']}, theta: {metadata['theta']} center: {metadata['center']}")
         collector.collect([msgs[i][0], msgs[i][1]])
 
       
@@ -406,7 +409,7 @@ class DistOperator(FlatMapFunction):
 
 
 class SirtOperator(MapFunction, CheckpointedFunction):
-    def __init__(self):
+    def __init__(self, cfg):
       self.cfg = {
         "thread_count": cfg.thread_count,
         "window_step": cfg.window_step,
@@ -439,14 +442,14 @@ class DenoiserOperator(SinkFunction):
   def __init__(self, args):
     self.args = args
     self.serializer = TraceSerializer.ImageSerializer()
-    metadata = {}
-    data = {}
+    waiting_metadata = {}
+    waiting_data = {}
     self.running = True
 
   def invoke(self, value, context):
-    metadata = value[0]
+    meta = value[0]
     data = value[1]
-    if metadata["Type"] == "FIN":
+    if meta["Type"] == "FIN":
       self.running = False
     
     if not self.running: return
@@ -454,33 +457,31 @@ class DenoiserOperator(SinkFunction):
     nproc_sirt = self.args.ntask_sirt
     recon_path = self.args.logdir
 
-    
-    dd = np.frombuffer(dd, dtype=np.float32)
-    dd = dd.reshape(metadata[i]["rank_dims"])
-    data.append(dd)
+    dd = np.frombuffer(data, dtype=np.float32)
+    dd = dd.reshape(meta["rank_dims"])
+    iteration_stream = meta["iteration_stream"]
+    rank = meta["rank"]
 
-    if len(metadata) > 0:
-        correct_order_meta = [
-            d for _, d in sorted(
-                zip([(m["iteration_stream"], m["rank"]) for m in metadata], metadata),
-                key=lambda d: (d[0][0], d[0][1])  # Sort by iteration_stream first, then by rank
-            )
-        ]
-        correct_order = [
-            d for _, d in sorted(
-                zip([(m["iteration_stream"], m["rank"]) for m in metadata], data),
-                key=lambda d: (d[0][0], d[0][1])  # Sort by iteration_stream first, then by rank
-            )
-        ]
-        for j in range(len(correct_order_meta)//nproc_sirt):
-            batch_data = correct_order[j*nproc_sirt:nproc_sirt+j*nproc_sirt]
-            batch_meta = correct_order_meta[j*nproc_sirt:nproc_sirt+j*nproc_sirt]
-            print(batch_meta)
-            data = np.concatenate(batch_data, axis=0)
-            #process_stream(model, data, metadata)
-            output_path = recon_path + "/" + batch_meta[0]["iteration_stream"]+'-denoised.h5'
-            with h5py.File(output_path, 'w') as h5_output:
-                h5_output.create_dataset('/data', data=data)
+    if iteration_stream not in self.waiting_metadata:
+        self.waiting_metadata[iteration_stream] = {}
+        self.waiting_data[iteration_stream] = {}
+    self.waiting_metadata[iteration_stream][rank] = meta
+    self.waiting_data[iteration_stream][rank] = dd
+
+    # Denoise if collected sufficient data
+    if self.waiting_metadata[iteration_stream].shape[0] == nproc_sirt:
+      # Sort data and metadata by rank
+      sorted_metadata = [self.waiting_metadata[iteration_stream][r] for r in sorted(self.waiting_metadata[iteration_stream].keys())]
+      sorted_data = [self.waiting_data[iteration_stream][r] for r in sorted(self.waiting_data[iteration_stream].keys())]
+      print(sorted_metadata)
+      denoise_input = np.concatenate(sorted_data, axis=0)
+      #process_stream(model, denoise_input, sorted_metadata)
+      output_path = recon_path + "/" + iteration_stream+'-denoised.h5'
+      with h5py.File(output_path, 'w') as h5_output:
+          h5_output.create_dataset('/data', data=denoise_input)
+      # Clear waiting data
+      del self.waiting_metadata[iteration_stream]
+      del self.waiting_data[iteration_stream]
 
 def main():
   args = parse_arguments()
@@ -514,8 +515,7 @@ def main():
   ).name("Data Distributor")
 
   # define reconstruction tasks
-  sirt = dist.key_by(lambda x: x[0]["task_id"], key_type=Types.INT())
-    .map(
+  sirt = dist.key_by(lambda x: x[0]["task_id"], key_type=Types.INT()).map(
       SirtOperator(cfg=args),
       output_type=Types.TUPLE([
         Types.PRIMITIVE_ARRAY(Types.BYTE()),
