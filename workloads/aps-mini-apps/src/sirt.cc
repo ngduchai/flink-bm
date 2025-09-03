@@ -1,11 +1,10 @@
 #include <iomanip>
-#include "sirt/recon_engine.h"
+#include "sirt.h"
+#include "sirt_recon_space.h"
 #include "trace_h5io.h"
 #include "data_region_base.h"
-#include "tclap/CmdLine.h"
 #include "disp_comm_mpi.h"
 #include "disp_engine_reduction.h"
-#include "sirt.h" // Include SIRTReconSpace
 #include <cassert>
 #include <time.h>
 #include <string>
@@ -19,13 +18,10 @@
 
 
 
-void SirtOperator::update(pybind11::dict tmetadata) {
+void SirtEngine::setup(const std::unordered_map<std::string, int64_t>& tmetadata) {
 
-  tmetadata = json::parse(pybind11::str(metadata));
-  ::init(this->tmetadata);
-
-  auto n_blocks = tmetadata["n_sinograms"].get<int64_t>();
-  auto num_cols = tmetadata["n_rays_per_proj_row"].get<int64_t>();
+  const int64_t n_blocks = tmetadata.at("n_sinograms");
+  const int64_t num_cols = tmetadata.at("n_rays_per_proj_row");
   
   /// Reconstructed image
   DataRegionBareBase<float> recon_image(n_blocks*num_cols*num_cols);
@@ -38,9 +34,9 @@ void SirtOperator::update(pybind11::dict tmetadata) {
   trace_io::H5Metadata h5md;
   h5md.ndims=3;
   h5md.dims= new hsize_t[3];
-  h5md.dims[1] = tmetadata["tn_sinograms"].get<int64_t>();
+  h5md.dims[1] = tmetadata.at("tn_sinograms");
   h5md.dims[0] = 0;   /// Number of projections is unknown
-  h5md.dims[2] = tmetadata["n_rays_per_proj_row"].get<int64_t>();
+  h5md.dims[2] = tmetadata.at("n_rays_per_proj_row");
   size_t data_size = 0;
 
   
@@ -57,15 +53,16 @@ void SirtOperator::update(pybind11::dict tmetadata) {
   
 }
 
-void SirtOperator::process(pybind11::dict metadata, pybind11::array_t<int> rawdata) {
+void SirtEngine::process(const std::unordered_map<std::string, int>& config,
+      const std::unordered_map<std::string, std::string>& metadata,
+      const std::uint8_t* data,
+      std::size_t len
+    ) {
 
-  curr_slices = ms.readSlidingWindow(recon_image, config.window_step, consumer);
+  curr_slices = ms.readSlidingWindow(recon_image, metadata, data);
   
-  if(config.center!=0 && curr_slices!=nullptr)
-    curr_slices->metadata().center(config.center);
-  #ifdef TIMERON
-  datagen_tot += (std::chrono::system_clock::now()-datagen_beg);
-  #endif
+  if(config.at("center") !=0 && curr_slices!=nullptr)
+    curr_slices->metadata().center(config.at("center"));
   
   if (ms.isEndOfStream()) {
     std::cout << "[Task-" << task_id << "] End of stream. Exiting..." << std::endl;
@@ -76,7 +73,7 @@ void SirtOperator::process(pybind11::dict metadata, pybind11::array_t<int> rawda
     continue;
   }
   /// Iterate on window
-  for(int i=0; i<config.window_iter; ++i){
+  for(int i=0; i<config.at("window_iter"); ++i){
 
     int killed = kill_signal.load();
     if (killed != 0) {
@@ -84,33 +81,19 @@ void SirtOperator::process(pybind11::dict metadata, pybind11::array_t<int> rawda
       return killed;
     }
 
-    #ifdef TIMERON
-    auto recon_beg = std::chrono::system_clock::now();
-    #endif
     engine->RunParallelReduction(*curr_slices, req_number);  /// Reconstruction
-
-    #ifdef TIMERON
-    recon_tot += (std::chrono::system_clock::now()-recon_beg);
-    auto inplace_beg = std::chrono::system_clock::now();
-    #endif
+    
     engine->ParInPlaceLocalSynchWrapper();              /// Local combination
-    #ifdef TIMERON
-    inplace_tot += (std::chrono::system_clock::now()-inplace_beg);
-
-    /// Update reconstruction object
-    auto update_beg = std::chrono::system_clock::now();
-    #endif
+   
     main_recon_space->UpdateRecon(recon_image, main_recon_replica);
-    #ifdef TIMERON
-    update_tot += (std::chrono::system_clock::now()-update_beg);
-    #endif
+    
     engine->ResetReductionSpaces(init_val);
     curr_slices->ResetMirroredRegionIter();
   }
 
   passes++;
   /* Emit reconstructed data */
-  if(!(passes%config.write_freq)){
+  if(!(passes%config.at("write_freq"))){
     std::stringstream iteration_stream;
     iteration_stream << std::setfill('0') << std::setw(6) << passes;
     

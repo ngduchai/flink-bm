@@ -1,5 +1,10 @@
 from setuptools import setup, Extension
-import sys, pybind11
+import sys, pybind11, os
+
+# TODO: Adjust these paths as necessary
+here = "/home/ndhai/src/flink-bm/workloads/aps-mini-apps/"
+locallib = "/home/ndhai/src/spack-aps/var/spack/environments/APS/.spack-env/view/lib"
+localinclude = "/home/ndhai/src/spack-aps/var/spack/environments/APS/.spack-env/view/include"
 
 cxxargs = ["-O3"]
 if sys.platform.startswith("linux"):
@@ -8,23 +13,30 @@ if sys.platform.startswith("linux"):
 ext = Extension(
     "sirt_ops",
     sources=[
-        "sirt/sirt_bindings.cpp",
-        "sirt/sirt.cpp",   # add all your engine .cpp files here
+        "src/sirt_bindings.cc",
+        "src/sirt.cc",
+        # "src/data_stream.cc",
+        "src/tracelib/trace_comm.cc",
+        "src/tracelib/trace_h5io.cc",
+        "src/tracelib/trace_utils.cc"
     ],
     include_dirs=[
         pybind11.get_include(),
-        "cpp",                  # path where SirtEngine.hpp lives
-        # add include dirs for DataRegionBase/TraceMetadata if needed
+        os.path.join(here, "include"),
+        os.path.join(here, "include/tracelib"),
+        localinclude
     ],
-    # libraries=["adios2", "hdf5", ...],      # if you link external libs
-    # library_dirs=["/opt/libs", ...],
+    # If you link external libs:
+    libraries=["hdf5", "boost"],    # etc.
+    library_dirs=["/usr/local/lib", locallib],
+    # extra_link_args=["-Wl,-rpath,/opt/lib"],   # helpful when shipping .so's
     extra_compile_args=cxxargs,
     language="c++",
 )
 
 setup(
     name="sirt-ops",
-    version="1.0.0",
-    description="Pybind11 bindings for SirtEngine with checkpointing",
+    version="0.2.0",
+    description="Pybind11 bindings for SirtEngine (checkpointable)",
     ext_modules=[ext],
 )

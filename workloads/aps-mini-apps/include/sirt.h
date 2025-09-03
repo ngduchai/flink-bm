@@ -18,6 +18,8 @@ public:
         std::size_t len
     );
 
+    void setup(const std::unordered_map<std::string, int64_t>& tmetadata);
+
     // checkpointing
     std::vector<std::uint8_t> snapshot() const;
     std::vector<std::uint8_t> restore(const std::vector<std::uint8_t>& snapshot);
