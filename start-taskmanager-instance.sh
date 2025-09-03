@@ -17,6 +17,6 @@ apptainer instance start --cleanenv --fakeroot \
 apptainer exec \
         --fakeroot --cleanenv \
         instance://flink-taskmanager-$INSTANCE_NAME /opt/flink/bin/taskmanager.sh start-foreground \
-        > /dev/null 2> /dev/null &
+        > "log/taskmanager-stdout.out" 2>&1 &
 
 
