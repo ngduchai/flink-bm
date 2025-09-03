@@ -24,8 +24,8 @@ sinkParallelism=1
 sinkDelayMs=0
 maxRecords=20000
 
-failure_rates=(100000 50 100 150)
-ckptDurations=(0 10000 20000 100000)
+failure_rates=(70 135)
+ckptDurations=(10000 20000 40000)
 recovery_delay=0
 
 TOP=`cat $DIR/recent-run`
@@ -38,7 +38,7 @@ for failure_rate in "${failure_rates[@]}"
 do
     for ckptDuration in "${ckptDurations[@]}"
     do
-        WORKSPACE=$TOP/$failure_rate-$ckptDuration-$count
+        WORKSPACE=$TOP/$failure_rate-$ckptDuration
         mkdir -p $WORKSPACE
         cd $WORKSPACE
         echo FAILURE_RATE: $failure_rate CKPT_DURATION: $ckptDuration =====================================
@@ -49,12 +49,12 @@ do
         echo Run the test
         bash test-single-failure.sh $failure_rate $recovery_delay $workload \
             --ratePerSecond $ratePerSecond \
-        --sourceParallelism $sourceParallelism \
-        --sinkParallelism $sinkParallelism \
-        --sinkDelayMs $sinkDelayMs \
-        --maxRecords $maxRecords \
-        --ckptDuration $ckptDuration \
-        > test-log.out 2> test-log.err
+            --sourceParallelism $sourceParallelism \
+            --sinkParallelism $sinkParallelism \
+            --sinkDelayMs $sinkDelayMs \
+            --maxRecords $maxRecords \
+            --ckptDuration $ckptDuration \
+            > test-log.out 2> test-log.err
         echo Stop Flink cluster
         bash stop-all.sh
         sleep 1

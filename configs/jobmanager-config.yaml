@@ -9,18 +9,20 @@ jobmanager:
   execution:
     failover-strategy: region
   rpc:
-    address: x3006c0s1b1n0
+    address: x3111c0s31b1n0
     port: 6123
   memory:
     process:
       size: 8192m
 restart-strategy: fixed-delay
 restart-strategy.fixed-delay.attempts: 1000
-restart-strategy.fixed-delay.delay: 10s
+restart-strategy.fixed-delay.delay: 100ms
+python.executable: /usr/bin/python3
+python.client.executable: /usr/bin/python3
 parallelism:
   default: 1
 rest:
-  address: x3006c0s1b1n0
+  address: x3111c0s31b1n0
 env:
   java:
     opts:

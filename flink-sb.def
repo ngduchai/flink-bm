@@ -1,0 +1,25 @@
+Bootstrap: docker
+From: ubuntu:22.04   # or debian:bookworm, something with recent glibc
+
+%post
+    # Install Python and basic build tools
+    apt-get update && apt-get install -y \
+        python3 python3-pip python3-venv \
+        openjdk-17-jre-headless curl ca-certificates \
+        && rm -rf /var/lib/apt/lists/*
+
+    # Install Flink
+    mkdir -p /opt && cd /opt
+    curl -L https://archive.apache.org/dist/flink/flink-2.0.0/flink-2.0.0-bin-scala_2.12.tgz \
+      | tar xz
+    ln -s /opt/flink-2.0.0 /opt/flink
+
+    # Install PyFlink and common libs
+    python3 -m pip install --no-cache-dir --upgrade pip
+    python3 -m pip install --no-cache-dir apache-flink==2.0.0 numpy h5py flatbuffers
+
+%environment
+    export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+    export FLINK_HOME=/opt/flink
+    export PATH=$FLINK_HOME/bin:$PATH
+    export PYTHON=/usr/bin/python3
