@@ -12,6 +12,7 @@
 #include <utility>
 #include "trace_data.h"
 #include <csignal>
+#include <functional>
 
 class DataStreamEvent {
   public:
@@ -42,7 +43,8 @@ class DataStream
 
     std::vector<float> vproj;
     std::vector<float> vtheta;
-    std::vector<const std::unordered_map<std::string, std::string>&> vmeta;
+    // std::vector<const std::unordered_map<std::string, std::string>> vmeta;
+    std::vector<std::reference_wrapper<const std::unordered_map<std::string,std::string>>> vmeta;
 
     /* Add streaming message to buffers
     * @param event: mofka event containing data and metadata
@@ -83,7 +85,7 @@ class DataStream
     */
     DataRegionBase<float, TraceMetadata>* readSlidingWindow(
       DataRegionBareBase<float> &recon_image, int step,
-      const std::unordered_map<std::string, std::string>& metadata, float *data);
+      const std::unordered_map<std::string, std::string>& metadata, const float *data);
 
     int getRank();
 

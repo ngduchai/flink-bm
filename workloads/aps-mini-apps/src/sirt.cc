@@ -15,6 +15,14 @@
 #include <charconv>
 #include <csignal>
 
+#include <boost/serialization/export.hpp>
+#include <boost/archive/text_oarchive.hpp>
+#include <boost/archive/text_iarchive.hpp>
+
+// Define an alias for the instantiated template class
+using DISPEngineReductionSIRT = DISPEngineReduction<SIRTReconSpace, float>;
+using DISPEngineBaseSIRT = DISPEngineBase<SIRTReconSpace, float>;
+using AReductionSpaceBaseSIRT = AReductionSpaceBase<SIRTReconSpace, float>;
 
 
 void SirtEngine::setup(const std::unordered_map<std::string, int64_t>& tmetadata) {
@@ -24,56 +32,54 @@ void SirtEngine::setup(const std::unordered_map<std::string, int64_t>& tmetadata
   ds.beg_sinograms = tmetadata.at("beg_sinograms");
   ds.tn_sinograms = tmetadata.at("tn_sinograms");
 
-  const int64_t n_blocks = not_sinograms;
-  const int64_t num_cols = nrays_per_proj_row;
+  const int64_t n_blocks = ds.n_sinograms;
+  const int64_t num_cols = ds.n_rays_per_proj_row;
 
   h5md.ndims=3;
   h5md.dims= new hsize_t[3];
-  h5md.dims[1] = tn_sinograms;
+  h5md.dims[1] = ds.tn_sinograms;
   h5md.dims[0] = 0;   /// Number of projections is unknown
-  h5md.dims[2] = n_rays_per_proj_row;
+  h5md.dims[2] = ds.n_rays_per_proj_row;
+
+  window_step = tmetadata.at("window_step");
   
   /// Reconstructed image
   recon_image = new DataRegionBareBase<float>(n_blocks*num_cols*num_cols);
   for(size_t i=0; i<recon_image->count(); ++i)
-    recon_image[i]=0.; /// Initial values of the reconstructe image
+    (*recon_image)[i]=0.; /// Initial values of the reconstructe image
 
-  /// Number of requested ray-sum values by each thread poll
-  int64_t req_number = num_cols;
   /// Required data structure for dumping image to h5 file
-  trace_io::H5Metadata h5md;
   h5md.ndims=3;
   h5md.dims= new hsize_t[3];
-  h5md.dims[1] = tmetadata.at("tn_sinograms");
+  h5md.dims[1] = ds.n_sinograms;
   h5md.dims[0] = 0;   /// Number of projections is unknown
-  h5md.dims[2] = tmetadata.at("n_rays_per_proj_row");
-  size_t data_size = 0;
+  h5md.dims[2] = ds.n_rays_per_proj_row;
 
   
   main_recon_space = new SIRTReconSpace(
       n_blocks, 2*num_cols*num_cols);
   main_recon_space->Initialize(num_cols*num_cols);
 
-  DataRegion2DBareBase<float> &main_recon_replica = main_recon_space->reduction_objects();
-  float init_val=0.;
-
+  main_recon_replica = &main_recon_space->reduction_objects();
+  
   /* Prepare processing engine and main reduction space for other threads */
-  *engine = new DISPEngineReductionSIRT(main_recon_space, config.thread_count);
+  engine = new DISPEngineReductionSIRT(main_recon_space, tmetadata.at("thread_count"));
   
 }
 
-ProcessResult SirtEngine::process(const std::unordered_map<std::string, int>& config,
-      const std::unordered_map<std::string, std::string>& metadata,
-      const std::uint8_t* data,
-      std::size_t len
-    ) {
+ProcessResult SirtEngine::process(
+  const std::unordered_map<std::string, int>& config,
+  const std::unordered_map<std::string, std::string>& metadata,
+  const float* data,
+  std::size_t len
+) {
 
   ProcessResult result;
   int task_id = config.at("rank");
   float init_val=0.;
   int64_t req_number = ds.n_rays_per_proj_row;
 
-  DataRegionBase<float, TraceMetadata> *curr_slices = ds.readSlidingWindow(*recon_image, metadata, data);
+  DataRegionBase<float, TraceMetadata> *curr_slices = ds.readSlidingWindow(*recon_image, window_step, metadata, data);
   
 
   if(config.at("center") !=0 && curr_slices!=nullptr)
@@ -94,7 +100,7 @@ ProcessResult SirtEngine::process(const std::unordered_map<std::string, int>& co
     
     engine->ParInPlaceLocalSynchWrapper();              /// Local combination
    
-    main_recon_space->UpdateRecon(*recon_image, main_recon_replica);
+    main_recon_space->UpdateRecon(*recon_image, *main_recon_replica);
     
     engine->ResetReductionSpaces(init_val);
     curr_slices->ResetMirroredRegionIter();
@@ -159,9 +165,9 @@ SirtEngine::~SirtEngine() {
   if (engine != nullptr) {
     delete engine;
   }
-  if (h5md.dims != nullptr) {
-    delete[] h5md.dims;
-  }
+  // if (h5md.dims != nullptr) {
+  //   delete[] h5md.dims;
+  // }
   if (recon_image != nullptr) {
     delete recon_image;
   }

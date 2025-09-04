@@ -83,7 +83,7 @@ DataStream::DataStream(uint32_t window_len, int rank, int progress) // Removed d
 
 DataRegionBase<float, TraceMetadata>* DataStream::readSlidingWindow(
   DataRegionBareBase<float> &recon_image, int step,
-  const std::unordered_map<std::string, std::string>& metadata, float *data) {
+  const std::unordered_map<std::string, std::string>& metadata, const float *data) {
   // Dynamically meet sizes
   while(vtheta.size() > window_len) {
     eraseBegTraceMsg();

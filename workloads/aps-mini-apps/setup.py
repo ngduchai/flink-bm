@@ -2,12 +2,14 @@ from setuptools import setup, Extension
 import sys, pybind11, os
 
 # TODO: Adjust these paths as necessary
-here = "/home/ndhai/diaspora/flink-bm/workloads/aps-mini-apps/"
-localview = "/home/ndhai/diaspora/spack-aps/var/spack/environments/APS/.spack-env/view/"
+# here = "/home/ndhai/diaspora/flink-bm/workloads/aps-mini-apps/"
+# localview = "/home/ndhai/diaspora/spack-aps/var/spack/environments/APS/.spack-env/view/"
+here = "/home/ndhai/src/flink-bm/workloads/aps-mini-apps"
+localview = "/home/ndhai/src/spack-aps/var/spack/environments/APS/.spack-env/view/"
 locallib = localview + "lib"
 localinclude = localview + "include"
 
-cxxargs = ["-O3"]
+cxxargs = ["-O3", "-std=c++17"]
 if sys.platform.startswith("linux"):
     cxxargs += ["-fPIC"]
 
@@ -23,14 +25,27 @@ ext = Extension(
     ],
     include_dirs=[
         pybind11.get_include(),
+        pybind11.get_include(user=True),   # <— add user include path too
         os.path.join(here, "include"),
         os.path.join(here, "include/tracelib"),
         localinclude
     ],
-    # If you link external libs:
-    libraries=["hdf5", "boost"],    # etc.
-    library_dirs=["/usr/local/lib", locallib],
-    # extra_link_args=["-Wl,-rpath,/opt/lib"],   # helpful when shipping .so's
+    # Minimal, but correct: use Boost.Serialization's actual lib name
+    libraries=[
+        "hdf5",
+        "boost_serialization",  # <— was "boost"
+        "pthread",              # <— needed on Linux
+        # Add MPI only if you don't build with mpicxx:
+        # "mpi", "mpi_cxx",
+    ],
+    library_dirs=[
+        "/usr/local/lib",
+        locallib
+    ],
+    # Keep runtime search path so the module finds Spack libs at import time
+    extra_link_args=[
+        f"-Wl,-rpath,{locallib}"
+    ],
     extra_compile_args=cxxargs,
     language="c++",
 )
