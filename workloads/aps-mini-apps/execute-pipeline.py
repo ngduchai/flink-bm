@@ -27,9 +27,6 @@ def parse_arguments():
 
   parser.add_argument("--image_pv", help="EPICS image PV name.")
 
-  parser.add_argument('--batchsize', type=int, default=16,
-                      help='Stream batch size')
-
   parser.add_argument('--ntask_sirt', type=int, default=0,
                       help='number of reconstruction tasks')
 
@@ -76,6 +73,16 @@ def parse_arguments():
               help='Removes invalid measurements from incoming projections, i.e. negatives, nans and infs.')
   parser.add_argument('--remove_stripes', action='store_true', default=False,
               help='Removes stripes using fourier-wavelet method (in tomopy).')
+  
+  # SIRT configuration
+  parser.add_argument('--write_freq', type=str, default="10000",
+                        help='Write frequency')
+  parser.add_argument('--window_length', type=str, default="32",
+                      help='Number of projections that will be stored in the window')
+  parser.add_argument('--window_step', type=str, default="1",
+                      help='Number of projections that will be received in each request')
+  parser.add_argument('--window_iter', type=str, default="1",
+                      help='Number of iterations on received window')
 
   return parser.parse_args()
 
@@ -413,13 +420,42 @@ class SirtOperator(MapFunction, CheckpointedFunction):
       self.cfg = {
         "thread_count": cfg.thread_count,
         "window_step": cfg.window_step,
+        "beg_sinogram": cfg.beg_sinogram,
         "center": cfg.center,
         "write_freq": cfg.write_freq,
         "window_iter": cfg.window_iter,
+        "window_length": cfg.window_length,
+        "window_step" : cfg.window_step,
+        "num_sinogram_columns": cfg.num_sinogram_columns
       }
 
     def open(self, ctx: RuntimeContext):
         self.engine = sirt_ops.SirtEngine()
+        
+        # determine data assignment and setup the sirt engine
+        # based on task_id and num_tasks
+        task_id = ctx.get_index_of_this_subtask()
+        num_tasks = ctx.get_number_of_parallel_subtasks()
+        total_sinograms = self.cfg["num_sinograms"]
+        nsino = total_sinograms // num_tasks
+        remaining = total_sinograms % num_tasks
+
+        r = 1 if task_id < remaining else 0
+        n_sinograms = r + nsino
+        beg_sinograms = (1 + nsino) * num_tasks if task_id < remaining else (1 + nsino) * remaining + nsino * (task_id - remaining)
+
+        tmetadata = {
+          "task_id": task_id,
+          "n_sinograms": n_sinograms,
+          "n_rays_per_project_row": self.cfg["num_sinogram_columns"],
+          "beg_sinogram": beg_sinograms,
+          "tn_sinograms": total_sinograms,
+          "window_step": self.cfg["window_step"],
+          "thread_count": self.cfg["thread_count"]
+        }
+        self.engine.setup(tmetadata)
+
+        # Restore state if available
         self.state = ctx.get_list_state(
             ListStateDescriptor("sirt_state", Types.PRIMITIVE_ARRAY(Types.BYTE()))
         )
@@ -433,7 +469,7 @@ class SirtOperator(MapFunction, CheckpointedFunction):
         self.state.add(list(snap))  # store as byte[] in operator state
 
     def map(self, value):
-        cfg, meta_in, payload = value  # dict, dict, bytes/bytearray/memoryview
+        meta_in, payload = value  # dict, dict, bytes/bytearray/memoryview
         out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
         return [dict(out_meta), bytes(out_bytes)]
 

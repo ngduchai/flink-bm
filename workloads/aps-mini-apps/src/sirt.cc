@@ -27,6 +27,8 @@ using AReductionSpaceBaseSIRT = AReductionSpaceBase<SIRTReconSpace, float>;
 
 void SirtEngine::setup(const std::unordered_map<std::string, int64_t>& tmetadata) {
 
+  task_id = tmetadata.at("task_id");
+
   ds.n_sinograms = tmetadata.at("n_sinograms");
   ds.n_rays_per_proj_row = tmetadata.at("n_rays_per_proj_row");
   ds.beg_sinograms = tmetadata.at("beg_sinograms");
@@ -75,7 +77,6 @@ ProcessResult SirtEngine::process(
 ) {
 
   ProcessResult result;
-  int task_id = config.at("rank");
   float init_val=0.;
   int64_t req_number = ds.n_rays_per_proj_row;
 
@@ -157,6 +158,17 @@ ProcessResult SirtEngine::process(
   return result;
 
 }
+
+std::vector<std::uint8_t> SirtEngine::snapshot() const {
+  std::vector<std::uint8_t> saved_ckpt;
+  // TODO: replace these with actual boost serialization
+  return saved_ckpt;
+}
+
+void restore(const std::vector<std::uint8_t>& snapshot) {
+  // TODO: replace these with actual boost deserialization
+}
+
 
 SirtEngine::~SirtEngine() {
   if (main_recon_space != nullptr) {

@@ -20,6 +20,7 @@ struct ProcessResult {
 class SirtEngine {
 
 private:
+    int task_id = -1;
     DataStream ds;
     trace_io::H5Metadata h5md;
     int passes = 0;
@@ -49,7 +50,7 @@ public:
 
     // checkpointing
     std::vector<std::uint8_t> snapshot() const;
-    std::vector<std::uint8_t> restore(const std::vector<std::uint8_t>& snapshot);
+    void restore(const std::vector<std::uint8_t>& snapshot);
 
     ~SirtEngine();
 

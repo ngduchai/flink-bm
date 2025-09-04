@@ -78,7 +78,8 @@ PYBIND11_MODULE(sirt_ops, m) {
                 std::memcpy(snap.data(), info.ptr, nbytes);
 
                 py::gil_scoped_release g;
-                auto ret = self.restore(snap);
-                return py::bytes(reinterpret_cast<const char*>(ret.data()), ret.size());
+                self.restore(snap);
+                // auto ret = self.restore(snap);
+                // return py::bytes(reinterpret_cast<const char*>(ret.data()), ret.size());
             });
 }
