@@ -10,12 +10,23 @@
 #include <fstream>
 #include <vector>
 #include <utility>
-#include <nlohmann/json.hpp>
 #include "trace_data.h"
 #include <csignal>
 
-using json = nlohmann::json;
-namespace tl = thallium;
+class DataStreamEvent {
+  public:
+    std::unordered_map<std::string, std::string> metadata;
+    int sequence_id;
+    int projection_id;
+    double theta;
+    double center;
+    float* data; // Pointer to the data segment
+
+    DataStreamEvent(std::unordered_map<std::string, std::string> metadata,
+      int seq_id, int proj_id, double th, double cen, float* dat)
+      : metadata(metadata), sequence_id(seq_id), projection_id(proj_id),
+      theta(th), center(cen), data(dat) {}
+};
 
 class DataStream
 {
@@ -26,18 +37,17 @@ class DataStream
     // int comm_size;
 
     int progress;
-    std::vector<mofka::Event> pending_events;
+    std::vector<DataStreamEvent> pending_events;
     bool end_of_stream = false;
 
     std::vector<float> vproj;
     std::vector<float> vtheta;
-    std::vector<json> vmeta;
-    json info;
+    std::vector<const std::unordered_map<std::string, std::string>&> vmeta;
 
     /* Add streaming message to buffers
     * @param event: mofka event containing data and metadata
     */
-    void addTomoMsg(mofka::Event event);
+    void addTomoMsg(DataStreamEvent event);
 
 
     /* Erase streaming message to buffers
@@ -55,6 +65,11 @@ class DataStream
 
   public:
 
+    int64_t n_sinograms = 0;
+    int64_t n_rays_per_proj_row = 0;
+    int64_t beg_sinograms = 0;
+    int64_t tn_sinograms = 0;
+
     DataStream(uint32_t window_len, int rank, int progress=0);
 
     /* Create a data region from sliding window
@@ -67,20 +82,14 @@ class DataStream
     *          DataRegionBase if there is data in sliding window
     */
     DataRegionBase<float, TraceMetadata>* readSlidingWindow(
-      DataRegionBareBase<float> &recon_image,
-      json metadata, float *data);
-
-    json getInfo();
+      DataRegionBareBase<float> &recon_image, int step,
+      const std::unordered_map<std::string, std::string>& metadata, float *data);
 
     int getRank();
 
     int getBufferSize();
 
-    uint32_t getBatch();
-
     uint32_t getCounter();
-
-    void setInfo(json &j);
 
     void windowLength(uint32_t wlen);
 

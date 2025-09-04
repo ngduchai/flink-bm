@@ -2,9 +2,10 @@ from setuptools import setup, Extension
 import sys, pybind11, os
 
 # TODO: Adjust these paths as necessary
-here = "/home/ndhai/src/flink-bm/workloads/aps-mini-apps/"
-locallib = "/home/ndhai/src/spack-aps/var/spack/environments/APS/.spack-env/view/lib"
-localinclude = "/home/ndhai/src/spack-aps/var/spack/environments/APS/.spack-env/view/include"
+here = "/home/ndhai/diaspora/flink-bm/workloads/aps-mini-apps/"
+localview = "/home/ndhai/diaspora/spack-aps/var/spack/environments/APS/.spack-env/view/"
+locallib = localview + "lib"
+localinclude = localview + "include"
 
 cxxargs = ["-O3"]
 if sys.platform.startswith("linux"):

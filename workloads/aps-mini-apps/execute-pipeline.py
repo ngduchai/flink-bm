@@ -506,7 +506,7 @@ def main():
       logdir=args.logdir
     ),
     "DAQ Source",
-    Types.LIST(Types.MAP(Types.STRING(), Types.GENERIC(object), Types.BYTE_ARRAY()))
+    Types.LIST(Types.MAP(Types.STRING(), Types.GENERIC(object)), Types.BYTE_ARRAY())
   )
 
   # define data distribution
