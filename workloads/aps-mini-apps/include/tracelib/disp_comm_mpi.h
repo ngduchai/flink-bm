@@ -3,7 +3,7 @@
 
 #include <iostream>
 #include "disp_comm_base.h"
-#include "mpi.h"
+// #include "mpi.h"
 
 template <typename DT>
 class DISPCommMPI : public DISPCommBase<DT> {

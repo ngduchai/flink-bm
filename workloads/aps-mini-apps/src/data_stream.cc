@@ -1,16 +1,16 @@
 #include "data_stream.h"
 
-void DataStream::DataStream(DataStreamEvent event){
-  auto metadata = event.metadata;
-  auto data = event.data;
+// void DataStream::addTomoMsg(DataStreamEvent event){
+//   auto metadata = event.metadata;
+//   auto data = event.data;
   
-  pending_events.push_back(event);
-  vmeta.push_back(metadata); /// Setup metadata
-  vtheta.push_back(metadata.at("theta"));
+//   pending_events.push_back(event);
+//   vmeta.push_back(metadata); /// Setup metadata
+//   vtheta.push_back(metadata.at("theta"));
 
-  size_t n_rays_per_proj = n_sinograms * n_rays_per_proj_row;
-  vproj.insert(vproj.end(), event.data, event.data + n_rays_per_proj);
-}
+//   size_t n_rays_per_proj = n_sinograms * n_rays_per_proj_row;
+//   vproj.insert(vproj.end(), event.data, event.data + n_rays_per_proj);
+// }
 
 void DataStream::addTomoMsg(DataStreamEvent event){
   pending_events.push_back(event);
@@ -41,17 +41,20 @@ void DataStream::eraseBegTraceMsg(){
 */
 DataRegionBase<float, TraceMetadata>* DataStream::setupTraceDataRegion(
   DataRegionBareBase<float> &recon_image){
+
+    int center = std::stoi(vmeta.back().get().at("center"));
+
     TraceMetadata *mdata = new TraceMetadata(
     vtheta.data(),
-    0,                      // metadata().proj_id(),
-    beg_sinogram,           // metadata().slice_id(),
-    0,                      // metadata().col_id(),
-    tn_sinograms,           // metadata().num_total_slices(),
-    vtheta.size(),          // int const num_projs,
-    n_sinograms,            // metadata().num_slices(),
-    n_rays_per_proj_row,    // metadata().num_cols(),
-    n_rays_per_proj_row,    // * metadata().n_rays_per_proj_row, // metadata().num_grids(),
-    vmeta.back().center;    // use the last incoming center for recon.);
+    0,                                // metadata().proj_id(),
+    beg_sinograms,                    // metadata().slice_id(),
+    0,                                // metadata().col_id(),
+    tn_sinograms,                     // metadata().num_total_slices(),
+    vtheta.size(),                    // int const num_projs,
+    n_sinograms,                      // metadata().num_slices(),
+    n_rays_per_proj_row,              // metadata().num_cols(),
+    n_rays_per_proj_row,              // * metadata().n_rays_per_proj_row, // metadata().num_grids(),
+    center);                          // use the last incoming center for recon.);
 
   mdata->recon(recon_image);
 
@@ -100,7 +103,7 @@ DataRegionBase<float, TraceMetadata>* DataStream::readSlidingWindow(
   double theta = std::stod(metadata.at("theta"));
   double center = std::stod(metadata.at("center"));
   std::cout << "[Task-" << getRank() << "]: seq_id: " << sequence_id << " projection_id: " << proj_id << " theta: " << theta << " center: " << center << ", progress = " << progress << std::endl;
-  pending_events.push_back(DataStreamEvent(sequence_id, proj_id, theta, center, data));
+  pending_events.push_back(DataStreamEvent(metadata, sequence_id, proj_id, theta, center, data));
 
   if (pending_events.size() < step) {
     return nullptr; // Not collecting enough messages to process

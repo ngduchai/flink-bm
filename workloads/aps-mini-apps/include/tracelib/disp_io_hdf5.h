@@ -4,7 +4,7 @@
 #include <string>
 #include <stdexcept>
 #include "hdf5.h"
-#include "mpi.h"
+// #include "mpi.h"
 
 typedef struct {
   std::string file_path;

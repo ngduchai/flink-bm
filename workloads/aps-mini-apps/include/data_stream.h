@@ -20,10 +20,10 @@ class DataStreamEvent {
     int projection_id;
     double theta;
     double center;
-    float* data; // Pointer to the data segment
+    const float* data; // Pointer to the data segment
 
     DataStreamEvent(std::unordered_map<std::string, std::string> metadata,
-      int seq_id, int proj_id, double th, double cen, float* dat)
+      int seq_id, int proj_id, double th, double cen, const float* dat)
       : metadata(metadata), sequence_id(seq_id), projection_id(proj_id),
       theta(th), center(cen), data(dat) {}
 };
