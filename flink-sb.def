@@ -1,6 +1,10 @@
 Bootstrap: docker
 From: ubuntu:22.04   # or debian:bookworm, something with recent glibc
 
+$files
+# copy the tarball from host into the container build context
+../../zip/flink-2.0.0-bin-scala_2.12.tgz /tmp/flink.tgz
+
 %post
     # Install Python and basic build tools
     apt-get update && apt-get install -y \
@@ -12,7 +16,7 @@ From: ubuntu:22.04   # or debian:bookworm, something with recent glibc
     mkdir -p /opt && cd /opt
     # Use local flink instead, download may take time on Polaris
     # curl -L https://archive.apache.org/dist/flink/flink-2.0.0/flink-2.0.0-bin-scala_2.12.tgz  | tar xz
-    tar -xzf ../../zip/flink-2.0.0-bin-scala_2.12.tgz -C /opt
+    tar -xzf /tmp/flink.tgz -C /opt
     ln -s /opt/flink-2.0.0 /opt/flink
 
     # Install PyFlink and common libs
