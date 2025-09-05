@@ -4,14 +4,15 @@ From: ubuntu:22.04   # or debian:bookworm, something with recent glibc
 %post
     # Install Python and basic build tools
     apt-get update && apt-get install -y \
-        python3 python3-pip python3-venv \
+        python3 python3-pip python3-venv curl \
         openjdk-17-jre-headless curl ca-certificates \
         && rm -rf /var/lib/apt/lists/*
 
     # Install Flink
     mkdir -p /opt && cd /opt
-    curl -L https://archive.apache.org/dist/flink/flink-2.0.0/flink-2.0.0-bin-scala_2.12.tgz \
-      | tar xz
+    # Use local flink instead, download may take time on Polaris
+    # curl -L https://archive.apache.org/dist/flink/flink-2.0.0/flink-2.0.0-bin-scala_2.12.tgz  | tar xz
+    tar -xzf ../../zip/flink-2.0.0-bin-scala_2.12.tgz -C /opt
     ln -s /opt/flink-2.0.0 /opt/flink
 
     # Install PyFlink and common libs
