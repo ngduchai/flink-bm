@@ -11,6 +11,7 @@ img_dir=$HOME/diaspora/src/flink
 apptainer instance start --cleanenv --fakeroot \
         --bind $LOG_DIR:/opt/flink/log \
         --bind $CFG_FILE:/opt/flink/conf/config.yaml \
+        --bind $img_dir/workloads:/opt/workloads \
         --bind /soft/xalt/:/soft/xalt/ \
         $img_dir/flink_img flink-taskmanager-$INSTANCE_NAME
 

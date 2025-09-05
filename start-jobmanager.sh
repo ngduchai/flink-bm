@@ -3,6 +3,7 @@ img_dir=$HOME/diaspora/src/flink
 apptainer instance start --cleanenv --fakeroot \
 	--bind $active_dir/log:/opt/flink/log \
 	--bind $active_dir/configs/jobmanager-config.yaml:/opt/flink/conf/config.yaml \
+	--bind $active_dir/workloads:/opt/workloads \
 	--bind /soft/xalt/:/soft/xalt/ \
 	$img_dir/flink_img flink-jobmanager
 
