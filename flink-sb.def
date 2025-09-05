@@ -9,6 +9,7 @@ From: ubuntu:22.04   # or debian:bookworm, something with recent glibc
     # Install Python and basic build tools
     apt-get update && apt-get install -y \
         python3 python3-pip python3-venv curl \
+        libboost-serialization-dev \
         openjdk-17-jre-headless curl ca-certificates \
         && rm -rf /var/lib/apt/lists/*
 
