@@ -7,10 +7,12 @@ From: ubuntu:22.04   # or debian:bookworm, something with recent glibc
 
 %post
     # Install Python and basic build tools
-    apt-get update && apt-get install -y \
+    apt-get update
+    apt-get install -y mpich libmpich-dev libhdf5-mpich-dev
+    apt-get install -y \
         python3 python3-pip python3-venv curl \
         libboost-serialization-dev \
-        libhdf5-dev mpich libmpich-dev libhdf5-mpich-dev zlib1g-dev \
+        libhdf5-dev zlib1g-dev \
         openjdk-17-jre-headless curl ca-certificates \
         && rm -rf /var/lib/apt/lists/*
 
