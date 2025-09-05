@@ -16,6 +16,7 @@ From: ubuntu:22.04   # or debian:bookworm, something with recent glibc
 
     # Install PyFlink and common libs
     python3 -m pip install --no-cache-dir --upgrade pip
+    python3 -m pip install --upgrade build pybind11 setuptools wheel
     python3 -m pip install --no-cache-dir apache-flink==2.0.0 numpy h5py flatbuffers
 
 %environment
