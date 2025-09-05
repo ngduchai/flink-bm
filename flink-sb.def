@@ -1,7 +1,7 @@
 Bootstrap: docker
 From: ubuntu:22.04   # or debian:bookworm, something with recent glibc
 
-$files
+%files
 # copy the tarball from host into the container build context
 ../../zip/flink-2.0.0-bin-scala_2.12.tgz /tmp/flink.tgz
 
