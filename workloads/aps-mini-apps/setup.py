@@ -31,6 +31,7 @@ ext = Extension(
         pybind11.get_include(user=True),   # <— add user include path too
         os.path.join(here, "include"),
         os.path.join(here, "include/tracelib"),
+        "/usr/include/hdf5/serial",
         localinclude
     ],
     # Minimal, but correct: use Boost.Serialization's actual lib name
@@ -43,7 +44,6 @@ ext = Extension(
     ],
     library_dirs=[
         "/usr/local/lib",
-        "/usr/include/hdf5/serial",
         locallib
     ],
     # Keep runtime search path so the module finds Spack libs at import time
