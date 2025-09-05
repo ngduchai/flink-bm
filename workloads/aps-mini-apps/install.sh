@@ -1,4 +1,3 @@
-apptainer exec --fakeroot --cleanenv instance://flink-sirt /bin/bash -lc '
 set -euo pipefail
 
 # Paths inside the container
@@ -50,4 +49,3 @@ export PYTHONPATH="$WHEEL_DIR:${PYTHONPATH}"
 # 5) (Optional) show the wheel we will ship
 echo "[build] Available wheel:"
 ls -lh "$WHEEL_DIR"/sirt_ops-*.whl
-'
