@@ -3,7 +3,6 @@
 
 #include "data_region_base.h"
 #include <cassert>
-#include <fmt/format.h>
 #include <time.h>
 #include <string>
 #include <iostream>
