@@ -1,7 +1,6 @@
 #include <iomanip>
 #include "sirt.h"
 #include "sirt_recon_space.h"
-#include "trace_h5io.h"
 #include "data_region_base.h"
 #include "disp_engine_reduction.h"
 #include <cassert>

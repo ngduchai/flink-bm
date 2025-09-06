@@ -22,7 +22,6 @@ ext = Extension(
         "src/sirt_bindings.cc",
         "src/sirt.cc",
         "src/data_stream.cc",
-        "src/tracelib/trace_h5io.cc",
         "src/tracelib/trace_utils.cc"
     ],
     include_dirs=[

@@ -6,7 +6,6 @@
 #include <unordered_map>
 #include <vector>
 #include "data_stream.h"
-#include "trace_h5io.h"
 #include "disp_engine_reduction.h"
 #include "disp_engine_base.h"
 #include "reduction_space_a.h"
