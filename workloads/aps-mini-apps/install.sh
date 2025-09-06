@@ -7,7 +7,9 @@ VENV=/opt/venv                     # build/run venv
 PYBIN=python3
 
 # Optional: libs your C++ depends on
-export LD_LIBRARY_PATH="/opt/libs:${LD_LIBRARY_PATH}"   # adjust if you mounted external .so here
+export LD_LIBRARY_PATH="/opt/libs:/usr/local/lib:/usr/lib/x86_64-linux-gnu/hdf5/serial/:${LD_LIBRARY_PATH}"   # adjust if you mounted external .so here
+
+mkdir -p "$WHEEL_DIR"
 
 # # 1) Create venv and install build deps
 # if [ ! -d "$VENV" ]; then
