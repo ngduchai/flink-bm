@@ -42,7 +42,7 @@ ext = Extension(
     ],
     library_dirs=[
         "/usr/local/lib",
-        "/usr/lib/x86_64-linux-gnu/hdf5/serial/"
+        "/usr/lib/x86_64-linux-gnu/hdf5/serial/",
         locallib
     ],
     # Keep runtime search path so the module finds Spack libs at import time
