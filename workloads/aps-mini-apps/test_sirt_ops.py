@@ -1,60 +1,51 @@
-# job.py — minimal streaming example
-from pyflink.datastream import StreamExecutionEnvironment, MapFunction, RuntimeContext
-from pyflink.common import Types
-import sirt_ops  # your C++ extension
-
-# Example: a config & a minimal setup meta you already use in C++
-SETUP_META = {
-    "n_sinograms": 10,
-    "n_rays_per_proj_row": 128,
-    "beg_sinograms": 0,
-    "tn_sinograms": 10,
-    "window_step": 2,
-}
+from pyflink.datastream import StreamExecutionEnvironment
+from pyflink.common.typeinfo import Types
+from pyflink.datastream.functions import MapFunction
+import numpy as np
+import sirt_ops
 
 CFG = {
     "rank": 0,
-    "center": 0,
-    "window_iter": 2,
-    "write_freq": 5,
+    "window_iter": 1,
+    "write_freq": 1,
+    "center": 1,
 }
+META_IN = {"Type": "DATA", "seq_n": "0", "projection_id": "0", "theta": "0.0", "center": "0.0"}
 
-META_IN = {
-    "Type": "DATA",
-    "seq_n": "0",
-    "projection_id": "0",
-    "theta": "0.0",
-    "center": "0.0",
-}
+# Prepare payloads as **Python floats**, not numpy.float32 scalars
+def make_payloads(n):
+    return [np.random.rand(n).astype("float32").tolist() for _ in range(12)]
 
-import numpy as np
+payloads = make_payloads(1024)
 
 class SirtMap(MapFunction):
-    def open(self, runtime_context: RuntimeContext):
+    def __init__(self):
         self.engine = sirt_ops.SirtEngine()
-        self.engine.setup(SETUP_META)
+        # You still call setup from Python side
+        self.engine.setup({
+            "n_sinograms": 4,
+            "n_rays_per_proj_row": 1024,
+            "beg_sinograms": 0,
+            "tn_sinograms": 4,
+            "window_step": 1,
+        })
 
     def map(self, value):
-        # value is assumed to be a flat list/array of float32 sinogram samples
+        # Convert to numpy.float32 here
         arr = np.asarray(value, dtype=np.float32)
         out_bytes, out_meta = self.engine.process(CFG, META_IN, arr)
-        # return some simple text so we can see output; real job would write to sink
-        return f"len={len(out_bytes)}, meta={out_meta.get('iteration_stream','NA')}"
+        return f"out={len(out_bytes)} bytes, iter={out_meta.get('iteration_stream', 'NA')}"
 
 def run():
     env = StreamExecutionEnvironment.get_execution_environment()
     env.set_parallelism(1)
 
-    # Example source: from elements (in practice, use Kafka, files, sockets, etc.)
-    # Each element here is a payload to process.
-    n = SETUP_META["n_sinograms"] * SETUP_META["n_rays_per_proj_row"]
-    payloads = [list(np.random.rand(n).astype(np.float32)) for _ in range(12)]
-    ds = env.from_collection(payloads, type_info=Types.PRIMITIVE_ARRAY(Types.FLOAT()))
+    # IMPORTANT: use LIST(Types.FLOAT()), not PRIMITIVE_ARRAY
+    ds = env.from_collection(payloads, type_info=Types.LIST(Types.FLOAT()))
 
-    ds.map(SirtMap(), output_type=Types.STRING()) \
-      .print()
+    ds.map(SirtMap()).print()
 
-    env.execute("sirt_ops_minimal")
+    env.execute("SIRT Ops Test Job")
 
 if __name__ == "__main__":
     run()
