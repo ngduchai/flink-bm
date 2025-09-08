@@ -2,7 +2,7 @@ set -euo pipefail
 
 # Paths inside the container
 SRC=/opt/workloads/aps-mini-apps   # repo root bind-mounted from host
-WHEEL_DIR=/opt/wheels              # persistent wheel cache (bind-mounted)
+WHEEL_DIR=/tmp/wheels              # persistent wheel cache (bind-mounted)
 VENV=/opt/venv                     # build/run venv
 PYBIN=python3
 
