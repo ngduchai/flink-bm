@@ -26,6 +26,7 @@ fi
 # Remote command executed on JM host
 read -r -d '' REMOTE <<'EOS' || true
 set -euo pipefail
+cd $HOME && source load-apptainer.sh
 INST=$(apptainer instance list | awk 'NR>1 {print $1}' | grep -i 'flink' | head -n1 || true)
 if [[ -z "$INST" ]]; then
   echo "[submit/JM] No running Apptainer instance matching /flink/"; exit 1
