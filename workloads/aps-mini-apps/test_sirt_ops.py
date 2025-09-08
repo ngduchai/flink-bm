@@ -6,11 +6,13 @@ import sirt_ops
 
 # --- SIRT config and minimal metadata ---
 SETUP_META = {
+    "task_id": 0,
     "n_sinograms": 1,
     "n_rays_per_proj_row": 1024,
     "beg_sinograms": 0,
     "tn_sinograms": 1,
     "window_step": 1,
+    "thread_count": 1
 }
 CFG = {"rank": 0, "center": 0, "window_iter": 1, "write_freq": 1}
 META_IN = {
