@@ -23,23 +23,27 @@ META_IN = {
     "center": "0.0",
 }
 
-class SirtMap(MapFunction):
-    def open(self, ctx: RuntimeContext):
-        # One engine per task
+class SirtDoFn(MapFunction):
+    def open(self, runtime_ctx):
+        import sirt_ops
         self.engine = sirt_ops.SirtEngine()
-        self.engine.setup(SETUP_META)
+        self.engine.setup(SETUP_META)  # this now validates keys in the binding
 
-        self.n = SETUP_META["n_sinograms"] * SETUP_META["n_rays_per_proj_row"]
-        # (Optional) deterministic payload per subtask
-        self.subtask = ctx.get_index_of_this_subtask()
-
-    def map(self, i: int) -> str:
-        # Generate payload locally (no list serialization issues)
-        rng = np.random.default_rng(seed=1234 + self.subtask * 1000 + i)
-        arr = rng.random(self.n, dtype=np.float32)
-
-        out_bytes, out_meta = self.engine.process(CFG, META_IN, arr)
-        return f"i={i}, out={len(out_bytes)} bytes, iter={out_meta.get('iteration_stream','NA')}"
+    def map(self, x):
+        try:
+            cfg = {"step": 1}
+            meta = {"Type": "DATA", "seq_n": "0", "projection_id": "0", "theta": "0.0", "center": "0.0"}
+            # x is a list[float]; send as numpy float32 for contiguous buffer
+            import numpy as np
+            payload = np.asarray(x, dtype=np.float32)
+            out_bytes, out_meta = self.engine.process(cfg, meta, payload)
+            return f"ok {len(out_bytes)}"
+        except Exception as e:
+            # Force a Python traceback to go into TM logs:
+            import traceback, sys
+            traceback.print_exc()
+            sys.stderr.flush()
+            raise
 
 def run():
     env = StreamExecutionEnvironment.get_execution_environment()

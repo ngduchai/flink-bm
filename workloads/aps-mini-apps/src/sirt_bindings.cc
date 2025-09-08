@@ -42,16 +42,22 @@ PYBIND11_MODULE(sirt_ops, m) {
                const std::unordered_map<std::string, std::string>& meta_in,
                py::object payload) {
                 py::buffer_info info;
+                // your robust as_ro_float_buffer(payload, info) here:
                 auto [ptr, n] = as_ro_float_buffer(payload, info);
-                py::object keep_alive = payload;    // keep exporter alive
-
-                py::gil_scoped_release g;
-                ProcessResult r = self.process(cfg, meta_in, ptr, n);
-
-                return py::make_tuple(
-                    py::bytes(reinterpret_cast<const char*>(r.data.data()), r.data.size()),
-                    r.meta
-                );
+        
+                if (!ptr || n == 0) {
+                    throw std::runtime_error("process(): empty payload");
+                }
+        
+                try {
+                    py::gil_scoped_release g;
+                    ProcessResult r = self.process(cfg, meta_in, ptr, n);
+                    return py::make_tuple(
+                        py::bytes(reinterpret_cast<const char*>(r.data.data()), r.data.size()),
+                        r.meta);
+                } catch (const std::exception& e) {
+                    throw std::runtime_error(std::string("SirtEngine.process failed: ") + e.what());
+                }
             },
             py::arg("config"), py::arg("metadata"), py::arg("payload"))
 
