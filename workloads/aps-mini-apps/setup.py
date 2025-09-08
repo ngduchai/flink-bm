@@ -20,9 +20,10 @@ ext = Extension(
     "sirt_ops",
     sources=[
         "src/sirt_bindings.cc",
-        "src/sirt.cc",
+        "src/sirt_engine.cc",
         "src/data_stream.cc",
-        "src/tracelib/trace_utils.cc"
+        "src/tracelib/trace_utils.cc",
+        "src/tracelib/sirt.cc"
     ],
     include_dirs=[
         pybind11.get_include(),
