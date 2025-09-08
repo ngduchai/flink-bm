@@ -165,7 +165,7 @@ std::vector<std::uint8_t> SirtEngine::snapshot() const {
   return saved_ckpt;
 }
 
-void restore(const std::vector<std::uint8_t>& snapshot) {
+void SirtEngine::restore(const std::vector<std::uint8_t>& snapshot) {
   // TODO: replace these with actual boost deserialization
 }
 

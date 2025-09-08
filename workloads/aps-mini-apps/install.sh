@@ -46,7 +46,7 @@ fi
 # Install wheel into container’s Python
 WHEEL_TO_INSTALL=$(ls -t "$WHEEL_DIR"/sirt_ops-*.whl | head -n1)
 echo "[install] Installing: $WHEEL_TO_INSTALL"
-"$PYBIN" -m pip install -U "$WHEEL_TO_INSTALL"
+"$PYBIN" -m pip install --force-reinstall -U "$WHEEL_TO_INSTALL"
 
 echo "[install] Verifying import..."
 "$PYBIN" - <<'PY'
