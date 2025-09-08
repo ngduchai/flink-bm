@@ -20,7 +20,7 @@ cat "$UNIQ_HOSTFILE"
 # Command to execute on each node: run install.sh inside *every* running instance with "flink" in the name
 read -r -d '' NODE_CMD <<'EOF' || true
 set -euo pipefail
-source load-apptainer.sh
+source $HOME/load-apptainer.sh
 INSTANCES=$(apptainer instance list | awk 'NR>1 {print $1}' | grep -i 'flink' || true)
 if [ -z "$INSTANCES" ]; then
   echo "[node:$(hostname)] No running instances matching /flink/; nothing to do."
