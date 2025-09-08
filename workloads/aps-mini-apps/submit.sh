@@ -34,7 +34,7 @@ fi
 echo "[submit/JM] Using instance: $INST"
 
 # Run inside the container; export required vars first to avoid 'unbound variable'
-apptainer exec instance://"$INST" bash -lc '
+apptainer exec --cleanenv instance://"$INST" bash -lc '
   set -euo pipefail
   export JOB_PATH_CONT="__JOB_PATH_CONT__"
   export PY_IN_CONT="__PY_IN_CONT__"
