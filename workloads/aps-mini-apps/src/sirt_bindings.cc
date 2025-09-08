@@ -1,7 +1,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
-#include "sirt.h"
+#include "sirt_engine.h"
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
