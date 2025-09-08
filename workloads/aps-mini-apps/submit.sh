@@ -4,7 +4,7 @@ set -euo pipefail
 # --- EDIT THESE ---
 JM_HOST="${JM_HOST:-<jobmanager-hostname>}"    # e.g. node001
 JOB_ROOT_DIR="/home/ndhai/diaspora/src/flink"
-JOB_PATH_HOST="${JOB_PATH_HOST:-$JOB_ROOT_DIR/aps-mini-apps/test_sirt_ops.py}"  # host path to job.py (shared FS)
+JOB_PATH_HOST="${JOB_PATH_HOST:-$JOB_ROOT_DIR/workloads/aps-mini-apps/test_sirt_ops.py}"  # host path to job.py (shared FS)
 JOB_PATH_CONT="${JOB_PATH_CONT:-/opt/workloads/aps-mini-apps/test_sirt_ops.py}" # path inside JM container
 PY_IN_CONT="${PY_IN_CONT:-python3}"            # python path inside container (e.g. /usr/bin/python3.10)
 FLINK_BIN="/opt/flink/bin/flink"               # inside container; adjust if different
