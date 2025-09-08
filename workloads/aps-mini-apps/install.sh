@@ -46,8 +46,8 @@ if [ $NEED_BUILD -eq 1 ]; then
 fi
 
 # 4) Export runtime env so PyFlink can import the wheel if needed
-export PYTHONPATH="$WHEEL_DIR:${PYTHONPATH}"
+export PYTHONPATH="$WHEEL_DIR:${PYTHONPATH:-}"
 
 # 5) (Optional) show the wheel we will ship
-echo "[build] Available wheel:"
-ls -lh "$WHEEL_DIR"/sirt_ops-*.whl
+echo "[build] Available wheel(s):"
+ls -lh "$WHEEL_DIR"/sirt_ops-*.whl || true
