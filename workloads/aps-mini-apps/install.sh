@@ -34,7 +34,7 @@ fi
 if [ $NEED_BUILD -eq 1 ]; then
   echo "[install] Building wheel..."
   rm -rf build/ dist/
-  "$PYBIN" -m pip -q install --upgrade pip build pybind11 setuptools wheel tomopy dxchange h5py
+  "$PYBIN" -m pip -q install --upgrade pip build pybind11 setuptools wheel
   "$PYBIN" -m build
   WHEEL_PATH=$(ls dist/sirt_ops-*.whl | head -n1)
   [ -n "$WHEEL_PATH" ] || { echo "[install] No wheel produced in dist/"; exit 1; }

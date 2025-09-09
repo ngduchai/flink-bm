@@ -6,30 +6,50 @@ From: ubuntu:22.04   # or debian:bookworm, something with recent glibc
 /home/ndhai/diaspora/zip/flink-2.0.0-bin-scala_2.12.tgz /opt/src/flink.tgz
 
 %post
-    # Install Python and basic build tools
-    apt-get update
-    apt-get install -y mpich libmpich-dev libhdf5-mpich-dev
-    apt-get install -y \
-        python3 python3-pip python3-venv curl \
-        libboost-serialization-dev \
-        libhdf5-dev zlib1g-dev \
-        openjdk-17-jre-headless curl ca-certificates \
-        && rm -rf /var/lib/apt/lists/*
+    set -euo pipefail
 
-    # Install Flink
+    # --- OS deps ---
+    apt-get update
+    apt-get install -y --no-install-recommends \
+        ca-certificates curl bzip2 \
+        openjdk-17-jre-headless \
+        mpich libmpich-dev \
+        libhdf5-mpich-dev libhdf5-dev zlib1g-dev \
+        libboost-serialization-dev \
+        python3 python3-pip python3-venv
+    rm -rf /var/lib/apt/lists/*
+
+    # --- Flink ---
     mkdir -p /opt && cd /opt
-    # Use local flink instead, download may take time on Polaris
-    # curl -L https://archive.apache.org/dist/flink/flink-2.0.0/flink-2.0.0-bin-scala_2.12.tgz  | tar xz
     tar -xzf /opt/src/flink.tgz -C /opt
     ln -s /opt/flink-2.0.0 /opt/flink
 
-    # Install PyFlink and common libs
-    python3 -m pip install --no-cache-dir --upgrade pip
-    python3 -m pip install --upgrade build pybind11 setuptools wheel
-    python3 -m pip install --no-cache-dir apache-flink==2.0.0 numpy h5py flatbuffers
+    # --- micromamba + conda env for tomopy ---
+    MAMBA_ROOT=/opt/micromamba
+    ENV_PREFIX=$MAMBA_ROOT/envs/aps
+    mkdir -p /tmp/mamba-bin
+    curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xj -C /tmp/mamba-bin bin/micromamba
+
+    # Create env with Python 3.10 (good with many scientific wheels) and tomopy stack
+    /tmp/mamba-bin/bin/micromamba create -y -p "$ENV_PREFIX" -c conda-forge \
+        python=3.10 tomopy dxchange h5py numpy scipy scikit-image
+
+    # Add pip packages inside the env (build toolchain + pyflink client libs etc.)
+    "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir --upgrade pip
+    "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
+        build pybind11 setuptools wheel flatbuffers apache-flink==2.0.0
+
+    # Make Flink use this Python by default
+    mkdir -p /opt/flink/conf
+    {
+      echo "python.executable: $ENV_PREFIX/bin/python"
+      echo "python.client.executable: $ENV_PREFIX/bin/python"
+    } >> /opt/flink/conf/flink-conf.yaml
 
 %environment
     export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
     export FLINK_HOME=/opt/flink
-    export PATH=$FLINK_HOME/bin:$PATH
-    export PYTHON=/usr/bin/python3
+    export PATH=$FLINK_HOME/bin:/opt/micromamba/envs/aps/bin:$PATH
+    export PYTHON=/opt/micromamba/envs/aps/bin/python
+    # If you mount extra native libs at runtime, prepend /opt/libs here
+    export LD_LIBRARY_PATH=/usr/local/lib:/usr/lib/x86_64-linux-gnu/hdf5/serial:$LD_LIBRARY_PATH
