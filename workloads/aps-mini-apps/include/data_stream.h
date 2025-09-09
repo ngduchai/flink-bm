@@ -43,7 +43,8 @@ class DataStream
     std::vector<float> vproj;
     std::vector<float> vtheta;
     // std::vector<const std::unordered_map<std::string, std::string>> vmeta;
-    std::vector<std::reference_wrapper<const std::unordered_map<std::string,std::string>>> vmeta;
+    // std::vector<std::unordered_map<std::string,std::string>> vmeta;
+    std::vector<float> vcenters;
 
     /* Add streaming message to buffers
     * @param event: mofka event containing data and metadata

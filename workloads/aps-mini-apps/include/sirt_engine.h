@@ -12,7 +12,7 @@
 #include "sirt_recon_space.h"
 
 struct ProcessResult {
-    std::vector<std::uint8_t> data;  // output bytes
+    std::vector<float> data;  // output bytes
     std::unordered_map<std::string, std::string> meta; // output metadata
 };
 
@@ -39,7 +39,7 @@ public:
     }
 
     ProcessResult process(
-        const std::unordered_map<std::string, int>& config,
+        const std::unordered_map<std::string, int64_t>& config,
         const std::unordered_map<std::string, std::string>& metadata,
         const float* data,
         std::size_t len

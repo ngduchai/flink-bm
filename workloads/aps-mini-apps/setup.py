@@ -5,9 +5,9 @@ import sys, pybind11, os
 # TODO: Adjust these paths as necessary
 # here = "/home/ndhai/diaspora/flink-bm/workloads/aps-mini-apps/"
 # localview = "/home/ndhai/diaspora/spack-aps/var/spack/environments/APS/.spack-env/view/"
-# here = "/home/ndhai/src/flink-bm/workloads/aps-mini-apps"
+here = "/home/ndhai/src/flink-bm/workloads/aps-mini-apps"
 # localview = "/home/ndhai/src/spack-aps/var/spack/environments/APS/.spack-env/view/"
-here = "/opt/workloads/aps-mini-apps"
+# here = "/opt/workloads/aps-mini-apps"
 localview = "/home/ndhai/src/spack-aps/var/spack/environments/APS/.spack-env/view/"
 locallib = localview + "lib"
 localinclude = localview + "include"
@@ -23,7 +23,8 @@ ext = Extension(
         "src/sirt_engine.cc",
         "src/data_stream.cc",
         "src/tracelib/trace_utils.cc",
-        "src/tracelib/sirt.cc"
+        "src/tracelib/sirt.cc",
+        "src/sirt_common.cc"
     ],
     include_dirs=[
         pybind11.get_include(),

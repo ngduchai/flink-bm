@@ -1,4 +1,5 @@
 #include "data_stream.h"
+#include "sirt_common.h"
 
 // void DataStream::addTomoMsg(DataStreamEvent event){
 //   auto metadata = event.metadata;
@@ -6,7 +7,7 @@
   
 //   pending_events.push_back(event);
 //   vmeta.push_back(metadata); /// Setup metadata
-//   vtheta.push_back(metadata.at("theta"));
+//   vtheta.push_back(required_str(metadata, "theta"));
 
 //   size_t n_rays_per_proj = n_sinograms * n_rays_per_proj_row;
 //   vproj.insert(vproj.end(), event.data, event.data + n_rays_per_proj);
@@ -14,7 +15,8 @@
 
 void DataStream::addTomoMsg(DataStreamEvent event){
   pending_events.push_back(event);
-  vmeta.push_back(event.metadata); /// Setup metadata
+  // vmeta.push_back(event.metadata); /// Setup metadata
+  vcenters.push_back(std::stof(require_str(event.metadata, "center")));
   vtheta.push_back(event.theta);
   // spdlog::info("Received data {}", metadata.string());
 
@@ -30,7 +32,8 @@ void DataStream::eraseBegTraceMsg(){
   vtheta.erase(vtheta.begin());
   size_t n_rays_per_proj = n_sinograms * n_rays_per_proj_row;
   vproj.erase(vproj.begin(),vproj.begin()+n_rays_per_proj);
-  vmeta.erase(vmeta.begin());
+  // vmeta.erase(vmeta.begin());
+  vcenters.erase(vcenters.begin());
 }
 
 
@@ -42,19 +45,22 @@ void DataStream::eraseBegTraceMsg(){
 DataRegionBase<float, TraceMetadata>* DataStream::setupTraceDataRegion(
   DataRegionBareBase<float> &recon_image){
 
-    int center = std::stoi(vmeta.back().get().at("center"));
+    std::cout << "[Task-" << getRank() << "]: Setting up data region from sliding window with " << vtheta.size() << " projections" << std::endl;
+    
+    // int center = std::stoi(require_str(vmeta.back(), "center"));
+    int center = vcenters.back();
 
     TraceMetadata *mdata = new TraceMetadata(
-    vtheta.data(),
-    0,                                // metadata().proj_id(),
-    beg_sinograms,                    // metadata().slice_id(),
-    0,                                // metadata().col_id(),
-    tn_sinograms,                     // metadata().num_total_slices(),
-    vtheta.size(),                    // int const num_projs,
-    n_sinograms,                      // metadata().num_slices(),
-    n_rays_per_proj_row,              // metadata().num_cols(),
-    n_rays_per_proj_row,              // * metadata().n_rays_per_proj_row, // metadata().num_grids(),
-    center);                          // use the last incoming center for recon.);
+      vtheta.data(),
+      0,                                // metadata().proj_id(),
+      beg_sinograms,                    // metadata().slice_id(),
+      0,                                // metadata().col_id(),
+      tn_sinograms,                     // metadata().num_total_slices(),
+      vtheta.size(),                    // int const num_projs,
+      n_sinograms,                      // metadata().num_slices(),
+      n_rays_per_proj_row,              // metadata().num_cols(),
+      n_rays_per_proj_row,              // * metadata().n_rays_per_proj_row, // metadata().num_grids(),
+      center);                          // use the last incoming center for recon.);
 
   mdata->recon(recon_image);
 
@@ -65,7 +71,6 @@ DataRegionBase<float, TraceMetadata>* DataStream::setupTraceDataRegion(
       data,
       mdata->count(),
       mdata);
-
   curr_data->ResetMirroredRegionIter();
   return curr_data;
 }
@@ -91,17 +96,19 @@ DataRegionBase<float, TraceMetadata>* DataStream::readSlidingWindow(
   while(vtheta.size() > window_len) {
     eraseBegTraceMsg();
   }
-    
-  if (metadata.at("Type") == "FIN") {
+
+  // Load metadata
+  std::string type = require_str(metadata, "Type"); 
+  if (type == "FIN") {
     setEndOfStream(true);
     std::cout << "[Task-" << getRank() << "]: End of stream detected" << std::endl;
     return nullptr;
   }
   
-  int sequence_id = std::stoi(metadata.at("seq_n"));
-  int proj_id = std::stoi(metadata.at("projection_id"));
-  double theta = std::stod(metadata.at("theta"));
-  double center = std::stod(metadata.at("center"));
+  int sequence_id = std::stoi(require_str(metadata, "seq_n"));
+  int proj_id = std::stoi(require_str(metadata, "projection_id"));
+  double theta = std::stod(require_str(metadata, "theta"));
+  double center = std::stod(require_str(metadata, "center"));
   std::cout << "[Task-" << getRank() << "]: seq_id: " << sequence_id << " projection_id: " << proj_id << " theta: " << theta << " center: " << center << ", progress = " << progress << std::endl;
   pending_events.push_back(DataStreamEvent(metadata, sequence_id, proj_id, theta, center, data));
 

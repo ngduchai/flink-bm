@@ -14,6 +14,7 @@
 #include <unistd.h>
 #include <charconv>
 #include <csignal>
+#include "sirt_common.h"
 
 #include <boost/serialization/export.hpp>
 #include <boost/archive/text_oarchive.hpp>
@@ -24,15 +25,15 @@ using DISPEngineReductionSIRT = DISPEngineReduction<SIRTReconSpace, float>;
 using DISPEngineBaseSIRT = DISPEngineBase<SIRTReconSpace, float>;
 using AReductionSpaceBaseSIRT = AReductionSpaceBase<SIRTReconSpace, float>;
 
-
 void SirtEngine::setup(const std::unordered_map<std::string, int64_t>& tmetadata) {
 
-  task_id = tmetadata.at("task_id");
-
-  ds.n_sinograms = tmetadata.at("n_sinograms");
-  ds.n_rays_per_proj_row = tmetadata.at("n_rays_per_proj_row");
-  ds.beg_sinograms = tmetadata.at("beg_sinograms");
-  ds.tn_sinograms = tmetadata.at("tn_sinograms");
+  task_id               = require_int(tmetadata, "task_id");
+  window_step           = require_int(tmetadata, "window_step");
+  int thread_count      = require_int(tmetadata, "thread_count");
+  ds.n_sinograms        = require_int(tmetadata, "n_sinograms");
+  ds.n_rays_per_proj_row= require_int(tmetadata, "n_rays_per_proj_row");
+  ds.beg_sinograms      = require_int(tmetadata, "beg_sinograms");
+  ds.tn_sinograms       = require_int(tmetadata, "tn_sinograms");
 
   const int64_t n_blocks = ds.n_sinograms;
   const int64_t num_cols = ds.n_rays_per_proj_row;
@@ -42,8 +43,6 @@ void SirtEngine::setup(const std::unordered_map<std::string, int64_t>& tmetadata
   h5md.dims[1] = ds.tn_sinograms;
   h5md.dims[0] = 0;   /// Number of projections is unknown
   h5md.dims[2] = ds.n_rays_per_proj_row;
-
-  window_step = tmetadata.at("window_step");
   
   /// Reconstructed image
   recon_image = new DataRegionBareBase<float>(n_blocks*num_cols*num_cols);
@@ -65,12 +64,12 @@ void SirtEngine::setup(const std::unordered_map<std::string, int64_t>& tmetadata
   main_recon_replica = &main_recon_space->reduction_objects();
   
   /* Prepare processing engine and main reduction space for other threads */
-  engine = new DISPEngineReductionSIRT(main_recon_space, tmetadata.at("thread_count"));
+  engine = new DISPEngineReductionSIRT(main_recon_space, thread_count);
   
 }
 
 ProcessResult SirtEngine::process(
-  const std::unordered_map<std::string, int>& config,
+  const std::unordered_map<std::string, int64_t>& config,
   const std::unordered_map<std::string, std::string>& metadata,
   const float* data,
   std::size_t len
@@ -82,9 +81,20 @@ ProcessResult SirtEngine::process(
 
   DataRegionBase<float, TraceMetadata> *curr_slices = ds.readSlidingWindow(*recon_image, window_step, metadata, data);
   
+  int center = require_int(config, "center");
+  int window_iter = require_int(config, "window_iter");
+  int write_freq = require_int(config, "write_freq");
 
-  if(config.at("center") !=0 && curr_slices!=nullptr)
-    curr_slices->metadata().center(config.at("center"));
+  std::cout << "[Task-" << task_id << "] passes = " << passes << " -- Processing window with " 
+            << (curr_slices ? curr_slices->metadata().num_projs() : 0) 
+            << " projections, center=" << center 
+            << ", window_iter=" << window_iter 
+            << ", write_freq=" << write_freq 
+            << std::endl;
+
+
+  if(center !=0 && curr_slices!=nullptr)
+    curr_slices->metadata().center(center);
   
   if (ds.isEndOfStream()) {
     std::cout << "[Task-" << task_id << "] End of stream. Exiting..." << std::endl;
@@ -95,21 +105,32 @@ ProcessResult SirtEngine::process(
     return result;
   }
   /// Iterate on window
-  for(int i=0; i<config.at("window_iter"); ++i){
+  for(int i=0; i<window_iter; ++i){
+
+    std::cout << "[Task-" << task_id << "] passes = " << passes << " -- Iteration " << i+1 << "/" << window_iter << " on current window" << std::endl;
 
     engine->RunParallelReduction(*curr_slices, req_number);  /// Reconstruction
+    std::cout << "[Task-" << task_id << "] ---- Complete parallel reduction ---- " << std::endl;
     
     engine->ParInPlaceLocalSynchWrapper();              /// Local combination
+    std::cout << "[Task-" << task_id << "] ---- Complete par in-place local synch ---- " << std::endl;
    
     main_recon_space->UpdateRecon(*recon_image, *main_recon_replica);
+    std::cout << "[Task-" << task_id << "] ---- Complete updating reconstruction ---- " << std::endl;
     
     engine->ResetReductionSpaces(init_val);
+    std::cout << "[Task-" << task_id << "] ---- Complete resetting reduction spaces ---- " << std::endl;
+
     curr_slices->ResetMirroredRegionIter();
+    std::cout << "[Task-" << task_id << "] ---- Complete resetting mirrored region iter ---- " << std::endl;
   }
 
   passes++;
   /* Emit reconstructed data */
-  if(!(passes%config.at("write_freq"))){
+  if(!(passes%write_freq)){
+
+    std::cout << "[Task-" << task_id << "] passes = " << passes-1 << " -- Emitting reconstructed image" << std::endl;
+
     std::stringstream iteration_stream;
     iteration_stream << std::setfill('0') << std::setw(6) << passes;
     
@@ -131,27 +152,29 @@ ProcessResult SirtEngine::process(
       static_cast<hsize_t>(h5md.dims[2]),
       static_cast<hsize_t>(h5md.dims[2])};
 
-      std::unordered_map<std::string, std::string> md = {
-        {"Type", "DATA"},
-        {"rank", std::to_string(task_id)},
-        {"iteration_stream", iteration_stream.str()},
-        {"rank_dims_0", std::to_string(rank_dims[0])},
-        {"rank_dims_1", std::to_string(rank_dims[1])},
-        {"rank_dims_2", std::to_string(rank_dims[2])},
-        {"app_dims_0", std::to_string(app_dims[0])},
-        {"app_dims_1", std::to_string(app_dims[1])},
-        {"app_dims_2", std::to_string(app_dims[2])},
-        {"recon_slice_data_index", std::to_string(recon_slice_data_index)}
+    std::unordered_map<std::string, std::string> md = {
+      {"Type", "DATA"},
+      {"rank", std::to_string(task_id)},
+      {"iteration_stream", iteration_stream.str()},
+      {"rank_dims_0", std::to_string(rank_dims[0])},
+      {"rank_dims_1", std::to_string(rank_dims[1])},
+      {"rank_dims_2", std::to_string(rank_dims[2])},
+      {"app_dims_0", std::to_string(app_dims[0])},
+      {"app_dims_1", std::to_string(app_dims[1])},
+      {"app_dims_2", std::to_string(app_dims[2])},
+      {"recon_slice_data_index", std::to_string(recon_slice_data_index)}
     };
+
+    std::cout << "[Task-" << task_id << "] ---- Reconstructed image data index: " << recon_slice_data_index << std::endl;
 
     // result.data = &recon[recon_slice_data_index];
     result.data.insert(result.data.end(), 
-        reinterpret_cast<std::uint8_t*>(&recon[recon_slice_data_index]), 
-        reinterpret_cast<std::uint8_t*>(&recon[recon_slice_data_index]) + 
-        data_size * sizeof(float));
+        &recon[recon_slice_data_index], 
+        &recon[recon_slice_data_index] +  data_size);
     result.meta = md;
     // MPI_Barrier(MPI_COMM_WORLD);
   }
+
   //delete curr_slices->metadata(); //TODO Check for memory leak
   delete curr_slices;
 
