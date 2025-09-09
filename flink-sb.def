@@ -35,15 +35,8 @@ bash -euxo pipefail <<'BASH'
 
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir --upgrade pip
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
-      build pybind11 setuptools wheel flatbuffers apache-flink==2.0.0 \
-      protobuf==4.25.3 grpcio==1.59.0 googleapis-common-protos
-
-  # Make Flink use this Python by default
-  mkdir -p /opt/flink/conf
-  {
-    echo "python.executable: $ENV_PREFIX/bin/python"
-    echo "python.client.executable: $ENV_PREFIX/bin/python"
-  } >> /opt/flink/conf/flink-conf.yaml
+      build pybind11 setuptools wheel flatbuffers apache-flink==2.0.0
+      
 BASH
 
 %environment
