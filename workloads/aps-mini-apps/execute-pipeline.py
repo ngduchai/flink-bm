@@ -9,10 +9,6 @@ from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
 from pyflink.datastream.functions import SourceFunction, FlatMapFunction, MapFunction, SinkFunction, RuntimeContext
 from pyflink.datastream.state import ListStateDescriptor
 
-# --- added (without changing any existing import order) ---
-from pyflink.datastream.functions import RichParallelSourceFunction
-# ----------------------------------------------------------
-
 
 # -------------------------
 # Args
@@ -123,58 +119,50 @@ def ordered_subset(max_ind, nelem):
 
 
 # -------------------------
-# Source (updated to RichParallelSourceFunction)
+# Source factory (callable-based SourceFunction)
 # -------------------------
-class DaqOperator(RichParallelSourceFunction):
-    def __init__(self, input_f, beg_sinogram=0, num_sinograms=0, seq=0,
-                 slp=0.0, iteration=1, save_after_serialize=False, prj_slp=0.0, logdir="."):
-        # NOTE: DO NOT call super().__init__() here
-        self.input_f = input_f
-        self.beg_sinogram = beg_sinogram
-        self.num_sinograms = num_sinograms
-        self.seq = seq
-        self.slp = slp
-        self.iteration = iteration
-        self.save_after_serialize = save_after_serialize
-        self.prj_slp = prj_slp
-        self.logdir = logdir
-        self.running = True
+def make_daq_source(input_f, beg_sinogram, num_sinograms, seq0, iteration_sleep, d_iteration,
+                    proj_sleep, logdir, save_after_serialize=False):
+    """
+    Returns a pyflink SourceFunction built from a Python callable.
+    This matches the supported pattern in PyFlink 2.0.
+    """
+    def _run(ctx):
+        seq = int(seq0)
 
-    def cancel(self):
-        self.running = False
-
-    def run(self, ctx):
-        if self.input_f.endswith('.npy'):
-            serialized_data = np.load(self.input_f, allow_pickle=True)
+        if input_f.endswith('.npy'):
+            serialized_data = np.load(input_f, allow_pickle=True)
         else:
-            idata, flat, dark, itheta = setup_simulation_data(self.input_f, self.beg_sinogram, self.num_sinograms)
+            idata, flat, dark, itheta = setup_simulation_data(input_f, beg_sinogram, num_sinograms)
             serialized_data = serialize_dataset(idata, flat, dark, itheta)
-            if self.save_after_serialize:
-                np.save(f"{self.input_f}.npy", serialized_data)
+            if save_after_serialize:
+                np.save(f"{input_f}.npy", serialized_data)
             del idata, flat, dark
 
         tot_transfer_size = 0
-        time0 = time.time()
+        t0 = time.time()
         indices = ordered_subset(serialized_data.shape[0], 16)
 
-        for it in range(self.iteration):
-            print(f"Current iteration over dataset: {it + 1}/{self.iteration}")
+        time.sleep(float(iteration_sleep))
+
+        for it in range(int(d_iteration)):
+            print(f"Current iteration over dataset: {it + 1}/{d_iteration}")
             for index in indices:
-                if not self.running:
-                    return
-                time.sleep(self.prj_slp)
-                md = {"index": int(index), "Type": "DATA", "sequence_id": self.seq}
+                time.sleep(float(proj_sleep))
+                md = {"index": int(index), "Type": "DATA", "sequence_id": seq}
                 ctx.collect([md, serialized_data[index]])
-                self.seq += 1
+                seq += 1
                 tot_transfer_size += len(serialized_data[index])
 
         ctx.collect([{"Type": "FIN"}, bytearray(1)])
 
-        elapsed_time = time.time() - time0
+        elapsed = time.time() - t0
         tot_MiBs = (tot_transfer_size * 1.0) / 2 ** 20
-        nproj = self.iteration * len(serialized_data)
-        print(f"Sent projections: {nproj}; Size (MiB): {tot_MiBs:.2f}; Elapsed (s): {elapsed_time:.2f}")
-        print(f"Rate (MiB/s): {tot_MiBs / elapsed_time:.2f}; (msg/s): {nproj / elapsed_time:.2f}")
+        nproj = int(d_iteration) * len(serialized_data)
+        print(f"Sent projections: {nproj}; Size (MiB): {tot_MiBs:.2f}; Elapsed (s): {elapsed:.2f}")
+        print(f"Rate (MiB/s): {tot_MiBs / elapsed:.2f}; (msg/s): {nproj / elapsed:.2f}")
+
+    return SourceFunction(_run)
 
 
 # -------------------------
@@ -263,7 +251,7 @@ class DistOperator(FlatMapFunction):
                 rotation = rotation * math.pi / 180.0
 
             if self.args.normalize and self.tot_white_imgs > 0 and self.tot_dark_imgs > 0:
-                sub = tomopy.normalize(sub, flat=self.white_imgs, dark=self.dark_imgs) if False else tp.normalize(sub, flat=self.white_imgs, dark=self.dark_imgs)
+                sub = tp.normalize(sub, flat=self.white_imgs, dark=self.dark_imgs)
             if self.args.remove_stripes:
                 sub = tp.remove_stripe_fw(sub, level=7, wname='sym16', sigma=1, pad=True)
             if self.args.mlog:
@@ -419,15 +407,16 @@ def main():
         env.add_python_file(whl)
 
     daq = env.add_source(
-        DaqOperator(
+        make_daq_source(
             input_f=args.simulation_file,
             beg_sinogram=args.beg_sinogram,
             num_sinograms=args.num_sinograms,
-            seq=0,
-            slp=args.iteration_sleep,
-            iteration=args.d_iteration,
-            prj_slp=args.proj_sleep,
-            logdir=args.logdir
+            seq0=0,
+            iteration_sleep=args.iteration_sleep,
+            d_iteration=args.d_iteration,
+            proj_sleep=args.proj_sleep,
+            logdir=args.logdir,
+            save_after_serialize=False
         ),
         "DAQ Source",
         type_info=Types.PICKLED_BYTE_ARRAY()
