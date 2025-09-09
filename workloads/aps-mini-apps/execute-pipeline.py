@@ -17,7 +17,8 @@ from pyflink.common import WatermarkStrategy, Encoder, Types
 from pyflink.datastream.state import ListStateDescriptor
 from pyflink.datastream import CheckpointingMode
 from pyflink.datastream import StreamExecutionEnvironment, RuntimeExecutionMode
-from pyflink.datastream.functions import SourceFunction, FlatMapFunction, MapFunction, SinkFunction, RuntimeContext, CheckpointedFunction
+from pyflink.datastream.functions import SourceFunction, FlatMapFunction, MapFunction, SinkFunction, RuntimeContext
+from pyflink.datastream.checkpointed_function import CheckpointedFunction
 
 import sirt_ops
 
@@ -417,59 +418,67 @@ class DistOperator(FlatMapFunction):
 
 class SirtOperator(MapFunction, CheckpointedFunction):
     def __init__(self, cfg):
-      self.cfg = {
-        "thread_count": cfg.thread_count,
-        "window_step": cfg.window_step,
-        "beg_sinogram": cfg.beg_sinogram,
-        "center": cfg.center,
-        "write_freq": cfg.write_freq,
-        "window_iter": cfg.window_iter,
-        "window_length": cfg.window_length,
-        "window_step" : cfg.window_step,
-        "num_sinogram_columns": cfg.num_sinogram_columns
-      }
+        self.cfg = {
+            "thread_count": cfg.thread_count,
+            "window_step": cfg.window_step,
+            "beg_sinogram": cfg.beg_sinogram,
+            "center": cfg.center,
+            "write_freq": cfg.write_freq,
+            "window_iter": cfg.window_iter,
+            "window_length": cfg.window_length,
+            "num_sinogram_columns": cfg.num_sinogram_columns,
+            "num_sinograms": cfg.num_sinograms,
+        }
+        self.engine = None
+        self.state = None  # ListState[bytes]
+
+    # NEW in Flink 2.0: initialize operator state here
+    def initialize_state(self, context):
+        from pyflink.datastream.state import ListStateDescriptor
+        # store bytes snapshots
+        desc = ListStateDescriptor("sirt_state", Types.PRIMITIVE_ARRAY(Types.BYTE()))
+        self.state = context.get_operator_state_store().get_list_state(desc)
 
     def open(self, ctx: RuntimeContext):
+        import sirt_ops
         self.engine = sirt_ops.SirtEngine()
-        
-        # determine data assignment and setup the sirt engine
-        # based on task_id and num_tasks
+
         task_id = ctx.get_index_of_this_subtask()
         num_tasks = ctx.get_number_of_parallel_subtasks()
-        total_sinograms = self.cfg["num_sinograms"]
+        total_sinograms = int(self.cfg["num_sinograms"])
+
         nsino = total_sinograms // num_tasks
         remaining = total_sinograms % num_tasks
-
         r = 1 if task_id < remaining else 0
         n_sinograms = r + nsino
-        beg_sinograms = (1 + nsino) * num_tasks if task_id < remaining else (1 + nsino) * remaining + nsino * (task_id - remaining)
+        beg_sinograms = (1 + nsino) * task_id if task_id < remaining else \
+                        (1 + nsino) * remaining + nsino * (task_id - remaining)
 
         tmetadata = {
-          "task_id": task_id,
-          "n_sinograms": n_sinograms,
-          "n_rays_per_project_row": self.cfg["num_sinogram_columns"],
-          "beg_sinogram": beg_sinograms,
-          "tn_sinograms": total_sinograms,
-          "window_step": self.cfg["window_step"],
-          "thread_count": self.cfg["thread_count"]
+            "task_id": task_id,
+            "n_sinograms": n_sinograms,
+            "n_rays_per_project_row": int(self.cfg["num_sinogram_columns"]),
+            "beg_sinogram": beg_sinograms,
+            "tn_sinograms": total_sinograms,
+            "window_step": int(self.cfg["window_step"]),
+            "thread_count": int(self.cfg["thread_count"]),
         }
         self.engine.setup(tmetadata)
 
-        # Restore state if available
-        self.state = ctx.get_list_state(
-            ListStateDescriptor("sirt_state", Types.PRIMITIVE_ARRAY(Types.BYTE()))
-        )
+        # restore snapshot if present
         saved = list(self.state.get())
         if saved:
-            self.engine.restore(bytes(saved[0]))
+            # ListState holds a list of byte arrays; we stored a single one
+            snap = bytes(saved[0])
+            self.engine.restore(snap)
 
     def snapshot_state(self, context):
-        snap = self.engine.snapshot()
+        snap = self.engine.snapshot()  # returns bytes/bytearray
         self.state.clear()
-        self.state.add(list(snap))  # store as byte[] in operator state
+        self.state.add(list(snap))  # ListState expects a sequence of bytes
 
     def map(self, value):
-        meta_in, payload = value  # dict, dict, bytes/bytearray/memoryview
+        meta_in, payload = value
         out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
         return [dict(out_meta), bytes(out_bytes)]
 
