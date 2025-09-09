@@ -7,7 +7,7 @@ import numpy as np
 import time
 import TraceSerializer
 import h5py
-import dxchange
+# import dxchange
 import tomopy as tp
 import csv
 import math
