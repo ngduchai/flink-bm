@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# --- EDIT THESE ---
+if [ "$#" -ne 1 ]; then
+  echo "Usage: $0 job_script.py"
+  echo "  job_script.py : APS mini-apps Flink job script to submit (e.g. test_sirt_ops.py)"
+  exit 1
+fi
+
+JOB_SCIPT=$1
 
 # Node list from PBS or fallback
 NODE_FILE=${PBS_NODEFILE:-nodes.txt}
@@ -9,7 +15,7 @@ nodes=( $(cat "$NODE_FILE") )
 JM_HOST="${nodes[0]}"
 
 JOB_ROOT_DIR="/home/ndhai/diaspora/src/flink"
-JOB_PATH_HOST="${JOB_PATH_HOST:-$JOB_ROOT_DIR/workloads/aps-mini-apps/test_sirt_ops.py}"   # host path to job.py (shared FS)
+JOB_PATH_HOST="${JOB_PATH_HOST:-$JOB_ROOT_DIR/workloads/aps-mini-apps/${JOB_SCRIPT}}"   # host path to job.py (shared FS)
 JOB_PATH_CONT="${JOB_PATH_CONT:-/opt/workloads/aps-mini-apps/test_sirt_ops.py}"            # path inside JM container
 PY_IN_CONT="${PY_IN_CONT:-python3}"                                                        # python inside container
 FLINK_BIN="${FLINK_BIN:-/opt/flink/bin/flink}"                                            # inside container
