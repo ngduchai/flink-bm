@@ -36,7 +36,7 @@ bash -euxo pipefail <<'BASH'
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir --upgrade pip
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
       build pybind11 setuptools wheel flatbuffers apache-flink==2.0.0
-      
+    
 BASH
 
 %environment

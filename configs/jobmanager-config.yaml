@@ -17,8 +17,10 @@ jobmanager:
 restart-strategy: fixed-delay
 restart-strategy.fixed-delay.attempts: 1000
 restart-strategy.fixed-delay.delay: 100ms
-python.executable: /usr/bin/python3
-python.client.executable: /usr/bin/python3
+# python.executable: /usr/bin/python3
+# python.client.executable: /usr/bin/python3
+python.executable: /opt/micromamba/envs/aps/bin/python
+python.client.executable: /opt/micromamba/envs/aps/bin/python
 parallelism:
   default: 1
 rest:
