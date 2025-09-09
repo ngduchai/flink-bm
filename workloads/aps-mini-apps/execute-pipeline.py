@@ -1,9 +1,9 @@
 import sys, os, glob, argparse, logging, math, time
-import numpy as np, h5py, dxchange, tomopy as tp, TraceSerializer
+import numpy as np, h5py, dxchange, tomopy as tp
 
 sys.path.append(os.path.join(os.path.dirname(__file__), 'common'))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'common/local'))
-
+import TraceSerializer
 from pyflink.common import Types
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
 from pyflink.datastream.functions import SourceFunction, FlatMapFunction, MapFunction, SinkFunction, RuntimeContext
