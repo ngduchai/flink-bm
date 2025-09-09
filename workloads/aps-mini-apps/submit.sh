@@ -7,7 +7,7 @@ if [ "$#" -ne 1 ]; then
   exit 1
 fi
 
-JOB_SCIPT=$1
+JOB_SCRIPT=$1
 
 # Node list from PBS or fallback
 NODE_FILE=${PBS_NODEFILE:-nodes.txt}
