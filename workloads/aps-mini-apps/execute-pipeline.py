@@ -83,6 +83,11 @@ def parse_arguments():
                       help='Number of projections that will be received in each request')
   parser.add_argument('--window_iter', type=str, default="1",
                       help='Number of iterations on received window')
+  parser.add_argument('--thread_count', type=int, default="1",
+                      help='Number of reconstruction threads')
+  parser.add_argument('--center', type=float, default=0.0,
+                      help='Rotation center for reconstruction. If 0.0, the center will be set to N/2.')
+  
 
   return parser.parse_args()
 
