@@ -36,9 +36,7 @@ if [[ ! -f "$CONFIG_JSON" ]]; then
   exit 1
 fi
 
-# Build -pyargs from JSON on the login node (no jq required)
-# - Converts { "k": v } to "--k v", keeping numbers as numbers and quoting strings.
-# - If simulation_file is relative, prefixes the container base path.
+# Build -pyargs from JSON
 PYARGS=$(
   python3 - "$CONFIG_JSON" <<'PY'
 import json, sys, shlex, os
@@ -46,21 +44,15 @@ cfg_path = sys.argv[1]
 with open(cfg_path, 'r') as f:
     d = json.load(f)
 
-# Container base where workloads/aps-mini-apps is visible:
 CONT_BASE = "/opt/workloads/aps-mini-apps"
 
 args = []
 for k, v in d.items():
-    key = f"--{k.replace('_','-')}"  # --ntask-sirt style (or keep underscores if your parser expects them)
-    if k == "simulation_file":
-        # rewrite relative paths to container-visible path
-        if not os.path.isabs(v):
-            v = os.path.normpath(os.path.join(CONT_BASE, v.lstrip("./")))
+    key = f"--{k}"   # keep underscores!
+    if k == "simulation_file" and not os.path.isabs(v):
+        v = os.path.normpath(os.path.join(CONT_BASE, v.lstrip("./")))
     if isinstance(v, bool):
-        # pass as 1/0 or true/false depending on your argparse
         v = "1" if v else "0"
-    elif isinstance(v, (int, float)):
-        v = str(v)
     else:
         v = str(v)
     args.extend([key, v])
@@ -81,7 +73,6 @@ if [[ -z "$INST" ]]; then
 fi
 echo "[submit/JM] Using instance: $INST"
 
-# Run inside the container
 apptainer exec --cleanenv instance://"$INST" bash -lc '
   set -euo pipefail
   export JOB_PATH_CONT="__JOB_PATH_CONT__"
@@ -101,7 +92,6 @@ apptainer exec --cleanenv instance://"$INST" bash -lc '
 '
 EOS
 
-# Safely inject variable values into the REMOTE heredoc
 escape() { printf '%s' "$1" | sed "s/'/'\\\\''/g"; }
 REMOTE=${REMOTE//__JOB_PATH_CONT__/$(escape "$JOB_PATH_CONT")}
 REMOTE=${REMOTE//__PY_IN_CONT__/$(escape "$PY_IN_CONT")}
