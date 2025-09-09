@@ -15,7 +15,7 @@ import logging
 
 from pyflink.common import WatermarkStrategy, Encoder, Types
 from pyflink.datastream.state import ListStateDescriptor
-from pyflink.common import CheckpointingMode
+from pyflink.datastream import CheckpointingMode
 from pyflink.datastream import StreamExecutionEnvironment, RuntimeExecutionMode
 from pyflink.datastream.functions import SourceFunction, FlatMapFunction, MapFunction, SinkFunction, RuntimeContext, CheckpointedFunction
 
