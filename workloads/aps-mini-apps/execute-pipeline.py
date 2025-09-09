@@ -1,18 +1,8 @@
-import sys
-import os
+import sys, os, glob, argparse, logging, math, time
+import numpy as np, h5py, dxchange, tomopy as tp, TraceSerializer
+
 sys.path.append(os.path.join(os.path.dirname(__file__), 'common'))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'common/local'))
-
-import argparse
-import glob
-import logging
-import math
-import time
-import numpy as np
-import h5py
-import dxchange
-import tomopy as tp
-import TraceSerializer
 
 from pyflink.common import Types
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
@@ -21,48 +11,44 @@ from pyflink.datastream.state import ListStateDescriptor
 
 
 # -------------------------
-# Argument parsing
+# Args
 # -------------------------
 def parse_arguments():
-    parser = argparse.ArgumentParser(description='Data Acquisition Process Simulator')
+    p = argparse.ArgumentParser(description='Data Acquisition Process Simulator')
+    p.add_argument("--image_pv")
+    p.add_argument('--ntask_sirt', type=int, default=0)
+    p.add_argument('--simulation_file')
+    p.add_argument('--d_iteration', type=int, default=1)
+    p.add_argument('--iteration_sleep', type=float, default=0.0)
+    p.add_argument('--proj_sleep', type=float, default=0.6)
+    p.add_argument('--beg_sinogram', type=int, default=0)
+    p.add_argument('--num_sinograms', type=int, default=0)
+    p.add_argument('--num_sinogram_columns', type=int)
+    p.add_argument('--num_sinogram_projections', type=int, default=1440)
+    p.add_argument('--logdir', type=str, default='.')
 
-    parser.add_argument("--image_pv", help="EPICS image PV name.")
+    # preprocessing
+    p.add_argument('--degree_to_radian', action='store_true', default=False)
+    p.add_argument('--mlog', action='store_true', default=False)
+    p.add_argument('--uint16_to_float32', action='store_true', default=False)
+    p.add_argument('--uint8_to_float32', action='store_true', default=False)
+    p.add_argument('--cast_to_float32', action='store_true', default=False)
+    p.add_argument('--normalize', action='store_true', default=False)
+    p.add_argument('--remove_invalids', action='store_true', default=False)
+    p.add_argument('--remove_stripes', action='store_true', default=False)
 
-    parser.add_argument('--ntask_sirt', type=int, default=0, help='number of reconstruction tasks')
-    parser.add_argument('--simulation_file', help='File name for mock data acquisition.')
-
-    parser.add_argument('--d_iteration', type=int, default=1, help='Number of iteration on simulated data.')
-    parser.add_argument('--iteration_sleep', type=float, default=0.0, help='Delay data publishing for each iteration.')
-    parser.add_argument('--proj_sleep', type=float, default=0.6, help='Delay data publishing for each projection.')
-    parser.add_argument('--beg_sinogram', type=int, default=0, help='Starting sinogram for reconstruction.')
-    parser.add_argument('--num_sinograms', type=int, default=0, help='Number of sinograms to reconstruct.')
-    parser.add_argument('--num_sinogram_columns', type=int, help='Number of columns per sinogram.')
-    parser.add_argument('--num_sinogram_projections', type=int, default=1440, help='Number of projections per sinogram.')
-    parser.add_argument('--logdir', type=str, default='.', help='Path to save log files.')
-
-    # Pre-processing flags
-    parser.add_argument('--degree_to_radian', action='store_true', default=False)
-    parser.add_argument('--mlog', action='store_true', default=False)
-    parser.add_argument('--uint16_to_float32', action='store_true', default=False)
-    parser.add_argument('--uint8_to_float32', action='store_true', default=False)
-    parser.add_argument('--cast_to_float32', action='store_true', default=False)
-    parser.add_argument('--normalize', action='store_true', default=False)
-    parser.add_argument('--remove_invalids', action='store_true', default=False)
-    parser.add_argument('--remove_stripes', action='store_true', default=False)
-
-    # SIRT configuration
-    parser.add_argument('--write_freq', type=str, default="10000", help='Write frequency')
-    parser.add_argument('--window_length', type=str, default="32", help='Projections stored in window')
-    parser.add_argument('--window_step', type=str, default="1", help='Projections per request')
-    parser.add_argument('--window_iter', type=str, default="1", help='Iterations per window')
-    parser.add_argument('--thread_count', type=int, default=1, help='Reconstruction threads')
-    parser.add_argument('--center', type=float, default=0.0, help='Rotation center (0.0 -> N/2)')
-
-    return parser.parse_args()
+    # SIRT
+    p.add_argument('--write_freq', type=str, default="10000")
+    p.add_argument('--window_length', type=str, default="32")
+    p.add_argument('--window_step', type=str, default="1")
+    p.add_argument('--window_iter', type=str, default="1")
+    p.add_argument('--thread_count', type=int, default=1)
+    p.add_argument('--center', type=float, default=0.0)
+    return p.parse_args()
 
 
 # -------------------------
-# Helpers for dataset I/O
+# IO helpers
 # -------------------------
 def setup_simulation_data(input_f, beg_sinogram=0, num_sinograms=0):
     print(f"Loading tomography data: {input_f}")
@@ -70,7 +56,6 @@ def setup_simulation_data(input_f, beg_sinogram=0, num_sinograms=0):
     idata, flat, dark, itheta = dxchange.read_aps_32id(input_f)
     idata = np.array(idata, dtype=np.float32)
 
-    # Ensure the requested number of sinograms exist
     if num_sinograms > 0 and idata.shape[1] < num_sinograms:
         print(f"num_sinograms = {num_sinograms} < loaded sinograms = {idata.shape[1]}. Duplicating.")
         n_copies = math.ceil(num_sinograms / idata.shape[1])
@@ -79,14 +64,9 @@ def setup_simulation_data(input_f, beg_sinogram=0, num_sinograms=0):
             duplicated = duplicated[:, :num_sinograms, :]
         idata = duplicated
 
-    if flat is not None:
-        flat = np.array(flat, dtype=np.float32)
-    if dark is not None:
-        dark = np.array(dark, dtype=np.float32)
-    if itheta is not None:
-        itheta = np.array(itheta, dtype=np.float32)
-
-    # dataset came pre-normalized in radians; convert back to degrees
+    flat = None if flat is None else np.array(flat, dtype=np.float32)
+    dark = None if dark is None else np.array(dark, dtype=np.float32)
+    itheta = None if itheta is None else np.array(itheta, dtype=np.float32)
     itheta = itheta * 180 / np.pi
 
     print(f"Projection dataset IO time={time.time()-t0:.2f}; "
@@ -95,45 +75,34 @@ def setup_simulation_data(input_f, beg_sinogram=0, num_sinograms=0):
 
 
 def serialize_dataset(idata, flat, dark, itheta, seq=0):
-    data = []
-    start_index = 0
-    time_ser = 0.0
-    serializer = TraceSerializer.ImageSerializer()
+    data, start_index, time_ser = [], 0, 0.0
+    S = TraceSerializer.ImageSerializer()
 
-    print("Starting serialization")
-
-    # white fields
     if flat is not None:
         for uniqueFlatId, flatId in zip(range(start_index, start_index + flat.shape[0]), range(flat.shape[0])):
             t0 = time.time()
             dflat = flat[flatId]
-            itype = serializer.ITypes.WhiteReset if flatId == 0 else serializer.ITypes.White
-            serialized_data = serializer.serialize(image=dflat, uniqueId=uniqueFlatId, itype=itype, rotation=0, seq=seq)
-            data.append(serialized_data)
+            itype = S.ITypes.WhiteReset if flatId == 0 else S.ITypes.White
+            data.append(S.serialize(image=dflat, uniqueId=uniqueFlatId, itype=itype, rotation=0, seq=seq))
             time_ser += time.time() - t0
             seq += 1
         start_index += flat.shape[0]
 
-    # dark fields
     if dark is not None:
         for uniqueDarkId, darkId in zip(range(start_index, start_index + dark.shape[0]), range(dark.shape[0])):
             t0 = time.time()
             ddark = dark[darkId]
-            itype = serializer.ITypes.DarkReset if darkId == 0 else serializer.ITypes.Dark
-            serialized_data = serializer.serialize(image=ddark, uniqueId=uniqueDarkId, itype=itype, rotation=0, seq=seq)
-            data.append(serialized_data)
+            itype = S.ITypes.DarkReset if darkId == 0 else S.ITypes.Dark
+            data.append(S.serialize(image=ddark, uniqueId=uniqueDarkId, itype=itype, rotation=0, seq=seq))
             time_ser += time.time() - t0
             seq += 1
         start_index += dark.shape[0]
 
-    # projections
     for uniqueId, projId, rotation in zip(range(start_index, start_index + idata.shape[0]),
                                           range(idata.shape[0]), itheta):
         t0 = time.time()
-        proj = idata[projId]
-        itype = serializer.ITypes.Projection
-        serialized_data = serializer.serialize(image=proj, uniqueId=uniqueId, itype=itype, rotation=rotation, seq=seq)
-        data.append(serialized_data)
+        data.append(S.serialize(image=idata[projId], uniqueId=uniqueId, itype=S.ITypes.Projection,
+                                rotation=rotation, seq=seq))
         time_ser += time.time() - t0
         seq += 1
 
@@ -150,19 +119,12 @@ def ordered_subset(max_ind, nelem):
 
 
 # -------------------------
-# Source: DAQ
+# Source
 # -------------------------
 class DaqOperator(SourceFunction):
-    def __init__(self,
-                 input_f,
-                 beg_sinogram=0,
-                 num_sinograms=0,
-                 seq=0,
-                 slp=0.0,
-                 iteration=1,
-                 save_after_serialize=False,
-                 prj_slp=0.0,
-                 logdir="."):
+    def __init__(self, input_f, beg_sinogram=0, num_sinograms=0, seq=0,
+                 slp=0.0, iteration=1, save_after_serialize=False, prj_slp=0.0, logdir="."):
+        super().__init__()  # IMPORTANT: initializes PyFlink bridge
         self.input_f = input_f
         self.beg_sinogram = beg_sinogram
         self.num_sinograms = num_sinograms
@@ -189,39 +151,34 @@ class DaqOperator(SourceFunction):
 
         tot_transfer_size = 0
         time0 = time.time()
-        nelems_per_subset = 16
-        indices = ordered_subset(serialized_data.shape[0], nelems_per_subset)
+        indices = ordered_subset(serialized_data.shape[0], 16)
 
-        for it in range(self.iteration):  # Simulate data acquisition
+        for it in range(self.iteration):
             print(f"Current iteration over dataset: {it + 1}/{self.iteration}")
             for index in indices:
                 if not self.running:
                     return
-
-                print(f"Sending projection {index}")
                 time.sleep(self.prj_slp)
-
                 md = {"index": int(index), "Type": "DATA", "sequence_id": self.seq}
                 ctx.collect([md, serialized_data[index]])
                 self.seq += 1
                 tot_transfer_size += len(serialized_data[index])
 
-        # Notify end of data
-        md = {"Type": "FIN"}
-        ctx.collect([md, bytearray(1)])
+        ctx.collect([{"Type": "FIN"}, bytearray(1)])
 
         elapsed_time = time.time() - time0
         tot_MiBs = (tot_transfer_size * 1.0) / 2 ** 20
         nproj = self.iteration * len(serialized_data)
-        print(f"Sent number of projections: {nproj}; Total size (MiB): {tot_MiBs:.2f}; Elapsed time (s): {elapsed_time:.2f}")
+        print(f"Sent projections: {nproj}; Size (MiB): {tot_MiBs:.2f}; Elapsed (s): {elapsed_time:.2f}")
         print(f"Rate (MiB/s): {tot_MiBs / elapsed_time:.2f}; (msg/s): {nproj / elapsed_time:.2f}")
 
 
 # -------------------------
-# FlatMap: Distributor
+# FlatMap distributor
 # -------------------------
 class DistOperator(FlatMapFunction):
     def __init__(self, args):
+        super().__init__()  # IMPORTANT
         self.args = args
         self.serializer = TraceSerializer.ImageSerializer()
         self.running = True
@@ -247,19 +204,15 @@ class DistOperator(FlatMapFunction):
             "center": float(center),
             "dtype": str(data.dtype),
         }
-        # preserve numeric bytes; avoid bytearray() on float arrays
         data_bytes = data.astype(np.float32, copy=False).tobytes()
         return self._msg(meta, data_bytes)
 
     def generate_worker_msgs(self, data: np.ndarray, dims: list, projection_id: int, theta: float,
                              n_ranks: int, center: float, seq: int) -> list:
-        # data is flattened: length should be dims[0] * dims[1]
         row, col = int(dims[0]), int(dims[1])
         assert data.size == row * col, "Flattened data size mismatch with dims"
-
         msgs = []
-        nsin = row // n_ranks
-        rem = row % n_ranks
+        nsin, rem = row // n_ranks, row % n_ranks
         offset_rows = 0
         for rank in range(n_ranks):
             rows_here = nsin + (1 if rank < rem else 0)
@@ -276,7 +229,6 @@ class DistOperator(FlatMapFunction):
             collector.collect(value)
             self.running = False
             return
-
         if not self.running:
             return
 
@@ -284,11 +236,8 @@ class DistOperator(FlatMapFunction):
         self.total_received += 1
         self.total_size += len(data)
 
-        # Deserialize msg to image
         read_image = self.serializer.deserialize(serialized_image=data)
-        # self.serializer.info(read_image)
 
-        # Prepare image array
         my_image_np = read_image.TdataAsNumpy()
         if self.args.uint8_to_float32:
             my_image_np.dtype = np.uint8
@@ -304,13 +253,11 @@ class DistOperator(FlatMapFunction):
 
         sub = sub.reshape((1, read_image.Dims().Y(), read_image.Dims().X()))
 
-        # Projections
         if read_image.Itype() is self.serializer.ITypes.Projection:
             rotation = read_image.Rotation()
             if self.args.degree_to_radian:
                 rotation = rotation * math.pi / 180.0
 
-            # tomopy preprocessing
             if self.args.normalize and self.tot_white_imgs > 0 and self.tot_dark_imgs > 0:
                 sub = tp.normalize(sub, flat=self.white_imgs, dark=self.dark_imgs)
             if self.args.remove_stripes:
@@ -322,56 +269,39 @@ class DistOperator(FlatMapFunction):
                 sub = tp.remove_neg(sub, val=0.00)
                 sub[np.where(sub == np.inf)] = 0.00
 
-            # downstream distribution
             data_flat = sub.flatten()
             ncols = sub.shape[2]
             theta = rotation
             projection_id = read_image.UniqueId()
             center = read_image.Center()
-            row = self.args.num_sinograms
-            col = ncols
-
-            dims = [row, col]
+            dims = [self.args.num_sinograms, ncols]
             center = (dims[1] / 2.0) if center == 0.0 else center
+
             msgs = self.generate_worker_msgs(data_flat, dims, projection_id, theta,
                                              self.args.ntask_sirt, center, sequence_id)
-
             for i in range(self.args.ntask_sirt):
                 md = msgs[i][0]
-                print(f"Task {i}: seq_id {md['seq_n']} proj_id {md['projection_id']}, "
-                      f"theta: {md['theta']} center: {md['center']}")
+                print(f"Task {i}: seq_id {md['seq_n']} proj_id {md['projection_id']}, theta: {md['theta']} center: {md['center']}")
                 collector.collect(msgs[i])
 
-        # White field
         if read_image.Itype() is self.serializer.ITypes.White:
-            self.white_imgs.extend(sub)
-            self.tot_white_imgs += 1
-
-        # White reset
+            self.white_imgs.extend(sub); self.tot_white_imgs += 1
         if read_image.Itype() is self.serializer.ITypes.WhiteReset:
-            self.white_imgs = []
-            self.white_imgs.extend(sub)
-            self.tot_white_imgs += 1
-
-        # Dark
+            self.white_imgs = []; self.white_imgs.extend(sub); self.tot_white_imgs += 1
         if read_image.Itype() is self.serializer.ITypes.Dark:
-            self.dark_imgs.extend(sub)
-            self.tot_dark_imgs += 1
-
-        # Dark reset
+            self.dark_imgs.extend(sub); self.tot_dark_imgs += 1
         if read_image.Itype() is self.serializer.ITypes.DarkReset:
-            self.dark_imgs = []
-            self.dark_imgs.extend(sub)
-            self.tot_dark_imgs += 1
+            self.dark_imgs = []; self.dark_imgs.extend(sub); self.tot_dark_imgs += 1
 
         self.seq += 1
 
 
 # -------------------------
-# Map: SIRT operator
+# Map: SIRT
 # -------------------------
 class SirtOperator(MapFunction):
     def __init__(self, cfg):
+        super().__init__()  # IMPORTANT
         self.cfg = {
             "thread_count": cfg.thread_count,
             "window_step": cfg.window_step,
@@ -384,17 +314,15 @@ class SirtOperator(MapFunction):
             "num_sinograms": cfg.num_sinograms,
         }
         self.engine = None
-        self.state = None  # ListState[byte[]]
+        self.state = None
 
     def open(self, ctx: RuntimeContext):
         import sirt_ops
         self.engine = sirt_ops.SirtEngine()
 
-        # Operator state (optional restore if present)
         desc = ListStateDescriptor("sirt_state", Types.PRIMITIVE_ARRAY(Types.BYTE()))
         self.state = ctx.get_list_state(desc)
 
-        # Partitioning math
         task_id = ctx.get_index_of_this_subtask()
         num_tasks = ctx.get_number_of_parallel_subtasks()
         total_sinograms = int(self.cfg["num_sinograms"])
@@ -415,14 +343,12 @@ class SirtOperator(MapFunction):
         }
         self.engine.setup(tmetadata)
 
-        # Try restoring from prior snapshot if any (no periodic save in this version)
         saved = list(self.state.get())
         if saved:
             self.engine.restore(bytes(saved[0]))
 
     def map(self, value):
         meta_in, payload = value
-        # Forward FIN without touching the engine
         if isinstance(meta_in, dict) and meta_in.get("Type") == "FIN":
             return value
         out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
@@ -430,10 +356,11 @@ class SirtOperator(MapFunction):
 
 
 # -------------------------
-# Sink: Denoiser (collect and write HDF5)
+# Sink: Denoiser
 # -------------------------
 class DenoiserOperator(SinkFunction):
     def __init__(self, args):
+        super().__init__()  # IMPORTANT
         self.args = args
         self.serializer = TraceSerializer.ImageSerializer()
         self.waiting_metadata = {}
@@ -451,8 +378,7 @@ class DenoiserOperator(SinkFunction):
         nproc_sirt = self.args.ntask_sirt
         recon_path = self.args.logdir
 
-        dd = np.frombuffer(data, dtype=np.float32)
-        dd = dd.reshape(meta["rank_dims"])
+        dd = np.frombuffer(data, dtype=np.float32).reshape(meta["rank_dims"])
         iteration_stream = meta["iteration_stream"]
         rank = meta["rank"]
 
@@ -462,20 +388,14 @@ class DenoiserOperator(SinkFunction):
         self.waiting_metadata[iteration_stream][rank] = meta
         self.waiting_data[iteration_stream][rank] = dd
 
-        # Denoise if collected sufficient data
         if len(self.waiting_metadata[iteration_stream]) == nproc_sirt:
             sorted_ranks = sorted(self.waiting_metadata[iteration_stream].keys())
-            sorted_metadata = [self.waiting_metadata[iteration_stream][r] for r in sorted_ranks]
             sorted_data = [self.waiting_data[iteration_stream][r] for r in sorted_ranks]
-            print(sorted_metadata)
-            denoise_input = np.concatenate(sorted_data, axis=0)
 
             os.makedirs(recon_path, exist_ok=True)
-            output_path = os.path.join(recon_path, f"{iteration_stream}-denoised.h5")
-            with h5py.File(output_path, 'w') as h5_output:
-                h5_output.create_dataset('/data', data=denoise_input)
+            with h5py.File(os.path.join(recon_path, f"{iteration_stream}-denoised.h5"), 'w') as h5_output:
+                h5_output.create_dataset('/data', data=np.concatenate(sorted_data, axis=0))
 
-            # Clear waiting data
             del self.waiting_metadata[iteration_stream]
             del self.waiting_data[iteration_stream]
 
@@ -485,17 +405,15 @@ class DenoiserOperator(SinkFunction):
 # -------------------------
 def main():
     args = parse_arguments()
-
     logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 
     env = StreamExecutionEnvironment.get_execution_environment()
     env.enable_checkpointing(10_000, CheckpointingMode.EXACTLY_ONCE)
 
-    # If sirt_ops is not installed into site-packages, attach the wheel(s)
+    # ship wheel if needed
     for whl in glob.glob("./dist/sirt_ops-0.2.0-*.whl"):
         env.add_python_file(whl)
 
-    # DAQ source
     daq = env.add_source(
         DaqOperator(
             input_f=args.simulation_file,
@@ -511,13 +429,11 @@ def main():
         type_info=Types.PICKLED_BYTE_ARRAY()
     )
 
-    # Distributor
     dist = daq.flat_map(
         DistOperator(args),
-        output_type=Types.PICKLED_BYTE_ARRAY()
+        output_type=Types.PICKLED_BYTE_ARRAY()   # <-- correct kw
     ).name("Data Distributor")
 
-    # SIRT operator
     sirt = dist.key_by(
         lambda x: x[0]["task_id"],
         key_type_info=Types.INT()
@@ -526,7 +442,6 @@ def main():
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("SIRT Operator").set_parallelism(args.ntask_sirt)
 
-    # Denoiser sink
     sirt.add_sink(DenoiserOperator(args)).name("Denoiser Sink").set_parallelism(1)
 
     env.execute("APS Mini-Apps Pipeline")
