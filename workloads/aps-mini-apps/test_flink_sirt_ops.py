@@ -6,7 +6,7 @@ import sirt_ops
 
 # --- SIRT config and minimal metadata ---
 SETUP_META = {
-    "task_id": 0,
+   "task_id": 0,
     "n_sinograms": 1,
     "n_rays_per_proj_row": 1024,
     "beg_sinograms": 0,
@@ -14,13 +14,13 @@ SETUP_META = {
     "window_step": 1,
     "thread_count": 1
 }
-CFG = {"rank": 0, "center": 0, "window_iter": 1, "write_freq": 1}
+CFG = {"rank": 0, "center": 512, "window_iter": 1, "write_freq": 1}
 META_IN = {
-    "Type": "DATA",
-    "seq_n": "0",
-    "projection_id": "0",
-    "theta": "0.0",
-    "center": "0.0",
+    "Type":"DATA",
+    "seq_n":"0",
+    "projection_id":"0",
+    "theta":"0.0",
+    "center":"0.0"
 }
 
 class SirtMap(MapFunction):
