@@ -41,30 +41,41 @@ PYBIND11_MODULE(sirt_ops, m) {
                const std::unordered_map<std::string, int64_t>& cfg,
                const std::unordered_map<std::string, std::string>& meta_in,
                py::object payload) {
-        
                 py::buffer_info info;
+                // your robust as_ro_float_buffer(payload, info) here:
                 auto [ptr, n] = as_ro_float_buffer(payload, info);
+        
                 if (!ptr || n == 0) {
                     throw std::runtime_error("process(): empty payload");
                 }
-        
-                ProcessResult r;
-                {   // release GIL only while calling into C++
-                    py::gil_scoped_release nogil;
-                    r = self.process(cfg, meta_in, ptr, n);
+
+                try {
+                    py::buffer_info info;
+                    auto [ptr, n] = as_ro_float_buffer(payload, info);
+                    if (!ptr || n == 0) {
+                        throw std::runtime_error("process(): empty payload");
+                    }
+            
+                    ProcessResult r;
+                    {   // release GIL only while calling into C++
+                        py::gil_scoped_release nogil;
+                        r = self.process(cfg, meta_in, ptr, n);
+                    }
+            
+                    // GIL is re-acquired here (nogil dtor ran)
+            
+                    // Build Python objects safely
+                    const char* bytes_ptr = reinterpret_cast<const char*>(r.data.data());
+                    const std::size_t nbytes = r.data.size() * sizeof(float);
+            
+                    py::bytes out = (nbytes == 0)
+                        ? py::bytes()                                  // empty bytes
+                        : py::bytes(bytes_ptr, nbytes);                // copy into Python
+            
+                    return py::make_tuple(out, r.meta);
+                } catch (const std::exception& e) {
+                    throw std::runtime_error(std::string("SirtEngine.process failed: ") + e.what());
                 }
-        
-                // GIL is re-acquired here (nogil dtor ran)
-        
-                // Build Python objects safely
-                const char* bytes_ptr = reinterpret_cast<const char*>(r.data.data());
-                const std::size_t nbytes = r.data.size() * sizeof(float);
-        
-                py::bytes out = (nbytes == 0)
-                    ? py::bytes()                                  // empty bytes
-                    : py::bytes(bytes_ptr, nbytes);                // copy into Python
-        
-                return py::make_tuple(out, r.meta);
             },
             py::arg("config"), py::arg("metadata"), py::arg("payload"))
 

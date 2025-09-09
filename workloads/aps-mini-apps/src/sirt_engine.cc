@@ -194,17 +194,17 @@ void SirtEngine::restore(const std::vector<std::uint8_t>& snapshot) {
 
 
 SirtEngine::~SirtEngine() {
-  if (main_recon_space != nullptr) {
-    delete main_recon_space;
-  }
-  if (engine != nullptr) {
-    delete engine;
-  }
-  // if (h5md.dims != nullptr) {
-  //   delete[] h5md.dims;
+  // if (main_recon_space != nullptr) {
+  //   delete main_recon_space;
   // }
-  if (recon_image != nullptr) {
-    delete recon_image;
-  }
+  // if (engine != nullptr) {
+  //   delete engine;
+  // }
+  // // if (h5md.dims != nullptr) {
+  // //   delete[] h5md.dims;
+  // // }
+  // if (recon_image != nullptr) {
+  //   delete recon_image;
+  // }
 }
 

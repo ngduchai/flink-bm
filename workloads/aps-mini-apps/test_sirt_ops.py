@@ -22,4 +22,6 @@ meta = {
     }
 print("calling process...")
 out_bytes, out_meta = eng.process(cfg, meta, payload)
-print("process ok:", len(out_bytes), out_meta)
+print("process #1 ok:", len(out_bytes), out_meta)
+out_bytes, out_meta = eng.process(cfg, meta, payload)
+print("process #2 ok:", len(out_bytes), out_meta)

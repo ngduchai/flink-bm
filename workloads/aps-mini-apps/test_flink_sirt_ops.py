@@ -6,7 +6,7 @@ import sirt_ops
 
 # --- SIRT config and minimal metadata ---
 SETUP_META = {
-   "task_id": 0,
+    "task_id": 0,
     "n_sinograms": 1,
     "n_rays_per_proj_row": 1024,
     "beg_sinograms": 0,
