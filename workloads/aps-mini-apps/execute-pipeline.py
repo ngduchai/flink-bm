@@ -18,7 +18,6 @@ from pyflink.datastream.state import ListStateDescriptor
 from pyflink.datastream import CheckpointingMode
 from pyflink.datastream import StreamExecutionEnvironment, RuntimeExecutionMode
 from pyflink.datastream.functions import SourceFunction, FlatMapFunction, MapFunction, SinkFunction, RuntimeContext
-from pyflink.datastream.checkpointed_function import CheckpointedFunction
 
 import sirt_ops
 
@@ -416,7 +415,7 @@ class DistOperator(FlatMapFunction):
     seq+=1
 
 
-class SirtOperator(MapFunction, CheckpointedFunction):
+class SirtOperator(MapFunction):
     def __init__(self, cfg):
         self.cfg = {
             "thread_count": cfg.thread_count,
@@ -430,16 +429,15 @@ class SirtOperator(MapFunction, CheckpointedFunction):
             "num_sinograms": cfg.num_sinograms,
         }
         self.engine = None
-        self.state = None  # ListState[bytes]
+        self.state = None   # ListState[byte[]]
 
-    # NEW in Flink 2.0: initialize operator state here
+    # Called once to create/restore operator state
     def initialize_state(self, context):
-        from pyflink.datastream.state import ListStateDescriptor
-        # store bytes snapshots
         desc = ListStateDescriptor("sirt_state", Types.PRIMITIVE_ARRAY(Types.BYTE()))
         self.state = context.get_operator_state_store().get_list_state(desc)
+        # NOTE: actual restore happens after we create the engine in open()
 
-    def open(self, ctx: RuntimeContext):
+    def open(self, ctx):
         import sirt_ops
         self.engine = sirt_ops.SirtEngine()
 
@@ -448,17 +446,16 @@ class SirtOperator(MapFunction, CheckpointedFunction):
         total_sinograms = int(self.cfg["num_sinograms"])
 
         nsino = total_sinograms // num_tasks
-        remaining = total_sinograms % num_tasks
-        r = 1 if task_id < remaining else 0
-        n_sinograms = r + nsino
-        beg_sinograms = (1 + nsino) * task_id if task_id < remaining else \
-                        (1 + nsino) * remaining + nsino * (task_id - remaining)
+        rem   = total_sinograms % num_tasks
+        r     = 1 if task_id < rem else 0
+        n_sinograms  = r + nsino
+        beg_sinogram = (task_id * nsino + min(task_id, rem))
 
         tmetadata = {
             "task_id": task_id,
             "n_sinograms": n_sinograms,
             "n_rays_per_project_row": int(self.cfg["num_sinogram_columns"]),
-            "beg_sinogram": beg_sinograms,
+            "beg_sinogram": beg_sinogram,
             "tn_sinograms": total_sinograms,
             "window_step": int(self.cfg["window_step"]),
             "thread_count": int(self.cfg["thread_count"]),
@@ -468,14 +465,13 @@ class SirtOperator(MapFunction, CheckpointedFunction):
         # restore snapshot if present
         saved = list(self.state.get())
         if saved:
-            # ListState holds a list of byte arrays; we stored a single one
-            snap = bytes(saved[0])
+            snap = bytes(saved[0])        # first (and only) item
             self.engine.restore(snap)
 
     def snapshot_state(self, context):
-        snap = self.engine.snapshot()  # returns bytes/bytearray
+        snap = self.engine.snapshot()      # returns bytes/bytearray
         self.state.clear()
-        self.state.add(list(snap))  # ListState expects a sequence of bytes
+        self.state.add(bytes(snap))        # store a single byte[] element
 
     def map(self, value):
         meta_in, payload = value
