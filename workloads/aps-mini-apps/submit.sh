@@ -36,7 +36,7 @@ if [[ ! -f "$CONFIG_JSON" ]]; then
   exit 1
 fi
 
-# Build -pyargs from JSON
+# Build CLI args from JSON (keep underscores in keys)
 PYARGS=$(
   python3 - "$CONFIG_JSON" <<'PY'
 import json, sys, shlex, os
@@ -48,14 +48,15 @@ CONT_BASE = "/opt/workloads/aps-mini-apps"
 
 args = []
 for k, v in d.items():
-    key = f"--{k}"   # keep underscores!
-    if k == "simulation_file" and not os.path.isabs(v):
+    key = f"--{k}"  # underscores preserved
+    if k == "simulation_file" and isinstance(v, str) and not os.path.isabs(v):
         v = os.path.normpath(os.path.join(CONT_BASE, v.lstrip("./")))
     if isinstance(v, bool):
         v = "1" if v else "0"
     else:
         v = str(v)
     args.extend([key, v])
+
 print(" ".join(shlex.quote(x) for x in args))
 PY
 )
@@ -88,10 +89,13 @@ apptainer exec --cleanenv instance://"$INST" bash -lc '
   echo "[submit/cont] flink version: $(flink --version | head -n1)"
   echo "[submit/cont] submitting job: $JOB_PATH_CONT"
   echo "[submit/cont] pyargs: $PYARGS"
-  "$FLINK_BIN" run -py "$JOB_PATH_CONT" --pyExecutable "$PY_IN_CONT" -p 1 -pyargs "$PYARGS"
+
+  # IMPORTANT: Use the literal -- so Flink forwards args to Python
+  "$FLINK_BIN" run -py "$JOB_PATH_CONT" --pyExecutable "$PY_IN_CONT" -p 1 -- $PYARGS
 '
 EOS
 
+# Safely inject variables into the remote heredoc
 escape() { printf '%s' "$1" | sed "s/'/'\\\\''/g"; }
 REMOTE=${REMOTE//__JOB_PATH_CONT__/$(escape "$JOB_PATH_CONT")}
 REMOTE=${REMOTE//__PY_IN_CONT__/$(escape "$PY_IN_CONT")}
