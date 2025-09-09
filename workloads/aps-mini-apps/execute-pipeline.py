@@ -549,21 +549,18 @@ def main():
       logdir=args.logdir
     ),
     "DAQ Source",
-    Types.LIST(Types.MAP(Types.STRING(), Types.GENERIC(object)), Types.BYTE_ARRAY())
+    output_type=Types.PICKLED_BYTE_ARRAY()
   )
 
   # define data distribution
   dist = daq.flat_map(DistOperator(args),
-    output_type=Types.LIST(Types.MAP(Types.STRING(), Types.GENERIC(object), Types.BYTE_ARRAY()))
+    output_type=Types.PICKLED_BYTE_ARRAY()
   ).name("Data Distributor")
 
   # define reconstruction tasks
   sirt = dist.key_by(lambda x: x[0]["task_id"], key_type=Types.INT()).map(
       SirtOperator(cfg=args),
-      output_type=Types.TUPLE([
-        Types.PRIMITIVE_ARRAY(Types.BYTE()),
-        Types.MAP(Types.STRING(), Types.STRING())
-      ])
+      output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("SIRT Operator").set_parallelism(args.ntask_sirt)
 
   # define denoiser as sink
