@@ -31,8 +31,8 @@ class SirtMap(MapFunction):
 
     def map(self, x):
         try:
-            cfg = {"step": 1}
-            meta = {"Type": "DATA", "seq_n": "0", "projection_id": "0", "theta": "0.0", "center": "0.0"}
+            cfg = CFG
+            meta = META_IN
             # x is a list[float]; send as numpy float32 for contiguous buffer
             import numpy as np
             payload = np.asarray(x, dtype=np.float32)
