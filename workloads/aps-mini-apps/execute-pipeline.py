@@ -187,7 +187,6 @@ def ordered_subset(max_ind, nelem):
 
 class DaqOperator(SourceFunction):
   def __init__(self,  
-                 batchsize,
                  input_f,
                  beg_sinogram=0,
                  num_sinograms=0,
@@ -197,7 +196,6 @@ class DaqOperator(SourceFunction):
                  save_after_serialize=False,
                  prj_slp=0,
                  logdir="."):
-    self.batchsize = batchsize
     self.input_f = input_f
     self.beg_sinogram = beg_sinogram
     self.num_sinograms = num_sinograms
@@ -541,7 +539,6 @@ def main():
   # define DAQ source
   daq = env.add_source(
     DaqOperator(
-      batchsize=args.batchsize,
       input_f=args.simulation_file,
       beg_sinogram=args.beg_sinogram,
       num_sinograms=args.num_sinograms,
