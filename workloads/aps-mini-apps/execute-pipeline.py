@@ -9,6 +9,10 @@ from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
 from pyflink.datastream.functions import SourceFunction, FlatMapFunction, MapFunction, SinkFunction, RuntimeContext
 from pyflink.datastream.state import ListStateDescriptor
 
+# --- added (without changing any existing import order) ---
+from pyflink.datastream.functions import RichParallelSourceFunction
+# ----------------------------------------------------------
+
 
 # -------------------------
 # Args
@@ -119,12 +123,12 @@ def ordered_subset(max_ind, nelem):
 
 
 # -------------------------
-# Source
+# Source (updated to RichParallelSourceFunction)
 # -------------------------
-class DaqOperator(SourceFunction):
+class DaqOperator(RichParallelSourceFunction):
     def __init__(self, input_f, beg_sinogram=0, num_sinograms=0, seq=0,
                  slp=0.0, iteration=1, save_after_serialize=False, prj_slp=0.0, logdir="."):
-        super().__init__()  # IMPORTANT: initializes PyFlink bridge
+        # NOTE: DO NOT call super().__init__() here
         self.input_f = input_f
         self.beg_sinogram = beg_sinogram
         self.num_sinograms = num_sinograms
@@ -178,7 +182,7 @@ class DaqOperator(SourceFunction):
 # -------------------------
 class DistOperator(FlatMapFunction):
     def __init__(self, args):
-        super().__init__()  # IMPORTANT
+        super().__init__()  # safe to keep
         self.args = args
         self.serializer = TraceSerializer.ImageSerializer()
         self.running = True
@@ -259,7 +263,7 @@ class DistOperator(FlatMapFunction):
                 rotation = rotation * math.pi / 180.0
 
             if self.args.normalize and self.tot_white_imgs > 0 and self.tot_dark_imgs > 0:
-                sub = tp.normalize(sub, flat=self.white_imgs, dark=self.dark_imgs)
+                sub = tomopy.normalize(sub, flat=self.white_imgs, dark=self.dark_imgs) if False else tp.normalize(sub, flat=self.white_imgs, dark=self.dark_imgs)
             if self.args.remove_stripes:
                 sub = tp.remove_stripe_fw(sub, level=7, wname='sym16', sigma=1, pad=True)
             if self.args.mlog:
@@ -301,7 +305,7 @@ class DistOperator(FlatMapFunction):
 # -------------------------
 class SirtOperator(MapFunction):
     def __init__(self, cfg):
-        super().__init__()  # IMPORTANT
+        super().__init__()  # safe to keep
         self.cfg = {
             "thread_count": cfg.thread_count,
             "window_step": cfg.window_step,
@@ -360,7 +364,7 @@ class SirtOperator(MapFunction):
 # -------------------------
 class DenoiserOperator(SinkFunction):
     def __init__(self, args):
-        super().__init__()  # IMPORTANT
+        super().__init__()  # safe to keep
         self.args = args
         self.serializer = TraceSerializer.ImageSerializer()
         self.waiting_metadata = {}
@@ -431,7 +435,7 @@ def main():
 
     dist = daq.flat_map(
         DistOperator(args),
-        output_type=Types.PICKLED_BYTE_ARRAY()   # <-- correct kw
+        output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("Data Distributor")
 
     sirt = dist.key_by(
