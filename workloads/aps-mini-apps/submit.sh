@@ -15,7 +15,7 @@ nodes=( $(cat "$NODE_FILE") )
 JM_HOST="${nodes[0]}"
 
 JOB_ROOT_DIR="/home/ndhai/diaspora/src/flink"
-JOB_PATH_HOST="${JOB_PATH_HOST:-$JOB_ROOT_DIR/workloads/aps-mini-apps/${JOB_SCRIPT}}"   # host path to job.py (shared FS)
+JOB_PATH_HOST="${JOB_PATH_HOST:-$JOB_ROOT_DIR/workloads/aps-mini-apps/$JOB_SCRIPT}"   # host path to job.py (shared FS)
 JOB_PATH_CONT="${JOB_PATH_CONT:-/opt/workloads/aps-mini-apps/test_sirt_ops.py}"            # path inside JM container
 PY_IN_CONT="${PY_IN_CONT:-python3}"                                                        # python inside container
 FLINK_BIN="${FLINK_BIN:-/opt/flink/bin/flink}"                                            # inside container
