@@ -1,55 +1,53 @@
 Bootstrap: docker
-From: ubuntu:22.04   # or debian:bookworm, something with recent glibc
+From: ubuntu:22.04
 
 %files
-# copy the tarball from host into the container build context
 /home/ndhai/diaspora/zip/flink-2.0.0-bin-scala_2.12.tgz /opt/src/flink.tgz
 
 %post
-    set -euo pipefail
+# Run the whole post section with bash so we can use -o pipefail, -u, etc.
+bash -euxo pipefail <<'BASH'
+  # --- OS deps ---
+  apt-get update
+  apt-get install -y --no-install-recommends \
+      ca-certificates curl bzip2 \
+      openjdk-17-jre-headless \
+      mpich libmpich-dev \
+      libhdf5-mpich-dev libhdf5-dev zlib1g-dev \
+      libboost-serialization-dev \
+      python3 python3-pip python3-venv
+  rm -rf /var/lib/apt/lists/*
 
-    # --- OS deps ---
-    apt-get update
-    apt-get install -y --no-install-recommends \
-        ca-certificates curl bzip2 \
-        openjdk-17-jre-headless \
-        mpich libmpich-dev \
-        libhdf5-mpich-dev libhdf5-dev zlib1g-dev \
-        libboost-serialization-dev \
-        python3 python3-pip python3-venv
-    rm -rf /var/lib/apt/lists/*
+  # --- Flink ---
+  mkdir -p /opt && cd /opt
+  tar -xzf /opt/src/flink.tgz -C /opt
+  ln -s /opt/flink-2.0.0 /opt/flink
 
-    # --- Flink ---
-    mkdir -p /opt && cd /opt
-    tar -xzf /opt/src/flink.tgz -C /opt
-    ln -s /opt/flink-2.0.0 /opt/flink
+  # --- micromamba + conda env for tomopy ---
+  MAMBA_ROOT=/opt/micromamba
+  ENV_PREFIX=$MAMBA_ROOT/envs/aps
+  mkdir -p /tmp/mamba-bin
+  curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
+    | tar -xj -C /tmp/mamba-bin bin/micromamba
 
-    # --- micromamba + conda env for tomopy ---
-    MAMBA_ROOT=/opt/micromamba
-    ENV_PREFIX=$MAMBA_ROOT/envs/aps
-    mkdir -p /tmp/mamba-bin
-    curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xj -C /tmp/mamba-bin bin/micromamba
+  /tmp/mamba-bin/bin/micromamba create -y -p "$ENV_PREFIX" -c conda-forge \
+      python=3.10 tomopy dxchange h5py numpy scipy scikit-image
 
-    # Create env with Python 3.10 (good with many scientific wheels) and tomopy stack
-    /tmp/mamba-bin/bin/micromamba create -y -p "$ENV_PREFIX" -c conda-forge \
-        python=3.10 tomopy dxchange h5py numpy scipy scikit-image
+  "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir --upgrade pip
+  "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
+      build pybind11 setuptools wheel flatbuffers apache-flink==2.0.0
 
-    # Add pip packages inside the env (build toolchain + pyflink client libs etc.)
-    "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir --upgrade pip
-    "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
-        build pybind11 setuptools wheel flatbuffers apache-flink==2.0.0
-
-    # Make Flink use this Python by default
-    mkdir -p /opt/flink/conf
-    {
-      echo "python.executable: $ENV_PREFIX/bin/python"
-      echo "python.client.executable: $ENV_PREFIX/bin/python"
-    } >> /opt/flink/conf/flink-conf.yaml
+  # Make Flink use this Python by default
+  mkdir -p /opt/flink/conf
+  {
+    echo "python.executable: $ENV_PREFIX/bin/python"
+    echo "python.client.executable: $ENV_PREFIX/bin/python"
+  } >> /opt/flink/conf/flink-conf.yaml
+BASH
 
 %environment
     export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
     export FLINK_HOME=/opt/flink
     export PATH=$FLINK_HOME/bin:/opt/micromamba/envs/aps/bin:$PATH
     export PYTHON=/opt/micromamba/envs/aps/bin/python
-    # If you mount extra native libs at runtime, prepend /opt/libs here
     export LD_LIBRARY_PATH=/usr/local/lib:/usr/lib/x86_64-linux-gnu/hdf5/serial:$LD_LIBRARY_PATH
