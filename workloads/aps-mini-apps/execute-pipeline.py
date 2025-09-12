@@ -364,17 +364,17 @@ class SirtOperator(MapFunction):
 # -------------------------
 # Sink: Denoiser (proper wrapper)
 # -------------------------
-class DenoiserSink(SinkFunction):
+# -------------------------
+# Sink: Denoiser (helper + factory that returns a SinkFunction)
+# -------------------------
+class _DenoiserHelper:
     def __init__(self, args):
-        # state carried on the instance
         self.args = args
         self.waiting_metadata = {}
         self.waiting_data = {}
         self.running = True
-        # IMPORTANT: pass a bound method so PyFlink wraps it properly
-        super().__init__(self._consume)
 
-    def _consume(self, value, context):
+    def consume(self, value, context):
         if not self.running:
             return
         meta, data = value
@@ -392,7 +392,6 @@ class DenoiserSink(SinkFunction):
         if iteration_stream not in self.waiting_metadata:
             self.waiting_metadata[iteration_stream] = {}
             self.waiting_data[iteration_stream] = {}
-
         self.waiting_metadata[iteration_stream][rank] = meta
         self.waiting_data[iteration_stream][rank] = dd
 
@@ -406,6 +405,13 @@ class DenoiserSink(SinkFunction):
 
             del self.waiting_metadata[iteration_stream]
             del self.waiting_data[iteration_stream]
+
+
+def make_denoiser_sink(args):
+    helper = _DenoiserHelper(args)
+    # CRITICAL: wrap the bound method with PyFlink's SinkFunction
+    return SinkFunction(helper.consume)
+
 
 
 # -------------------------
@@ -453,7 +459,7 @@ def main():
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("SIRT Operator").set_parallelism(args.ntask_sirt)
 
-    sirt.add_sink(DenoiserSink(args)).name("Denoiser Sink").set_parallelism(1)
+    sirt.add_sink(make_denoiser_sink(args)).name("Denoiser Sink").set_parallelism(1)
 
 
     env.execute("APS Mini-Apps Pipeline")
