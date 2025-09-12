@@ -361,48 +361,51 @@ class SirtOperator(MapFunction):
 # -------------------------
 # Sink: Denoiser
 # -------------------------
-class DenoiserSink(SinkFunction):
-    def __init__(self, args):
-        self.args = args
-        self.waiting_metadata = {}
-        self.waiting_data = {}
-        self.running = True
-
-    def invoke(self, value, context=None):
-        if not self.running:
+# -------------------------
+# Sink: Denoiser (Simple Function Implementation)
+# -------------------------
+def create_denoiser_sink(args):
+    waiting_metadata = {}
+    waiting_data = {}
+    running = [True]  # Use list to make it mutable in closure
+    
+    def denoiser_sink_func(value, context=None):
+        if not running[0]:
             return
         meta, data = value
         if isinstance(meta, dict) and meta.get("Type") == "FIN":
-            self.running = False
+            running[0] = False
             return
 
-        nproc_sirt = self.args.ntask_sirt
-        recon_path = self.args.logdir
+        nproc_sirt = args.ntask_sirt
+        recon_path = args.logdir
 
         dd = np.frombuffer(data, dtype=np.float32).reshape(meta["rank_dims"])
         iteration_stream = meta["iteration_stream"]
         rank = meta["rank"]
 
-        if iteration_stream not in self.waiting_metadata:
-            self.waiting_metadata[iteration_stream] = {}
-            self.waiting_data[iteration_stream] = {}
-        self.waiting_metadata[iteration_stream][rank] = meta
-        self.waiting_data[iteration_stream][rank] = dd
+        if iteration_stream not in waiting_metadata:
+            waiting_metadata[iteration_stream] = {}
+            waiting_data[iteration_stream] = {}
+        waiting_metadata[iteration_stream][rank] = meta
+        waiting_data[iteration_stream][rank] = dd
 
-        if len(self.waiting_metadata[iteration_stream]) == nproc_sirt:
-            sorted_ranks = sorted(self.waiting_metadata[iteration_stream].keys())
-            sorted_data = [self.waiting_data[iteration_stream][r] for r in sorted_ranks]
+        if len(waiting_metadata[iteration_stream]) == nproc_sirt:
+            sorted_ranks = sorted(waiting_metadata[iteration_stream].keys())
+            sorted_data = [waiting_data[iteration_stream][r] for r in sorted_ranks]
 
             os.makedirs(recon_path, exist_ok=True)
             with h5py.File(os.path.join(recon_path, f"{iteration_stream}-denoised.h5"), 'w') as h5_output:
                 h5_output.create_dataset('/data', data=np.concatenate(sorted_data, axis=0))
 
-            del self.waiting_metadata[iteration_stream]
-            del self.waiting_data[iteration_stream]
+            del waiting_metadata[iteration_stream]
+            del waiting_data[iteration_stream]
+    
+    return denoiser_sink_func
 
 
 def make_denoiser_sink(args):
-    return DenoiserSink(args)
+    return create_denoiser_sink(args)
 
 
 
