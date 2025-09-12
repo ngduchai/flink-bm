@@ -1,4 +1,4 @@
-import sys, os, glob, argparse, logging, math, time
+import sys, os, glob, argparse, logging, math, time 
 import numpy as np, h5py, dxchange, tomopy as tp
 
 sys.path.append(os.path.join(os.path.dirname(__file__), 'common'))
@@ -119,32 +119,23 @@ def ordered_subset(max_ind, nelem):
 
 
 # -------------------------
-# Source (proper subclass)
+# DAQ emitter as a one-shot FlatMap (avoids SourceFunction bridge)
 # -------------------------
-class DaqOperator(SourceFunction):
-    def __init__(self, input_f, beg_sinogram=0, num_sinograms=0, seq=0,
-                 slp=0.0, iteration=1, save_after_serialize=False, prj_slp=0.0, logdir="."):
-        # Store config
+class DaqEmitter(FlatMapFunction):
+    def __init__(self, *, input_f, beg_sinogram, num_sinograms, seq0,
+                 iteration_sleep, d_iteration, proj_sleep, logdir, save_after_serialize=False):
+        super().__init__()
         self.input_f = input_f
         self.beg_sinogram = int(beg_sinogram)
         self.num_sinograms = int(num_sinograms)
-        self.seq0 = int(seq)
-        self.iteration_sleep = float(slp)
-        self.iteration = int(iteration)
-        self.save_after_serialize = bool(save_after_serialize)
-        self.proj_sleep = float(prj_slp)
+        self.seq0 = int(seq0)
+        self.iteration_sleep = float(iteration_sleep)
+        self.d_iteration = int(d_iteration)
+        self.proj_sleep = float(proj_sleep)
         self.logdir = logdir
-        self._running = True
+        self.save_after_serialize = bool(save_after_serialize)
 
-        # IMPORTANT: pass a bound method to SourceFunction's ctor
-        # This ensures _j_function is created and Py4J sees a proper bridge object.
-        super().__init__(self._run)
-
-    def cancel(self):
-        self._running = False
-
-    # Bound method used by the wrapper created above
-    def _run(self, ctx):
+    def flat_map(self, _ignored, collector):
         seq = self.seq0
 
         if self.iteration_sleep > 0:
@@ -166,25 +157,21 @@ class DaqOperator(SourceFunction):
         t0 = time.time()
         indices = ordered_subset(serialized_data.shape[0], 16)
 
-        for it in range(self.iteration):
-            if not self._running:
-                break
-            print(f"Current iteration over dataset: {it + 1}/{self.iteration}")
+        for it in range(self.d_iteration):
+            print(f"Current iteration over dataset: {it + 1}/{self.d_iteration}")
             for index in indices:
-                if not self._running:
-                    break
                 time.sleep(self.proj_sleep)
                 md = {"index": int(index), "Type": "DATA", "sequence_id": seq}
-                ctx.collect([md, serialized_data[index]])
+                collector.collect([md, serialized_data[index]])
                 tot_transfer_size += len(serialized_data[index])
                 seq += 1
 
         # End-of-stream marker
-        ctx.collect([{"Type": "FIN"}, bytearray(1)])
+        collector.collect([{"Type": "FIN"}, bytearray(1)])
 
         elapsed = time.time() - t0
         tot_MiBs = (tot_transfer_size * 1.0) / 2 ** 20
-        nproj = self.iteration * len(serialized_data)
+        nproj = self.d_iteration * len(serialized_data)
         print(f"Sent projections: {nproj}; Size (MiB): {tot_MiBs:.2f}; Elapsed (s): {elapsed:.2f}")
         print(f"Rate (MiB/s): {tot_MiBs / elapsed:.2f}; (msg/s): {nproj / elapsed:.2f}")
 
@@ -430,20 +417,23 @@ def main():
     for whl in glob.glob("./dist/sirt_ops-0.2.0-*.whl"):
         env.add_python_file(whl)
 
-    daq = env.add_source(
-        DaqOperator(
+    # Kick off the pipeline with a single dummy element,
+    # then emit DAQ data from DaqEmitter.flat_map
+    kick = env.from_collection([0], type_info=Types.INT())
+    daq = kick.flat_map(
+        DaqEmitter(
             input_f=args.simulation_file,
             beg_sinogram=args.beg_sinogram,
             num_sinograms=args.num_sinograms,
-            seq=0,
-            slp=args.iteration_sleep,
-            iteration=args.d_iteration,
-            prj_slp=args.proj_sleep,
-            logdir=args.logdir
+            seq0=0,
+            iteration_sleep=args.iteration_sleep,
+            d_iteration=args.d_iteration,
+            proj_sleep=args.proj_sleep,
+            logdir=args.logdir,
+            save_after_serialize=False
         ),
-        "DAQ Source",
-        type_info=Types.PICKLED_BYTE_ARRAY()
-    )
+        output_type=Types.PICKLED_BYTE_ARRAY()
+    ).name("DAQ Emitter")
 
     dist = daq.flat_map(
         DistOperator(args),
