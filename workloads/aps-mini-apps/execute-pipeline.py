@@ -365,7 +365,7 @@ def make_denoiser_sink(args):
     # Create a simple lambda that just prints for now to test if the structure works
     def simple_sink(value):
         meta, data = value
-        if isinstance(meta, dict) and meta.get("Type") == "FIN"):
+        if isinstance(meta, dict) and meta.get("Type") == "FIN":
             print("Received FIN message")
             return
         
