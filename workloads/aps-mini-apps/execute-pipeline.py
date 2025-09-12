@@ -440,13 +440,13 @@ def main():
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("Data Distributor")
 
-    sirt = dist.key_by(
-        lambda x: x[0]["task_id"],
-        key_type_info=Types.INT()
+    sirt = sirt = dist.key_by(
+        lambda x: x[0]["task_id"]
     ).map(
         SirtOperator(cfg=args),
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("SIRT Operator").set_parallelism(args.ntask_sirt)
+
 
     sirt.add_sink(DenoiserOperator(args)).name("Denoiser Sink").set_parallelism(1)
 
