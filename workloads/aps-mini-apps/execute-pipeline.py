@@ -359,10 +359,7 @@ class SirtOperator(MapFunction):
 
 
 # -------------------------
-# Sink: Denoiser
-# -------------------------
-# -------------------------
-# Sink: Denoiser (Simple Function Implementation)
+# Sink: Denoiser (Correct PyFlink Implementation)
 # -------------------------
 def create_denoiser_sink(args):
     waiting_metadata = {}
@@ -401,7 +398,7 @@ def create_denoiser_sink(args):
             del waiting_metadata[iteration_stream]
             del waiting_data[iteration_stream]
     
-    return denoiser_sink_func
+    return SinkFunction(denoiser_sink_func)
 
 
 def make_denoiser_sink(args):
