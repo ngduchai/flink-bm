@@ -362,23 +362,22 @@ class SirtOperator(MapFunction):
 # Sink: Denoiser (Correct PyFlink Implementation)
 # -------------------------
 def make_denoiser_sink(args):
-    # Create a simple lambda that just prints for now to test if the structure works
-    def simple_sink(value):
-        meta, data = value
-        if isinstance(meta, dict) and meta.get("Type") == "FIN":
-            print("Received FIN message")
-            return
-        
-        print(f"Denoiser sink received: {type(meta)}, data size: {len(data) if data else 0}")
-        
-        # For now, just create a dummy file to test
-        if isinstance(meta, dict) and "rank" in meta:
-            import os
-            os.makedirs(args.logdir, exist_ok=True)
-            with open(os.path.join(args.logdir, f"test_output_{meta.get('rank', 0)}.txt"), 'a') as f:
-                f.write(f"Processed: {meta}\n")
+    # First, let's try using PyFlink's built-in print sink to see if the pipeline works
+    from pyflink.datastream.functions import SinkFunction
     
-    return simple_sink
+    # Try using a lambda wrapped in SinkFunction
+    def print_sink_func(value):
+        meta, data = value
+        print(f"Sink received - Meta type: {type(meta)}, Data size: {len(data) if data else 0}")
+        if isinstance(meta, dict):
+            print(f"Meta keys: {list(meta.keys())}")
+    
+    # If SinkFunction still doesn't work, we'll just return None and use print()
+    try:
+        return SinkFunction(print_sink_func)
+    except Exception as e:
+        print(f"SinkFunction creation failed: {e}")
+        return None
 
 
 
@@ -427,7 +426,7 @@ def main():
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("SIRT Operator").set_parallelism(args.ntask_sirt)
 
-    sirt.for_each(make_denoiser_sink(args)).name("Denoiser Sink").set_parallelism(1)
+    sirt.print().name("Denoiser Sink").set_parallelism(1)
 
 
     env.execute("APS Mini-Apps Pipeline")
