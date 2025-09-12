@@ -121,64 +121,59 @@ def ordered_subset(max_ind, nelem):
 # -------------------------
 # Source (proper subclass)
 # -------------------------
-class DaqOperator(SourceFunction):
-    def __init__(self, input_f, beg_sinogram=0, num_sinograms=0, seq=0,
-                 slp=0.0, iteration=1, save_after_serialize=False, prj_slp=0.0, logdir="."):
-        # NOTE: do NOT call super().__init__() in PyFlink 2.0
-        self.input_f = input_f
-        self.beg_sinogram = int(beg_sinogram)
-        self.num_sinograms = int(num_sinograms)
-        self.seq0 = int(seq)
-        self.iteration_sleep = float(slp)
-        self.iteration = int(iteration)
-        self.save_after_serialize = bool(save_after_serialize)
-        self.proj_sleep = float(prj_slp)
-        self.logdir = logdir
+def make_daq_source(input_f, beg_sinogram=0, num_sinograms=0, seq0=0,
+                    slp=0.0, iteration=1, save_after_serialize=False, prj_slp=0.0, logdir="."):
+    """
+    Returns a SourceFunction built from a Python callable.
+    This is the supported approach in PyFlink 2.0.
+    """
+    beg_sinogram = int(beg_sinogram)
+    num_sinograms = int(num_sinograms)
+    seq0 = int(seq0)
+    slp = float(slp)
+    iteration = int(iteration)
+    prj_slp = float(prj_slp)
+    save_after_serialize = bool(save_after_serialize)
 
-        def _run(ctx, *, _self=self):
-            seq = _self.seq0
-            if _self.slp > 0:
-                time.sleep(_self.slp)
+    def _run(ctx):
+        seq = seq0
+        if slp > 0:
+            time.sleep(slp)
 
-            # Load/prepare data
-            if _self.input_f.endswith('.npy'):
-                serialized_data = np.load(_self.input_f, allow_pickle=True)
-            else:
-                idata, flat, dark, itheta = setup_simulation_data(
-                    _self.input_f, _self.beg_sinogram, _self.num_sinograms
-                )
-                serialized_data = serialize_dataset(idata, flat, dark, itheta)
-                if _self.save_after_serialize:
-                    np.save(f"{_self.input_f}.npy", serialized_data)
-                del idata, flat, dark
+        # Load/prepare data
+        if str(input_f).endswith('.npy'):
+            serialized_data = np.load(input_f, allow_pickle=True)
+        else:
+            idata, flat, dark, itheta = setup_simulation_data(input_f, beg_sinogram, num_sinograms)
+            serialized_data = serialize_dataset(idata, flat, dark, itheta)
+            if save_after_serialize:
+                np.save(f"{input_f}.npy", serialized_data)
+            del idata, flat, dark
 
-            tot_transfer_size = 0
-            t0 = time.time()
-            indices = ordered_subset(serialized_data.shape[0], 16)
+        tot_transfer_size = 0
+        t0 = time.time()
+        indices = ordered_subset(serialized_data.shape[0], 16)
 
-            for it in range(_self.iteration):
-                print(f"Current iteration over dataset: {it + 1}/{_self.iteration}")
-                for index in indices:
-                    time.sleep(_self.proj_sleep)
-                    md = {"index": int(index), "Type": "DATA", "sequence_id": seq}
-                    ctx.collect([md, serialized_data[index]])
-                    tot_transfer_size += len(serialized_data[index])
-                    seq += 1
+        for it in range(iteration):
+            print(f"Current iteration over dataset: {it + 1}/{iteration}")
+            for index in indices:
+                time.sleep(prj_slp)
+                md = {"index": int(index), "Type": "DATA", "sequence_id": seq}
+                ctx.collect([md, serialized_data[index]])
+                tot_transfer_size += len(serialized_data[index])
+                seq += 1
 
-            # End-of-stream marker
-            ctx.collect([{"Type": "FIN"}, bytearray(1)])
+        # End-of-stream marker
+        ctx.collect([{"Type": "FIN"}, bytearray(1)])
 
-            elapsed = time.time() - t0
-            tot_MiBs = (tot_transfer_size * 1.0) / 2 ** 20
-            nproj = _self.iteration * len(serialized_data)
-            print(f"Sent projections: {nproj}; Size (MiB): {tot_MiBs:.2f}; Elapsed (s): {elapsed:.2f}")
-            print(f"Rate (MiB/s): {tot_MiBs / elapsed:.2f}; (msg/s): {nproj / elapsed:.2f}")
+        elapsed = time.time() - t0
+        tot_MiBs = (tot_transfer_size * 1.0) / 2 ** 20
+        nproj = iteration * len(serialized_data)
+        print(f"Sent projections: {nproj}; Size (MiB): {tot_MiBs:.2f}; Elapsed (s): {elapsed:.2f}")
+        print(f"Rate (MiB/s): {tot_MiBs / elapsed:.2f}; (msg/s): {nproj / elapsed:.2f}")
 
-        # IMPORTANT: pass the callable to the parent constructor
-        super().__init__(_run)
-
-    def cancel(self):
-        pass
+    # IMPORTANT: wrap the callable, don't return the callable itself
+    return SourceFunction(_run)
 
 
 # -------------------------
@@ -423,15 +418,16 @@ def main():
         env.add_python_file(whl)
 
     daq = env.add_source(
-        DaqOperator(
+        make_daq_source(
             input_f=args.simulation_file,
             beg_sinogram=args.beg_sinogram,
             num_sinograms=args.num_sinograms,
-            seq=0,
+            seq0=0,
             slp=args.iteration_sleep,
             iteration=args.d_iteration,
             prj_slp=args.proj_sleep,
-            logdir=args.logdir
+            logdir=args.logdir,
+            save_after_serialize=False
         ),
         "DAQ Source",
         type_info=Types.PICKLED_BYTE_ARRAY()
