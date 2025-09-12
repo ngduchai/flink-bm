@@ -363,7 +363,7 @@ class SirtOperator(MapFunction):
 # -------------------------
 class DenoiserOperator(SinkFunction):
     def __init__(self, args):
-        super().__init__()  # safe to keep
+        # DO NOT call super().__init__() in PyFlink 2.0
         self.args = args
         self.serializer = TraceSerializer.ImageSerializer()
         self.waiting_metadata = {}
@@ -377,10 +377,8 @@ class DenoiserOperator(SinkFunction):
             return
         if not self.running:
             return
-
         nproc_sirt = self.args.ntask_sirt
         recon_path = self.args.logdir
-
         dd = np.frombuffer(data, dtype=np.float32).reshape(meta["rank_dims"])
         iteration_stream = meta["iteration_stream"]
         rank = meta["rank"]
@@ -394,11 +392,9 @@ class DenoiserOperator(SinkFunction):
         if len(self.waiting_metadata[iteration_stream]) == nproc_sirt:
             sorted_ranks = sorted(self.waiting_metadata[iteration_stream].keys())
             sorted_data = [self.waiting_data[iteration_stream][r] for r in sorted_ranks]
-
             os.makedirs(recon_path, exist_ok=True)
             with h5py.File(os.path.join(recon_path, f"{iteration_stream}-denoised.h5"), 'w') as h5_output:
                 h5_output.create_dataset('/data', data=np.concatenate(sorted_data, axis=0))
-
             del self.waiting_metadata[iteration_stream]
             del self.waiting_data[iteration_stream]
 

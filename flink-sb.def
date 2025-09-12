@@ -31,7 +31,7 @@ bash -euxo pipefail <<'BASH'
     | tar -xj -C /tmp/mamba-bin bin/micromamba
 
   /tmp/mamba-bin/bin/micromamba create -y -p "$ENV_PREFIX" -c conda-forge \
-      python=3.10 tomopy dxchange h5py numpy scipy scikit-image
+      python=3.10 tomopy dxchange h5py numpy scipy scikit-image astropy olefile
 
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir --upgrade pip
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
