@@ -365,16 +365,13 @@ class SirtOperator(MapFunction):
 # Sink: Denoiser (callable factory)
 # -------------------------
 def make_denoiser_sink(args):
-    # state lives in the closure
-    serializer = TraceSerializer.ImageSerializer()
     waiting_metadata = {}
     waiting_data = {}
-    running = {"val": True}  # tiny mutable box
+    running = {"val": True}
 
     def _sink(value, context):
         if not running["val"]:
             return
-
         meta, data = value
         if isinstance(meta, dict) and meta.get("Type") == "FIN":
             running["val"] = False
@@ -390,7 +387,6 @@ def make_denoiser_sink(args):
         if iteration_stream not in waiting_metadata:
             waiting_metadata[iteration_stream] = {}
             waiting_data[iteration_stream] = {}
-
         waiting_metadata[iteration_stream][rank] = meta
         waiting_data[iteration_stream][rank] = dd
 
@@ -405,8 +401,8 @@ def make_denoiser_sink(args):
             del waiting_metadata[iteration_stream]
             del waiting_data[iteration_stream]
 
-    # IMPORTANT: return a SinkFunction wrapping the callable
-    return SinkFunction(_sink)
+    return SinkFunction(_sink)  # <-- IMPORTANT
+
 
 
 # -------------------------
@@ -446,7 +442,7 @@ def main():
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("Data Distributor")
 
-    sirt = sirt = dist.key_by(
+    sirt = dist.key_by(
         lambda x: x[0]["task_id"]
     ).map(
         SirtOperator(cfg=args),
