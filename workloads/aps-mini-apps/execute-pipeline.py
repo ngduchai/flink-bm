@@ -361,48 +361,24 @@ class SirtOperator(MapFunction):
 # -------------------------
 # Sink: Denoiser (Correct PyFlink Implementation)
 # -------------------------
-def create_denoiser_sink(args):
-    waiting_metadata = {}
-    waiting_data = {}
-    running = [True]  # Use list to make it mutable in closure
-    
-    def denoiser_sink_func(value, context=None):
-        if not running[0]:
-            return
-        meta, data = value
-        if isinstance(meta, dict) and meta.get("Type") == "FIN":
-            running[0] = False
-            return
-
-        nproc_sirt = args.ntask_sirt
-        recon_path = args.logdir
-
-        dd = np.frombuffer(data, dtype=np.float32).reshape(meta["rank_dims"])
-        iteration_stream = meta["iteration_stream"]
-        rank = meta["rank"]
-
-        if iteration_stream not in waiting_metadata:
-            waiting_metadata[iteration_stream] = {}
-            waiting_data[iteration_stream] = {}
-        waiting_metadata[iteration_stream][rank] = meta
-        waiting_data[iteration_stream][rank] = dd
-
-        if len(waiting_metadata[iteration_stream]) == nproc_sirt:
-            sorted_ranks = sorted(waiting_metadata[iteration_stream].keys())
-            sorted_data = [waiting_data[iteration_stream][r] for r in sorted_ranks]
-
-            os.makedirs(recon_path, exist_ok=True)
-            with h5py.File(os.path.join(recon_path, f"{iteration_stream}-denoised.h5"), 'w') as h5_output:
-                h5_output.create_dataset('/data', data=np.concatenate(sorted_data, axis=0))
-
-            del waiting_metadata[iteration_stream]
-            del waiting_data[iteration_stream]
-    
-    return SinkFunction(denoiser_sink_func)
-
-
 def make_denoiser_sink(args):
-    return create_denoiser_sink(args)
+    # Create a simple lambda that just prints for now to test if the structure works
+    def simple_sink(value):
+        meta, data = value
+        if isinstance(meta, dict) and meta.get("Type") == "FIN"):
+            print("Received FIN message")
+            return
+        
+        print(f"Denoiser sink received: {type(meta)}, data size: {len(data) if data else 0}")
+        
+        # For now, just create a dummy file to test
+        if isinstance(meta, dict) and "rank" in meta:
+            import os
+            os.makedirs(args.logdir, exist_ok=True)
+            with open(os.path.join(args.logdir, f"test_output_{meta.get('rank', 0)}.txt"), 'a') as f:
+                f.write(f"Processed: {meta}\n")
+    
+    return simple_sink
 
 
 
@@ -451,7 +427,7 @@ def main():
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("SIRT Operator").set_parallelism(args.ntask_sirt)
 
-    sirt.add_sink(make_denoiser_sink(args)).name("Denoiser Sink").set_parallelism(1)
+    sirt.for_each(make_denoiser_sink(args)).name("Denoiser Sink").set_parallelism(1)
 
 
     env.execute("APS Mini-Apps Pipeline")
