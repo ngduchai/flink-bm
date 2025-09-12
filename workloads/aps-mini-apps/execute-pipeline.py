@@ -361,15 +361,14 @@ class SirtOperator(MapFunction):
 # -------------------------
 # Sink: Denoiser
 # -------------------------
-class DenoiserSink(SinkFunction):
+class DenoiserHelper:
     def __init__(self, args):
-        super().__init__()
         self.args = args
         self.waiting_metadata = {}
         self.waiting_data = {}
         self.running = True
 
-    def invoke(self, value, context):
+    def sink_function(self, value, context=None):
         if not self.running:
             return
         meta, data = value
@@ -403,7 +402,8 @@ class DenoiserSink(SinkFunction):
 
 
 def make_denoiser_sink(args):
-    return DenoiserSink(args)
+    helper = DenoiserHelper(args)
+    return SinkFunction(helper.sink_function)
 
 
 
