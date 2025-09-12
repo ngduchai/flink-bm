@@ -361,20 +361,15 @@ class SirtOperator(MapFunction):
 # -------------------------
 # Sink: Denoiser
 # -------------------------
-# -------------------------
-# Sink: Denoiser (proper wrapper)
-# -------------------------
-# -------------------------
-# Sink: Denoiser (helper + factory that returns a SinkFunction)
-# -------------------------
-class _DenoiserHelper:
+class DenoiserSink(SinkFunction):
     def __init__(self, args):
+        super().__init__()
         self.args = args
         self.waiting_metadata = {}
         self.waiting_data = {}
         self.running = True
 
-    def consume(self, value, context):
+    def invoke(self, value, context):
         if not self.running:
             return
         meta, data = value
@@ -408,9 +403,7 @@ class _DenoiserHelper:
 
 
 def make_denoiser_sink(args):
-    helper = _DenoiserHelper(args)
-    # CRITICAL: wrap the bound method with PyFlink's SinkFunction
-    return SinkFunction(helper.consume)
+    return DenoiserSink(args)
 
 
 
