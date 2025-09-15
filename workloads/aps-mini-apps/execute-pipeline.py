@@ -8,7 +8,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'common', 'local'))
 import TraceSerializer
 from pyflink.common import Types, Configuration
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
-from pyflink.datastream.functions import SourceFunction, FlatMapFunction, MapFunction, SinkFunction, RuntimeContext
+from pyflink.datastream.functions import FlatMapFunction, MapFunction, RuntimeContext
 from pyflink.datastream.state import ListStateDescriptor
 
 
@@ -121,7 +121,7 @@ def ordered_subset(max_ind, nelem):
 
 
 # -------------------------
-# DAQ emitter as a one-shot FlatMap (avoids SourceFunction bridge)
+# DAQ emitter (yield-style flatMap)
 # -------------------------
 class DaqEmitter(FlatMapFunction):
     def __init__(self, *, input_f, beg_sinogram, num_sinograms, seq0,
@@ -137,7 +137,7 @@ class DaqEmitter(FlatMapFunction):
         self.logdir = logdir
         self.save_after_serialize = bool(save_after_serialize)
 
-    def flat_map(self, _ignored, collector):
+    def flat_map(self, _ignored):
         seq = self.seq0
 
         if self.iteration_sleep > 0:
@@ -164,12 +164,12 @@ class DaqEmitter(FlatMapFunction):
             for index in indices:
                 time.sleep(self.proj_sleep)
                 md = {"index": int(index), "Type": "DATA", "sequence_id": seq}
-                collector.collect([md, serialized_data[index]])
+                yield [md, serialized_data[index]]
                 tot_transfer_size += len(serialized_data[index])
                 seq += 1
 
         # End-of-stream marker
-        collector.collect([{"Type": "FIN"}, bytearray(1)])
+        yield [{"Type": "FIN"}, bytearray(1)]
 
         elapsed = time.time() - t0
         tot_MiBs = (tot_transfer_size * 1.0) / 2 ** 20
@@ -179,8 +179,7 @@ class DaqEmitter(FlatMapFunction):
 
 
 # -------------------------
-# FlatMap distributor
-#   NOTE: move ImageSerializer creation to open() so it isn't pickled.
+# FlatMap distributor (yield-style)
 # -------------------------
 class DistOperator(FlatMapFunction):
     def __init__(self, args):
@@ -196,9 +195,7 @@ class DistOperator(FlatMapFunction):
         self.seq = 0
 
     def open(self, ctx: RuntimeContext):
-        # Instantiate at runtime inside the worker to avoid cloudpickle of FlatBuffers internals
         self.serializer = TraceSerializer.ImageSerializer()
-        # Optional: quick version probe for debugging
         try:
             import flatbuffers
             has_force = hasattr(getattr(flatbuffers, "Builder"), "ForceDefaults")
@@ -240,11 +237,11 @@ class DistOperator(FlatMapFunction):
             offset_rows += rows_here
         return msgs
 
-    def flat_map(self, value, collector):
+    def flat_map(self, value):
         metadata, data = value
 
         if metadata["Type"] == "FIN":
-            collector.collect(value)
+            yield value
             self.running = False
             return
         if not self.running:
@@ -300,7 +297,7 @@ class DistOperator(FlatMapFunction):
             for i in range(self.args.ntask_sirt):
                 md = msgs[i][0]
                 print(f"Task {i}: seq_id {md['seq_n']} proj_id {md['projection_id']}, theta: {md['theta']} center: {md['center']}")
-                collector.collect(msgs[i])
+                yield msgs[i]
 
         if read_image.Itype() is self.serializer.ITypes.White:
             self.white_imgs.extend(sub); self.tot_white_imgs += 1
@@ -374,13 +371,12 @@ class SirtOperator(MapFunction):
 
 
 # -------------------------
-# Sink: Denoiser
-#   NOTE: create ImageSerializer only if/when needed; fix double collect bug.
+# Sink: Denoiser (yield-style)
 # -------------------------
 class DenoiserOperator(FlatMapFunction):
     def __init__(self, args):
         self.args = args
-        self.serializer = None    # avoid pickling heavy state
+        self.serializer = None
         self.waiting_metadata = {}
         self.waiting_data = {}
         self.running = True
@@ -388,11 +384,11 @@ class DenoiserOperator(FlatMapFunction):
     def open(self, ctx: RuntimeContext):
         self.serializer = TraceSerializer.ImageSerializer()
 
-    def flat_map(self, value, collector):
+    def flat_map(self, value):
         meta, data = value
         if meta.get("Type") == "FIN":
             self.running = False
-            collector.collect(("FIN", None))
+            yield ("FIN", None)
             return
         if not self.running:
             return
@@ -416,24 +412,22 @@ class DenoiserOperator(FlatMapFunction):
                 h5_output.create_dataset('/data', data=np.concatenate(sorted_data, axis=0))
             del self.waiting_metadata[iteration_stream]
             del self.waiting_data[iteration_stream]
-            collector.collect(("DENOISED", str(iteration_stream)))
+            yield ("DENOISED", str(iteration_stream))
 
 
 def _ship_local_modules(env):
     base = os.path.dirname(os.path.abspath(__file__))
     to_ship = [
-        os.path.join(base, "common"),              # ships the whole 'common' dir
-        os.path.join(base, "common", "local"),     # ships 'common/local' if you use it
-        os.path.join(base, "TraceSerializer.py"),  # in case the file is at repo root
+        os.path.join(base, "common"),
+        os.path.join(base, "common", "local"),
+        os.path.join(base, "TraceSerializer.py"),
     ]
     for p in to_ship:
         if os.path.exists(p):
             env.add_python_file(p)
 
 
-# top-level to make cloudpickle's life easier
 def task_key_selector(value):
-    # value is [meta, payload]; we key by the task id we set in Dist/Sirt stages
     return int(value[0]["task_id"])
 
 
@@ -456,9 +450,6 @@ class VersionProbe(MapFunction):
 PY_EXEC = "/opt/micromamba/envs/aps/bin/python"
 
 
-# -------------------------
-# Main
-# -------------------------
 def main():
     args = parse_arguments()
     logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
@@ -472,12 +463,9 @@ def main():
 
     _ship_local_modules(env)
 
-    # ship wheel if needed
     for whl in glob.glob("./dist/sirt_ops-0.2.0-*.whl"):
         env.add_python_file(whl)
 
-    # Kick off the pipeline with a single dummy element,
-    # then emit DAQ data from DaqEmitter.flat_map
     kick = env.from_collection([0], type_info=Types.INT())
     daq = kick.flat_map(
         DaqEmitter(
