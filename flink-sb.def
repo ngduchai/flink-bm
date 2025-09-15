@@ -33,13 +33,28 @@ bash -euxo pipefail <<'BASH'
   /tmp/mamba-bin/bin/micromamba create -y -p "$ENV_PREFIX" -c conda-forge \
       python=3.10 tomopy dxchange h5py numpy scipy scikit-image astropy olefile
 
+  # --- Python deps for PyFlink (pin compatible set) ---
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir --upgrade pip
-  "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
-      build pybind11 setuptools wheel flatbuffers apache-flink==2.0.0
 
-  # --- Pin Python-side libs to versions compatible with Beam/PyFlink portability ---
+  # 1) Install Flink Python API without letting pip drag transitive deps
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
-      protobuf==3.20.3 cloudpickle==2.2.1
+      "apache-flink==2.0.0" --no-deps
+
+  # 2) Install a Beam/serialization stack that works with Flink 2.0
+  #    (protobuf 3.20.x is the safest for many Beam runners;
+  #     cloudpickle 2.2.x matches PyFlink’s serializer expectations)
+  "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
+      "apache-beam==2.54.0" \
+      "protobuf==3.20.3" \
+      "cloudpickle==2.2.1"
+  
+  "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
+    "proto-plus<2.0.0" \
+    "grpcio<1.63"
+
+  # 3) Other essential packages
+  "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
+      build pybind11 setuptools wheel flatbuffers
     
 BASH
 
