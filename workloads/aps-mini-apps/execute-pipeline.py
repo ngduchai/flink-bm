@@ -359,26 +359,48 @@ class SirtOperator(MapFunction):
 
 
 # -------------------------
-# Sink: Denoiser (Correct PyFlink Implementation)
+# Sink: Denoiser
 # -------------------------
-def make_denoiser_sink(args):
-    # First, let's try using PyFlink's built-in print sink to see if the pipeline works
-    from pyflink.datastream.functions import SinkFunction
-    
-    # Try using a lambda wrapped in SinkFunction
-    def print_sink_func(value):
-        meta, data = value
-        print(f"Sink received - Meta type: {type(meta)}, Data size: {len(data) if data else 0}")
-        if isinstance(meta, dict):
-            print(f"Meta keys: {list(meta.keys())}")
-    
-    # If SinkFunction still doesn't work, we'll just return None and use print()
-    try:
-        return SinkFunction(print_sink_func)
-    except Exception as e:
-        print(f"SinkFunction creation failed: {e}")
-        return None
+class DenoiserOperator(SinkFunction):
+    def __init__(self, args):
+        super().__init__()  # safe to keep
+        self.args = args
+        self.serializer = TraceSerializer.ImageSerializer()
+        self.waiting_metadata = {}
+        self.waiting_data = {}
+        self.running = True
 
+    def invoke(self, value, context):
+        meta, data = value
+        if meta.get("Type") == "FIN":
+            self.running = False
+            return
+        if not self.running:
+            return
+
+        nproc_sirt = self.args.ntask_sirt
+        recon_path = self.args.logdir
+
+        dd = np.frombuffer(data, dtype=np.float32).reshape(meta["rank_dims"])
+        iteration_stream = meta["iteration_stream"]
+        rank = meta["rank"]
+
+        if iteration_stream not in self.waiting_metadata:
+            self.waiting_metadata[iteration_stream] = {}
+            self.waiting_data[iteration_stream] = {}
+        self.waiting_metadata[iteration_stream][rank] = meta
+        self.waiting_data[iteration_stream][rank] = dd
+
+        if len(self.waiting_metadata[iteration_stream]) == nproc_sirt:
+            sorted_ranks = sorted(self.waiting_metadata[iteration_stream].keys())
+            sorted_data = [self.waiting_data[iteration_stream][r] for r in sorted_ranks]
+
+            os.makedirs(recon_path, exist_ok=True)
+            with h5py.File(os.path.join(recon_path, f"{iteration_stream}-denoised.h5"), 'w') as h5_output:
+                h5_output.create_dataset('/data', data=np.concatenate(sorted_data, axis=0))
+
+            del self.waiting_metadata[iteration_stream]
+            del self.waiting_data[iteration_stream]
 
 
 # -------------------------
@@ -418,16 +440,15 @@ def main():
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("Data Distributor")
 
-    # small typo cleanup too: remove the double assignment
     sirt = dist.key_by(
-        lambda x: x[0]["task_id"]
+        lambda x: x[0]["task_id"],
+        key_type_info=Types.INT()
     ).map(
         SirtOperator(cfg=args),
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("SIRT Operator").set_parallelism(args.ntask_sirt)
 
-    sirt.print().name("Denoiser Sink").set_parallelism(1)
-
+    sirt.add_sink(DenoiserOperator(args)).name("Denoiser Sink").set_parallelism(1)
 
     env.execute("APS Mini-Apps Pipeline")
 
