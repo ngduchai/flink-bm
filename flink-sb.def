@@ -30,10 +30,10 @@ bash -euxo pipefail <<'BASH'
   curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
     | tar -xj -C /tmp/mamba-bin bin/micromamba
 
-  # Create env with NumPy 1.26-compatible scientific stack to avoid ABI issues
+  # Create env with NumPy 1.24.x (compatible with Beam 2.54) to avoid ABI issues
   /tmp/mamba-bin/bin/micromamba create -y -p "$ENV_PREFIX" -c conda-forge \
       python=3.10 \
-      numpy=1.26.* \
+      numpy=1.24.* \
       h5py=3.9.* \
       tomopy \
       dxchange \
@@ -47,12 +47,18 @@ bash -euxo pipefail <<'BASH'
   # --- Python deps for PyFlink (pin compatible set) ---
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir --upgrade pip
 
-  # 1) Install Flink Python API without letting pip drag transitive deps
-  "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
-      "apache-flink==2.0.0" --no-deps
+  # 1) Install Flink Python API without transitive deps
+  "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir "apache-flink==2.0.0" --no-deps
 
-  # 2) Install a Beam/serialization stack that works with Flink 2.0
-  #    (protobuf 3.20.x is safest; cloudpickle 2.2.x matches PyFlink serializer)
+  #    Install the dependencies that Flink expects (since we used --no-deps)
+  "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
+      "apache-flink-libraries==2.0.0" \
+      "avro>=1.12.0" \
+      "pemja==0.4.1" \
+      "py4j==0.10.9.7" \
+      "ruamel.yaml>=0.18.4"
+
+  # 2) Beam/serialization stack that works with Flink 2.0
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
       "apache-beam==2.54.0" \
       "protobuf==3.20.3" \
@@ -60,8 +66,8 @@ bash -euxo pipefail <<'BASH'
       "proto-plus<2.0.0" \
       "grpcio<1.63"
 
-  # Guardrail: ensure NumPy stays on 1.x in case any wheel tried to bump it
-  "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir --upgrade "numpy<2"
+  # Guardrail: keep NumPy on 1.x (Beam 2.54 requires <1.25)
+  "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir --upgrade "numpy<1.25"
 
   # 3) Other essential packages
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
@@ -71,14 +77,14 @@ bash -euxo pipefail <<'BASH'
   "$ENV_PREFIX/bin/python" - <<'PY'
 import pkg_resources as pr
 pkgs = ["numpy","pandas","pyarrow","h5py","tomopy","dxchange",
-        "apache-flink","apache-beam","protobuf","cloudpickle","proto-plus","grpcio"]
+        "apache-flink","apache-flink-libraries","apache-beam",
+        "protobuf","cloudpickle","proto-plus","grpcio","pemja","py4j","avro","ruamel.yaml"]
 for p in pkgs:
     try:
         print(f"{p}=={pr.get_distribution(p).version}")
     except Exception as e:
         print(f"{p} not installed: {e}")
 PY
-
 BASH
 
 %environment
