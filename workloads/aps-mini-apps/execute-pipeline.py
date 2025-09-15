@@ -1,14 +1,15 @@
-import sys, os, glob, argparse, logging, math, time 
+import sys, os, glob, argparse, logging, math, time
 import numpy as np, h5py, dxchange, tomopy as tp
 
+# Make sure local modules are findable when launched by Flink
 sys.path.append(os.path.join(os.path.dirname(__file__), 'common'))
-sys.path.append(os.path.join(os.path.dirname(__file__), 'common/local'))
+sys.path.append(os.path.join(os.path.dirname(__file__), 'common', 'local'))
+
 import TraceSerializer
-from pyflink.common import Types
+from pyflink.common import Types, Configuration
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
 from pyflink.datastream.functions import SourceFunction, FlatMapFunction, MapFunction, SinkFunction, RuntimeContext
 from pyflink.datastream.state import ListStateDescriptor
-from pyflink.common import Configuration
 
 
 # -------------------------
@@ -179,12 +180,13 @@ class DaqEmitter(FlatMapFunction):
 
 # -------------------------
 # FlatMap distributor
+#   NOTE: move ImageSerializer creation to open() so it isn't pickled.
 # -------------------------
 class DistOperator(FlatMapFunction):
     def __init__(self, args):
-        super().__init__()  # safe to keep
+        super().__init__()
         self.args = args
-        self.serializer = TraceSerializer.ImageSerializer()
+        self.serializer = None   # set in open()
         self.running = True
         self.total_received = 0
         self.total_size = 0
@@ -192,6 +194,18 @@ class DistOperator(FlatMapFunction):
         self.tot_white_imgs = 0
         self.tot_dark_imgs = 0
         self.seq = 0
+
+    def open(self, ctx: RuntimeContext):
+        # Instantiate at runtime inside the worker to avoid cloudpickle of FlatBuffers internals
+        self.serializer = TraceSerializer.ImageSerializer()
+        # Optional: quick version probe for debugging
+        try:
+            import flatbuffers
+            has_force = hasattr(getattr(flatbuffers, "Builder"), "ForceDefaults")
+            print("[DistOperator] flatbuffers:", getattr(flatbuffers, "__version__", "unknown"),
+                  "ForceDefaults?", has_force)
+        except Exception as e:
+            print("[DistOperator] flatbuffers probe failed:", e)
 
     @staticmethod
     def _msg(meta, data_bytes):
@@ -305,7 +319,7 @@ class DistOperator(FlatMapFunction):
 # -------------------------
 class SirtOperator(MapFunction):
     def __init__(self, cfg):
-        super().__init__()  # safe to keep
+        super().__init__()
         self.cfg = {
             "thread_count": cfg.thread_count,
             "window_step": cfg.window_step,
@@ -361,14 +375,18 @@ class SirtOperator(MapFunction):
 
 # -------------------------
 # Sink: Denoiser
+#   NOTE: create ImageSerializer only if/when needed; fix double collect bug.
 # -------------------------
 class DenoiserOperator(FlatMapFunction):
     def __init__(self, args):
         self.args = args
-        self.serializer = TraceSerializer.ImageSerializer()
+        self.serializer = None    # avoid pickling heavy state
         self.waiting_metadata = {}
         self.waiting_data = {}
         self.running = True
+
+    def open(self, ctx: RuntimeContext):
+        self.serializer = TraceSerializer.ImageSerializer()
 
     def flat_map(self, value, collector):
         meta, data = value
@@ -398,7 +416,8 @@ class DenoiserOperator(FlatMapFunction):
                 h5_output.create_dataset('/data', data=np.concatenate(sorted_data, axis=0))
             del self.waiting_metadata[iteration_stream]
             del self.waiting_data[iteration_stream]
-            collector.collect(collector.collect(("DENOISED", str(iteration_stream))))
+            collector.collect(("DENOISED", str(iteration_stream)))
+
 
 def _ship_local_modules(env):
     base = os.path.dirname(os.path.abspath(__file__))
@@ -411,24 +430,31 @@ def _ship_local_modules(env):
         if os.path.exists(p):
             env.add_python_file(p)
 
+
 # top-level to make cloudpickle's life easier
 def task_key_selector(value):
     # value is [meta, payload]; we key by the task id we set in Dist/Sirt stages
     return int(value[0]["task_id"])
 
+
 class VersionProbe(MapFunction):
     def map(self, x):
         try:
-            import sys, cloudpickle, google.protobuf, apache_beam
+            import sys, cloudpickle, google.protobuf, apache_beam, flatbuffers
+            has_force = hasattr(getattr(flatbuffers, "Builder"), "ForceDefaults")
             print("[probe] python=", sys.executable,
                   " cloudpickle=", cloudpickle.__version__,
-                  " protobuf=", google.protobuf.__version__)
+                  " protobuf=", google.protobuf.__version__,
+                  " beam=", apache_beam.__version__,
+                  " flatbuffers=", getattr(flatbuffers, "__version__", "unknown"),
+                  " ForceDefaults?", has_force)
         except Exception as e:
             print("[probe] version check failed:", e)
         return x
 
 
 PY_EXEC = "/opt/micromamba/envs/aps/bin/python"
+
 
 # -------------------------
 # Main
@@ -470,7 +496,6 @@ def main():
 
     probe = daq.map(VersionProbe(), output_type=Types.PICKLED_BYTE_ARRAY()).name("Version Probe")
 
-    # dist = daq.flat_map(
     dist = probe.flat_map(
         DistOperator(args),
         output_type=Types.PICKLED_BYTE_ARRAY()
@@ -483,7 +508,8 @@ def main():
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("SIRT Operator").set_parallelism(args.ntask_sirt)
 
-    den = sirt.flat_map(DenoiserOperator(args),
+    den = sirt.flat_map(
+        DenoiserOperator(args),
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("Denoiser Operator").set_parallelism(1)
 
