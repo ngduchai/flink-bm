@@ -13,7 +13,6 @@ bash -euxo pipefail <<'BASH'
       ca-certificates curl bzip2 \
       openjdk-17-jre-headless \
       mpich libmpich-dev \
-      # The next two are OK to have, but we'll ensure the conda libs are preferred at runtime
       libhdf5-mpich-dev libhdf5-dev zlib1g-dev \
       libboost-serialization-dev \
       python3 python3-pip python3-venv
@@ -31,36 +30,38 @@ bash -euxo pipefail <<'BASH'
   curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
     | tar -xj -C /tmp/mamba-bin bin/micromamba
 
-  # Create env with NumPy 1.24.x (compatible with Beam 2.54) and compiled deps from conda-forge
+  # Create env with NUMPY < 1.25 to satisfy Beam, and versions that play nicely together.
   /tmp/mamba-bin/bin/micromamba create -y -p "$ENV_PREFIX" -c conda-forge \
       python=3.10 \
-      numpy=1.24.* \
+      numpy=1.24.4 \
       h5py=3.9.* \
-      pandas=2.1.* \
-      pyarrow=14.0.* \
-      tomopy \
-      dxchange \
       scipy \
       scikit-image \
+      pandas=2.1.* \
+      pyarrow<15 \
+      tomopy \
+      dxchange \
       astropy \
       olefile
 
-  # --- Python deps for PyFlink/Beam (pip), while preserving conda NumPy ---
+  # Ensure no user-site wheels from the build context leak in
+  rm -rf /root/.local
+
+  # --- Python deps for PyFlink (pin compatible set) ---
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir --upgrade pip
 
-  # 1) Install Flink Python API without pulling transitive deps
+  # 1) Install Flink Python API without dragging transitive deps
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir "apache-flink==2.0.0" --no-deps
 
-  #    Install the dependencies that Flink expects (since we used --no-deps)
+  # 1a) Required Flink Python-side deps
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
-      "apache-flink-libraries==2.0.0" \
+      "apache-flink-libraries>=2.0.0,<2.0.1" \
       "avro>=1.12.0" \
       "pemja==0.4.1" \
       "py4j==0.10.9.7" \
       "ruamel.yaml>=0.18.4"
 
-  # 2) Beam/serialization stack that works with Flink 2.0
-  #    IMPORTANT: Do NOT upgrade/downgrade NumPy here; conda's 1.24.* must remain.
+  # 2) Beam/serialization stack known to work with Flink 2.0
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
       "apache-beam==2.54.0" \
       "protobuf==3.20.3" \
@@ -68,22 +69,10 @@ bash -euxo pipefail <<'BASH'
       "proto-plus<2.0.0" \
       "grpcio<1.63"
 
-  # 3) Other essential packages (pure Python or wheels; avoid changing NumPy)
+  # 3) Other essential packages (build helpers)
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
       build pybind11 setuptools wheel flatbuffers
 
-  # (Optional) quick versions print to help debug at build time
-  "$ENV_PREFIX/bin/python" - <<'PY'
-import pkg_resources as pr
-pkgs = ["numpy","pandas","pyarrow","h5py","tomopy","dxchange",
-        "apache-flink","apache-flink-libraries","apache-beam",
-        "protobuf","cloudpickle","proto-plus","grpcio","pemja","py4j","avro","ruamel.yaml"]
-for p in pkgs:
-    try:
-        print(f"{p}=={pr.get_distribution(p).version}")
-    except Exception as e:
-        print(f"{p} not installed: {e}")
-PY
 BASH
 
 %environment
@@ -91,5 +80,9 @@ BASH
     export FLINK_HOME=/opt/flink
     export PATH=$FLINK_HOME/bin:/opt/micromamba/envs/aps/bin:$PATH
     export PYTHON=/opt/micromamba/envs/aps/bin/python
-    # Prefer the conda env's libs first (NumPy/HDF5 used by h5py etc.)
-    export LD_LIBRARY_PATH=/opt/micromamba/envs/aps/lib:$LD_LIBRARY_PATH
+    export LD_LIBRARY_PATH=/opt/micromamba/envs/aps/lib:/usr/local/lib:/usr/lib/x86_64-linux-gnu/hdf5/mpich:$LD_LIBRARY_PATH
+    # Prevent user-site packages (~/.local) from shadowing the conda env
+    export PYTHONNOUSERSITE=1
+    # Keep pip from doing implicit --user installs
+    export PIP_DISABLE_PIP_VERSION_CHECK=1
+    export PIP_ROOT_USER_ACTION=ignore
