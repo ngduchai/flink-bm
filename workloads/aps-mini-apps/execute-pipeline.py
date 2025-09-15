@@ -399,7 +399,16 @@ class DenoiserOperator(FlatMapFunction):
             del self.waiting_data[iteration_stream]
             collector.collect(collector.collect(("DENOISED", str(iteration_stream))))
 
-
+def _ship_local_modules(env):
+    base = os.path.dirname(os.path.abspath(__file__))
+    to_ship = [
+        os.path.join(base, "common"),              # ships the whole 'common' dir
+        os.path.join(base, "common", "local"),     # ships 'common/local' if you use it
+        os.path.join(base, "TraceSerializer.py"),  # in case the file is at repo root
+    ]
+    for p in to_ship:
+        if os.path.exists(p):
+            env.add_python_file(p)
 
 # -------------------------
 # Main
@@ -410,6 +419,8 @@ def main():
 
     env = StreamExecutionEnvironment.get_execution_environment()
     env.enable_checkpointing(10_000, CheckpointingMode.EXACTLY_ONCE)
+
+    _ship_local_modules(env)
 
     # ship wheel if needed
     for whl in glob.glob("./dist/sirt_ops-0.2.0-*.whl"):
