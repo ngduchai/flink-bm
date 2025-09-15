@@ -363,7 +363,6 @@ class SirtOperator(MapFunction):
 # -------------------------
 class DenoiserOperator(FlatMapFunction):
     def __init__(self, args):
-        # DO NOT call super().__init__() in PyFlink 2.0
         self.args = args
         self.serializer = TraceSerializer.ImageSerializer()
         self.waiting_metadata = {}
@@ -374,6 +373,7 @@ class DenoiserOperator(FlatMapFunction):
         meta, data = value
         if meta.get("Type") == "FIN":
             self.running = False
+            collector.collect(("FIN", None))
             return
         if not self.running:
             return
@@ -397,7 +397,7 @@ class DenoiserOperator(FlatMapFunction):
                 h5_output.create_dataset('/data', data=np.concatenate(sorted_data, axis=0))
             del self.waiting_metadata[iteration_stream]
             del self.waiting_data[iteration_stream]
-            collector.collect({"Type": "DENOISED", "iteration_stream": iteration_stream})
+            collector.collect(collector.collect(("DENOISED", str(iteration_stream))))
 
 
 
