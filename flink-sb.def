@@ -5,7 +5,7 @@ From: ubuntu:22.04
 /home/ndhai/diaspora/zip/flink-2.0.0-bin-scala_2.12.tgz /opt/src/flink.tgz
 
 %post
-# Run the whole post section with bash so we can use -o pipefail, -u, etc.
+# Run the whole post section with bash so we can use -o pipefail
 bash -euxo pipefail <<'BASH'
   # --- OS deps ---
   apt-get update
@@ -30,30 +30,30 @@ bash -euxo pipefail <<'BASH'
   curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
     | tar -xj -C /tmp/mamba-bin bin/micromamba
 
-  # Create env with NUMPY < 1.25 to satisfy Beam, and versions that play nicely together.
+  # Create env with NumPy < 1.25 (Beam constraint) + scientific stack
   /tmp/mamba-bin/bin/micromamba create -y -p "$ENV_PREFIX" -c conda-forge \
       python=3.10 \
       numpy=1.24.4 \
-      h5py=3.9.* \
+      "h5py=3.9.*" \
       scipy \
       scikit-image \
-      pandas=2.1.* \
-      pyarrow<15 \
+      "pandas=2.1.*" \
+      "pyarrow=14.*" \
       tomopy \
       dxchange \
       astropy \
       olefile
 
-  # Ensure no user-site wheels from the build context leak in
+  # Ensure no user-site wheels leak in
   rm -rf /root/.local
 
   # --- Python deps for PyFlink (pin compatible set) ---
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir --upgrade pip
 
-  # 1) Install Flink Python API without dragging transitive deps
+  # 1) Install Flink Python API (no transitive deps here)
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir "apache-flink==2.0.0" --no-deps
 
-  # 1a) Required Flink Python-side deps
+  # 1a) Required Flink Python-side deps (quoted where comparators exist)
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
       "apache-flink-libraries>=2.0.0,<2.0.1" \
       "avro>=1.12.0" \
@@ -69,10 +69,12 @@ bash -euxo pipefail <<'BASH'
       "proto-plus<2.0.0" \
       "grpcio<1.63"
 
-  # 3) Other essential packages (build helpers)
+  # 3) Build helpers
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
       build pybind11 setuptools wheel flatbuffers
 
+  # Optional: trim caches
+  /tmp/mamba-bin/bin/micromamba clean -y --all || true
 BASH
 
 %environment
@@ -80,9 +82,10 @@ BASH
     export FLINK_HOME=/opt/flink
     export PATH=$FLINK_HOME/bin:/opt/micromamba/envs/aps/bin:$PATH
     export PYTHON=/opt/micromamba/envs/aps/bin/python
+    # Prefer conda libs first; include HDF5 mpich path
     export LD_LIBRARY_PATH=/opt/micromamba/envs/aps/lib:/usr/local/lib:/usr/lib/x86_64-linux-gnu/hdf5/mpich:$LD_LIBRARY_PATH
-    # Prevent user-site packages (~/.local) from shadowing the conda env
+    # Prevent ~/.local from shadowing the conda env
     export PYTHONNOUSERSITE=1
-    # Keep pip from doing implicit --user installs
+    # Keep pip from auto --user installs and noise
     export PIP_DISABLE_PIP_VERSION_CHECK=1
     export PIP_ROOT_USER_ACTION=ignore
