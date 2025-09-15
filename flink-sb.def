@@ -2,12 +2,14 @@ Bootstrap: docker
 From: ubuntu:22.04
 
 %files
-/home/ndhai/diaspora/zip/flink-2.0.0-bin-scala_2.12.tgz /opt/src/flink.tgz
+    /home/ndhai/diaspora/zip/flink-2.0.0-bin-scala_2.12.tgz  /opt/src/flink.tgz
+    /home/ndhai/diaspora/wheels/sirt_ops-0.2.0-cp310-cp310-linux_x86_64.whl  /opt/wheels/sirt_ops.whl
 
 %post
-# Run the whole post section with bash so we can use -o pipefail
+# Run the whole post section with bash -euxo pipefail
 bash -euxo pipefail <<'BASH'
   # --- OS deps ---
+  export DEBIAN_FRONTEND=noninteractive
   apt-get update
   apt-get install -y --no-install-recommends \
       ca-certificates curl bzip2 \
@@ -19,18 +21,18 @@ bash -euxo pipefail <<'BASH'
   rm -rf /var/lib/apt/lists/*
 
   # --- Flink ---
-  mkdir -p /opt && cd /opt
+  mkdir -p /opt
   tar -xzf /opt/src/flink.tgz -C /opt
   ln -s /opt/flink-2.0.0 /opt/flink
 
-  # --- micromamba + conda env for tomopy ---
+  # --- micromamba + env (/opt/micromamba/envs/aps) ---
   MAMBA_ROOT=/opt/micromamba
   ENV_PREFIX=$MAMBA_ROOT/envs/aps
   mkdir -p /tmp/mamba-bin
   curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
     | tar -xj -C /tmp/mamba-bin bin/micromamba
 
-  # Create env with NumPy < 1.25 (Beam constraint) + scientific stack
+  # Create env with ABI-compatible pins
   /tmp/mamba-bin/bin/micromamba create -y -p "$ENV_PREFIX" -c conda-forge \
       python=3.10 \
       numpy=1.24.4 \
@@ -44,16 +46,26 @@ bash -euxo pipefail <<'BASH'
       astropy \
       olefile
 
-  # Ensure no user-site wheels leak in
-  rm -rf /root/.local
+  # Hard disable any user-site interference
+  rm -rf /root/.local || true
+  mkdir -p /etc/profile.d
+  cat >/etc/profile.d/py-no-user-site.sh <<'EOF'
+export PYTHONNOUSERSITE=1
+export PIP_USER=0
+export PIP_DISABLE_PIP_VERSION_CHECK=1
+export PIP_NO_INPUT=1
+export PIP_NO_WARN_SCRIPT_LOCATION=0
+export PIP_NO_CACHE_DIR=1
+EOF
+  chmod 0644 /etc/profile.d/py-no-user-site.sh
 
   # --- Python deps for PyFlink (pin compatible set) ---
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir --upgrade pip
 
-  # 1) Install Flink Python API (no transitive deps here)
+  # 1) Install Flink Python API without pulling its transitive deps
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir "apache-flink==2.0.0" --no-deps
 
-  # 1a) Required Flink Python-side deps (quoted where comparators exist)
+  #   Missing runtime deps that PyFlink expects (add explicitly since we used --no-deps)
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
       "apache-flink-libraries>=2.0.0,<2.0.1" \
       "avro>=1.12.0" \
@@ -61,10 +73,12 @@ bash -euxo pipefail <<'BASH'
       "py4j==0.10.9.7" \
       "ruamel.yaml>=0.18.4"
 
-  # 2) Beam/serialization stack known to work with Flink 2.0
+  # 2) Beam/serialization stack for Flink 2.0 Python operators
+  #    Keep Beam at 2.54.0, but move protobuf to 4.25.x to fix
+  #    cloudpickle -> protobuf upb 'Builder.forceDefaults' runtime crash.
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
       "apache-beam==2.54.0" \
-      "protobuf==3.20.3" \
+      "protobuf==4.25.3" \
       "cloudpickle==2.2.1" \
       "proto-plus<2.0.0" \
       "grpcio<1.63"
@@ -73,8 +87,22 @@ bash -euxo pipefail <<'BASH'
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
       build pybind11 setuptools wheel flatbuffers
 
-  # Optional: trim caches
-  /tmp/mamba-bin/bin/micromamba clean -y --all || true
+  # 4) Your project wheel (pre-baked so no runtime writes needed)
+  "$ENV_PREFIX/bin/pip" install --no-cache-dir --no-deps /opt/wheels/sirt_ops.whl
+
+  # Sanity print (kept short to not spam logs)
+  "$ENV_PREFIX/bin/python" - <<'PY'
+import sys, numpy, h5py, pandas, pyarrow, google.protobuf, apache_beam, cloudpickle
+print("PY", sys.version.split()[0])
+print("NUMPY", numpy.__version__)
+print("H5PY", h5py.__version__)
+print("PANDAS", pandas.__version__)
+print("PYARROW", pyarrow.__version__)
+print("PROTOBUF", google.protobuf.__version__)
+print("BEAM", apache_beam.__version__)
+print("CLOUDPICKLE", cloudpickle.__version__)
+print("SITE", "\n".join(sys.path))
+PY
 BASH
 
 %environment
@@ -82,10 +110,6 @@ BASH
     export FLINK_HOME=/opt/flink
     export PATH=$FLINK_HOME/bin:/opt/micromamba/envs/aps/bin:$PATH
     export PYTHON=/opt/micromamba/envs/aps/bin/python
-    # Prefer conda libs first; include HDF5 mpich path
-    export LD_LIBRARY_PATH=/opt/micromamba/envs/aps/lib:/usr/local/lib:/usr/lib/x86_64-linux-gnu/hdf5/mpich:$LD_LIBRARY_PATH
-    # Prevent ~/.local from shadowing the conda env
     export PYTHONNOUSERSITE=1
-    # Keep pip from auto --user installs and noise
-    export PIP_DISABLE_PIP_VERSION_CHECK=1
-    export PIP_ROOT_USER_ACTION=ignore
+    export PIP_USER=0
+    export LD_LIBRARY_PATH=/usr/local/lib:/usr/lib/x86_64-linux-gnu/hdf5/mpich:$LD_LIBRARY_PATH
