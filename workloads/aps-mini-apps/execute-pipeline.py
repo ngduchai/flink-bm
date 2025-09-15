@@ -8,6 +8,7 @@ from pyflink.common import Types
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
 from pyflink.datastream.functions import SourceFunction, FlatMapFunction, MapFunction, SinkFunction, RuntimeContext
 from pyflink.datastream.state import ListStateDescriptor
+from pyflink.common import Configuration
 
 
 # -------------------------
@@ -415,6 +416,20 @@ def task_key_selector(value):
     # value is [meta, payload]; we key by the task id we set in Dist/Sirt stages
     return int(value[0]["task_id"])
 
+class VersionProbe(MapFunction):
+    def map(self, x):
+        try:
+            import sys, cloudpickle, google.protobuf, apache_beam
+            print("[probe] python=", sys.executable,
+                  " cloudpickle=", cloudpickle.__version__,
+                  " protobuf=", google.protobuf.__version__)
+        except Exception as e:
+            print("[probe] version check failed:", e)
+        return x
+
+
+PY_EXEC = "/opt/micromamba/envs/aps/bin/python"
+
 # -------------------------
 # Main
 # -------------------------
@@ -422,7 +437,11 @@ def main():
     args = parse_arguments()
     logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 
-    env = StreamExecutionEnvironment.get_execution_environment()
+    cfg = Configuration()
+    cfg.set_string("python.client.executable", PY_EXEC)
+    cfg.set_string("python.executable", PY_EXEC)
+
+    env = StreamExecutionEnvironment.get_execution_environment(cfg)
     env.enable_checkpointing(10_000, CheckpointingMode.EXACTLY_ONCE)
 
     _ship_local_modules(env)
@@ -449,7 +468,10 @@ def main():
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("DAQ Emitter")
 
-    dist = daq.flat_map(
+    probe = daq.map(VersionProbe(), output_type=Types.PICKLED_BYTE_ARRAY()).name("Version Probe")
+
+    # dist = daq.flat_map(
+    dist = probe.flat_map(
         DistOperator(args),
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("Data Distributor")
