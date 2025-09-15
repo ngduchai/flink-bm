@@ -8,7 +8,7 @@ CFG_FILE=$2
 INSTANCE_NAME=$3
 img_dir=$HOME/diaspora/src/flink
 
-apptainer instance start --cleanenv --fakeroot \
+apptainer instance start --cleanenv --fakeroot --writable-tmpfs \
         --bind $LOG_DIR:/opt/flink/log \
         --bind $CFG_FILE:/opt/flink/conf/config.yaml \
         --bind $img_dir/workloads:/opt/workloads \
