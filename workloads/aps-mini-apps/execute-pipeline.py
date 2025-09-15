@@ -410,6 +410,11 @@ def _ship_local_modules(env):
         if os.path.exists(p):
             env.add_python_file(p)
 
+# top-level to make cloudpickle's life easier
+def task_key_selector(value):
+    # value is [meta, payload]; we key by the task id we set in Dist/Sirt stages
+    return int(value[0]["task_id"])
+
 # -------------------------
 # Main
 # -------------------------
@@ -450,7 +455,7 @@ def main():
     ).name("Data Distributor")
 
     sirt = dist.key_by(
-        lambda x: x[0]["task_id"]
+        task_key_selector
     ).map(
         SirtOperator(cfg=args),
         output_type=Types.PICKLED_BYTE_ARRAY()

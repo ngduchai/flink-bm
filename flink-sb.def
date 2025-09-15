@@ -36,6 +36,10 @@ bash -euxo pipefail <<'BASH'
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir --upgrade pip
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
       build pybind11 setuptools wheel flatbuffers apache-flink==2.0.0
+
+  # --- Pin Python-side libs to versions compatible with Beam/PyFlink portability ---
+  "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
+      protobuf==3.20.3 cloudpickle==2.2.1
     
 BASH
 
@@ -44,4 +48,4 @@ BASH
     export FLINK_HOME=/opt/flink
     export PATH=$FLINK_HOME/bin:/opt/micromamba/envs/aps/bin:$PATH
     export PYTHON=/opt/micromamba/envs/aps/bin/python
-    export LD_LIBRARY_PATH=/usr/local/lib:/usr/lib/x86_64-linux-gnu/hdf5/serial:$LD_LIBRARY_PATH
+    export LD_LIBRARY_PATH=/usr/local/lib:/usr/lib/x86_64-linux-gnu/hdf5/mpich:$LD_LIBRARY_PATH
