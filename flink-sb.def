@@ -3,16 +3,16 @@ From: ubuntu:22.04
 
 %files
     /home/ndhai/diaspora/zip/flink-2.0.0-bin-scala_2.12.tgz  /opt/src/flink.tgz
-    /home/ndhai/diaspora/wheels/sirt_ops-0.2.0-cp310-cp310-linux_x86_64.whl  /opt/wheels/sirt_ops.whl
 
 %post
-# Run the whole post section with bash -euxo pipefail
 bash -euxo pipefail <<'BASH'
-  # --- OS deps ---
   export DEBIAN_FRONTEND=noninteractive
+
+  # --- OS deps (add toolchain for building wheels) ---
   apt-get update
   apt-get install -y --no-install-recommends \
       ca-certificates curl bzip2 \
+      build-essential git pkg-config \
       openjdk-17-jre-headless \
       mpich libmpich-dev \
       libhdf5-mpich-dev libhdf5-dev zlib1g-dev \
@@ -32,21 +32,15 @@ bash -euxo pipefail <<'BASH'
   curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
     | tar -xj -C /tmp/mamba-bin bin/micromamba
 
-  # Create env with ABI-compatible pins
   /tmp/mamba-bin/bin/micromamba create -y -p "$ENV_PREFIX" -c conda-forge \
       python=3.10 \
       numpy=1.24.4 \
       "h5py=3.9.*" \
-      scipy \
-      scikit-image \
-      "pandas=2.1.*" \
-      "pyarrow=14.*" \
-      tomopy \
-      dxchange \
-      astropy \
-      olefile
+      scipy scikit-image \
+      "pandas=2.1.*" "pyarrow=14.*" \
+      tomopy dxchange astropy olefile
 
-  # Hard disable any user-site interference
+  # Keep user-site out of the way (we install to /tmp/py instead)
   rm -rf /root/.local || true
   mkdir -p /etc/profile.d
   cat >/etc/profile.d/py-no-user-site.sh <<'EOF'
@@ -54,18 +48,15 @@ export PYTHONNOUSERSITE=1
 export PIP_USER=0
 export PIP_DISABLE_PIP_VERSION_CHECK=1
 export PIP_NO_INPUT=1
-export PIP_NO_WARN_SCRIPT_LOCATION=0
 export PIP_NO_CACHE_DIR=1
 EOF
   chmod 0644 /etc/profile.d/py-no-user-site.sh
 
-  # --- Python deps for PyFlink (pin compatible set) ---
+  # --- Python deps for PyFlink/Beam ---
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir --upgrade pip
 
-  # 1) Install Flink Python API without pulling its transitive deps
+  # PyFlink itself (no deps) + its expected deps explicitly
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir "apache-flink==2.0.0" --no-deps
-
-  #   Missing runtime deps that PyFlink expects (add explicitly since we used --no-deps)
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
       "apache-flink-libraries>=2.0.0,<2.0.1" \
       "avro>=1.12.0" \
@@ -73,9 +64,7 @@ EOF
       "py4j==0.10.9.7" \
       "ruamel.yaml>=0.18.4"
 
-  # 2) Beam/serialization stack for Flink 2.0 Python operators
-  #    Keep Beam at 2.54.0, but move protobuf to 4.25.x to fix
-  #    cloudpickle -> protobuf upb 'Builder.forceDefaults' runtime crash.
+  # Beam harness + serialization pins
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
       "apache-beam==2.54.0" \
       "protobuf==4.25.3" \
@@ -83,14 +72,55 @@ EOF
       "proto-plus<2.0.0" \
       "grpcio<1.63"
 
-  # 3) Build helpers
+  # Build helpers for compiling your wheel at runtime
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
       build pybind11 setuptools wheel flatbuffers
 
-  # 4) Your project wheel (pre-baked so no runtime writes needed)
-  "$ENV_PREFIX/bin/pip" install --no-cache-dir --no-deps /opt/wheels/sirt_ops.whl
+  # --- Runtime install helpers (writable target in /tmp/py) ---
+  install -d /usr/local/bin
+  cat >/usr/local/bin/install-wheel-in-tmp <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+WHEEL="${1:-}"
+if [[ -z "${WHEEL}" ]]; then
+  echo "Usage: install-wheel-in-tmp /path/to/some.whl" >&2
+  exit 2
+fi
+TARGET="${PIP_TARGET:-/tmp/py}"
+PY="${PYTHON:-/opt/micromamba/envs/aps/bin/python}"
+mkdir -p "${TARGET}"
+"${PY}" -m pip install --no-deps --no-cache-dir --target "${TARGET}" "${WHEEL}"
+echo "Installed into ${TARGET}"
+EOF
+  chmod +x /usr/local/bin/install-wheel-in-tmp
 
-  # Sanity print (kept short to not spam logs)
+  cat >/usr/local/bin/build-wheel-in-tmp <<'EOF'
+#!/usr/bin/env bash
+# Build from a source tree (default: /work/sirt_ops) and install it into /tmp/py
+set -euo pipefail
+SRC_DIR="${1:-/work/sirt_ops}"
+TARGET="${PIP_TARGET:-/tmp/py}"
+PY="${PYTHON:-/opt/micromamba/envs/aps/bin/python}"
+if [[ ! -d "${SRC_DIR}" ]]; then
+  echo "Source dir not found: ${SRC_DIR}" >&2
+  exit 2
+fi
+mkdir -p /tmp/wheels "${TARGET}"
+# Build wheel
+cd "${SRC_DIR}"
+"${PY}" -m build --wheel --outdir /tmp/wheels
+WHL="$(ls -1 /tmp/wheels/*.whl | head -n1)"
+if [[ -z "${WHL}" ]]; then
+  echo "No wheel produced" >&2
+  exit 3
+fi
+# Install wheel into TARGET without touching site-packages
+"${PY}" -m pip install --no-deps --no-cache-dir --target "${TARGET}" "${WHL}"
+echo "Built and installed ${WHL} into ${TARGET}"
+EOF
+  chmod +x /usr/local/bin/build-wheel-in-tmp
+
+  # Quick sanity (no heavy output)
   "$ENV_PREFIX/bin/python" - <<'PY'
 import sys, numpy, h5py, pandas, pyarrow, google.protobuf, apache_beam, cloudpickle
 print("PY", sys.version.split()[0])
@@ -100,16 +130,24 @@ print("PANDAS", pandas.__version__)
 print("PYARROW", pyarrow.__version__)
 print("PROTOBUF", google.protobuf.__version__)
 print("BEAM", apache_beam.__version__)
-print("CLOUDPICKLE", cloudpickle.__version__)
-print("SITE", "\n".join(sys.path))
 PY
 BASH
 
 %environment
     export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
     export FLINK_HOME=/opt/flink
-    export PATH=$FLINK_HOME/bin:/opt/micromamba/envs/aps/bin:$PATH
+    export PATH=$FLINK_HOME/bin:/opt/micromamba/envs/aps/bin:/usr/local/bin:$PATH
     export PYTHON=/opt/micromamba/envs/aps/bin/python
     export PYTHONNOUSERSITE=1
     export PIP_USER=0
+    # Writable install target for runtime wheels:
+    export PIP_TARGET=/tmp/py
+    export PYTHONPATH=/tmp/py:$PYTHONPATH
     export LD_LIBRARY_PATH=/usr/local/lib:/usr/lib/x86_64-linux-gnu/hdf5/mpich:$LD_LIBRARY_PATH
+
+%runscript
+    echo "Apptainer runtime helpers:"
+    echo "  build-wheel-in-tmp [SRC_DIR=/work/sirt_ops]"
+    echo "  install-wheel-in-tmp /path/to/your.whl"
+    echo ""
+    echo "Anything installed goes to: \$PIP_TARGET (default /tmp/py), already on PYTHONPATH."
