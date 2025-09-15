@@ -30,8 +30,19 @@ bash -euxo pipefail <<'BASH'
   curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
     | tar -xj -C /tmp/mamba-bin bin/micromamba
 
+  # Create env with NumPy 1.26-compatible scientific stack to avoid ABI issues
   /tmp/mamba-bin/bin/micromamba create -y -p "$ENV_PREFIX" -c conda-forge \
-      python=3.10 tomopy dxchange h5py numpy scipy scikit-image astropy olefile
+      python=3.10 \
+      numpy=1.26.* \
+      h5py=3.9.* \
+      tomopy \
+      dxchange \
+      scipy \
+      scikit-image \
+      astropy \
+      olefile \
+      pandas=2.1.* \
+      pyarrow=14.0.*
 
   # --- Python deps for PyFlink (pin compatible set) ---
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir --upgrade pip
@@ -41,21 +52,33 @@ bash -euxo pipefail <<'BASH'
       "apache-flink==2.0.0" --no-deps
 
   # 2) Install a Beam/serialization stack that works with Flink 2.0
-  #    (protobuf 3.20.x is the safest for many Beam runners;
-  #     cloudpickle 2.2.x matches PyFlink’s serializer expectations)
+  #    (protobuf 3.20.x is safest; cloudpickle 2.2.x matches PyFlink serializer)
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
       "apache-beam==2.54.0" \
       "protobuf==3.20.3" \
-      "cloudpickle==2.2.1"
-  
-  "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
-    "proto-plus<2.0.0" \
-    "grpcio<1.63"
+      "cloudpickle==2.2.1" \
+      "proto-plus<2.0.0" \
+      "grpcio<1.63"
+
+  # Guardrail: ensure NumPy stays on 1.x in case any wheel tried to bump it
+  "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir --upgrade "numpy<2"
 
   # 3) Other essential packages
   "$ENV_PREFIX/bin/python" -m pip install --no-cache-dir \
       build pybind11 setuptools wheel flatbuffers
-    
+
+  # (Optional) quick versions print to help debug at build time
+  "$ENV_PREFIX/bin/python" - <<'PY'
+import pkg_resources as pr
+pkgs = ["numpy","pandas","pyarrow","h5py","tomopy","dxchange",
+        "apache-flink","apache-beam","protobuf","cloudpickle","proto-plus","grpcio"]
+for p in pkgs:
+    try:
+        print(f"{p}=={pr.get_distribution(p).version}")
+    except Exception as e:
+        print(f"{p} not installed: {e}")
+PY
+
 BASH
 
 %environment
