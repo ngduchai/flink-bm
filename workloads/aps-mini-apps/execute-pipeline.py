@@ -244,7 +244,7 @@ class DistOperator(FlatMapFunction):
             offset_rows += rows_here
         return msgs
 
-    def flat_map(self, value):
+     def flat_map(self, value):
         metadata, data = value
 
         if metadata["Type"] == "FIN":
@@ -260,20 +260,50 @@ class DistOperator(FlatMapFunction):
 
         read_image = self.serializer.deserialize(serialized_image=data)
 
-        my_image_np = read_image.TdataAsNumpy()
-        if self.args.uint8_to_float32:
-            my_image_np.dtype = np.uint8
-            sub = np.array(my_image_np, dtype="float32")
-        elif self.args.uint16_to_float32:
-            my_image_np.dtype = np.uint16
-            sub = np.array(my_image_np, dtype="float32")
-        elif self.args.cast_to_float32:
-            my_image_np.dtype = np.float32
-            sub = my_image_np
-        else:
-            sub = my_image_np
+        # --- robust dtype/shape handling ---
+        Y = int(read_image.Dims().Y())
+        X = int(read_image.Dims().X())
 
-        sub = sub.reshape((1, read_image.Dims().Y(), read_image.Dims().X()))
+        # TdataAsNumpy() typically yields a uint8 vector of RAW BYTES
+        raw = read_image.TdataAsNumpy()
+        # Ensure it's a contiguous bytes-like object
+        raw_bytes = memoryview(raw).tobytes()
+        pixels = Y * X
+        if pixels <= 0:
+            raise ValueError(f"Invalid dims from TraceSerializer: Y={Y}, X={X}")
+
+        if len(raw_bytes) % pixels != 0:
+            raise ValueError(
+                f"Image byte-length {len(raw_bytes)} not divisible by pixels {pixels} "
+                f"(dims Y={Y}, X={X})."
+            )
+
+        bpp = len(raw_bytes) // pixels  # bytes per pixel
+        if bpp == 1:
+            base_dtype = np.uint8
+        elif bpp == 2:
+            base_dtype = np.uint16
+        elif bpp == 4:
+            base_dtype = np.float32
+        elif bpp == 8:
+            base_dtype = np.float64
+        else:
+            raise ValueError(f"Unsupported bytes-per-pixel={bpp}")
+
+        # Interpret buffer as the right dtype, then reshape
+        img = np.frombuffer(raw_bytes, dtype=base_dtype, count=pixels)
+        img = img.reshape((1, Y, X))
+
+        # Optional casting / preprocessing flags
+        if self.args.uint8_to_float32 and base_dtype == np.uint8:
+            sub = img.astype(np.float32, copy=False)
+        elif self.args.uint16_to_float32 and base_dtype == np.uint16:
+            sub = img.astype(np.float32, copy=False)
+        elif self.args.cast_to_float32:
+            sub = img.astype(np.float32, copy=False)
+        else:
+            sub = img
+        # --- end robust dtype/shape handling ---
 
         if read_image.Itype() is self.serializer.ITypes.Projection:
             rotation = read_image.Rotation()
@@ -316,6 +346,7 @@ class DistOperator(FlatMapFunction):
             self.dark_imgs = []; self.dark_imgs.extend(sub); self.tot_dark_imgs += 1
 
         self.seq += 1
+
 
 # -------------------------
 # Map: SIRT
