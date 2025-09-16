@@ -21,7 +21,7 @@ except ModuleNotFoundError:
 
 from pyflink.common import Types, Configuration
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
-from pyflink.datastream.functions import FlatMapFunction, MapFunction, RuntimeContext
+from pyflink.datastream.functions import FlatMapFunction, MapFunction, RichMapFunction, RuntimeContext
 from pyflink.datastream.state import ListStateDescriptor
 
 # -------------------------
@@ -324,7 +324,7 @@ class DistOperator(FlatMapFunction):
 # -------------------------
 # Map: SIRT
 # -------------------------
-class SirtOperator(MapFunction):
+class SirtOperator(RichMapFunction):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = {
