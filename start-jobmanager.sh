@@ -5,7 +5,7 @@ apptainer instance start --cleanenv --fakeroot --writable-tmpfs \
 	--bind $active_dir/configs/jobmanager-config.yaml:/opt/flink/conf/config.yaml \
 	--bind $active_dir/workloads:/opt/workloads \
 	--bind /soft/xalt/:/soft/xalt/ \
-	--bind /eagle/Diaspora/ndhai/flink/ckpts/ /mnt/ckpts/ \
+	--bind /eagle/Diaspora/ndhai/flink/ckpts/:/mnt/ckpts/ \
 	$img_dir/flink_img flink-jobmanager
 
 apptainer exec --fakeroot --cleanenv \
