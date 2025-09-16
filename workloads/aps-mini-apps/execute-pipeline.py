@@ -23,6 +23,8 @@ from pyflink.common import Types, Configuration
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
 from pyflink.datastream.functions import FlatMapFunction, MapFunction, RuntimeContext
 from pyflink.datastream.state import ListStateDescriptor
+from pyflink.datastream.functions import KeyedProcessFunction
+from pyflink.datastream.state import ValueStateDescriptor   # or ListStateDescriptor if you prefer
 
 # -------------------------
 # Args
@@ -324,7 +326,7 @@ class DistOperator(FlatMapFunction):
 # -------------------------
 # Map: SIRT
 # -------------------------
-class SirtOperator(MapFunction):
+class SirtOperator(KeyedProcessFunction):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = {
@@ -343,7 +345,13 @@ class SirtOperator(MapFunction):
 
     def open(self, ctx: RuntimeContext):
 
-        print("SirtOperator initializing...")
+        print("SirtOperator initializing (keyed)...")
+        import sirt_ops
+        self.engine = sirt_ops.SirtEngine()
+
+        # keyed state is OK here
+        desc = ValueStateDescriptor("sirt_state", Types.PICKLED_BYTE_ARRAY())
+        self.state = ctx.get_state(desc)
 
         import sirt_ops
         self.engine = sirt_ops.SirtEngine()
@@ -371,9 +379,13 @@ class SirtOperator(MapFunction):
         }
         self.engine.setup(tmetadata)
 
-        saved = list(self.state.get())
-        if saved:
-            self.engine.restore(bytes(saved[0]))
+        # saved = list(self.state.get())
+        # if saved:
+        #     self.engine.restore(bytes(saved[0]))
+        print("Restoring from previous run")
+        saved = self.state.value()
+        if saved is not None:
+            self.engine.restore(saved)
 
         print(f"SirtOperator initialized: task_id {task_id}/{num_tasks}, "
               f"sinograms {n_sinograms} starting at {beg_sinogram}, "
@@ -388,6 +400,22 @@ class SirtOperator(MapFunction):
         try:
             out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
             return [dict(out_meta), bytes(out_bytes)]
+        except Exception as e:
+            print("[SirtOperator] EXCEPTION in engine.process:", e, file=sys.stderr)
+            traceback.print_exc()
+            sys.stderr.flush(); sys.stdout.flush()
+            raise
+    
+    def process_element(self, value, ctx):
+        meta_in, payload = value
+        print(f"SirtOperator: Received msg: {meta_in}, size {len(payload)} bytes")
+        if isinstance(meta_in, dict) and meta_in.get("Type") == "FIN":
+            # pass FIN through
+            yield value
+            return
+        try:
+            out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
+            yield [dict(out_meta), bytes(out_bytes)]
         except Exception as e:
             print("[SirtOperator] EXCEPTION in engine.process:", e, file=sys.stderr)
             traceback.print_exc()
