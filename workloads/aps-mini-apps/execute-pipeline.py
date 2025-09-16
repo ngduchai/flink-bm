@@ -253,8 +253,6 @@ class DistOperator(FlatMapFunction):
             return
         if not self.running:
             return
-        
-        print(f"DistOperator: Received msg: {metadata}, size {len(data)} bytes")
 
         sequence_id = metadata["sequence_id"]
         self.total_received += 1
@@ -274,6 +272,8 @@ class DistOperator(FlatMapFunction):
             sub = my_image_np
         else:
             sub = my_image_np
+
+        print(f"DistOperator: Received msg: {metadata}, size {sub.size()} bytes")
 
         sub = sub.reshape((1, read_image.Dims().Y(), read_image.Dims().X()))
 
