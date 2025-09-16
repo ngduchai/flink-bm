@@ -247,8 +247,10 @@ class DistOperator(FlatMapFunction):
     def flat_map(self, value):
         metadata, data = value
 
-        if metadata["Type"] == "FIN":
-            yield value
+         # Broadcast FIN to all SIRT ranks and include task_id so key_by works
+        if metadata.get("Type") == "FIN":
+            for rank in range(int(self.args.ntask_sirt)):
+                yield [{"Type": "FIN", "task_id": rank}, b""]
             self.running = False
             return
         if not self.running:
@@ -462,8 +464,10 @@ def _ship_local_modules(env):
 
 # top-level key selector
 def task_key_selector(value):
-    print(f"Key selector received: {value[0]}")
-    return int(value[0]["task_id"])
+    md = value[0] if isinstance(value, (list, tuple)) and value else {}
+    tid = md.get("task_id", 0)  # default 0 for FIN or unexpected msgs
+    print(f"Key selector received meta: {md}")
+    return int(tid)
 
 class VersionProbe(MapFunction):
     def map(self, x):
@@ -522,7 +526,8 @@ def main():
     ).name("Data Distributor")
 
     sirt = dist.key_by(
-        task_key_selector
+        task_key_selector,
+        key_type_info=Types.INT()
     ).map(
         SirtOperator(cfg=args),
         output_type=Types.PICKLED_BYTE_ARRAY()
