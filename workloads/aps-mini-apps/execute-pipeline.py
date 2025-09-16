@@ -12,7 +12,13 @@ if os.path.isdir(COMMON_DIR):
 if os.path.isfile(TRACE_SERIALIZER_PATH):
     sys.path.append(BASE_DIR)
 
-import TraceSerializer
+try:
+    # when shipped as a zip: import from the 'common' package
+    from common import TraceSerializer  # preferred
+except ModuleNotFoundError:
+    # when the file lives next to this script (dev/local runs)
+    import TraceSerializer
+
 from pyflink.common import Types, Configuration
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
 from pyflink.datastream.functions import FlatMapFunction, MapFunction, RuntimeContext
