@@ -254,7 +254,7 @@ class DistOperator(FlatMapFunction):
         if not self.running:
             return
         
-        print(f"DistOperator: Received msg index {metadata['index']}, size {len(data)} bytes")
+        print(f"DistOperator: Received msg: {metadata}, size {len(data)} bytes")
 
         sequence_id = metadata["sequence_id"]
         self.total_received += 1
