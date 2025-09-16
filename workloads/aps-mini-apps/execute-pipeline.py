@@ -371,7 +371,7 @@ class SirtOperator(KeyedProcessFunction):
             tmetadata = {
                 "task_id": task_id,
                 "n_sinograms": n_sinograms,
-                "n_rays_per_project_row": int(self.cfg["num_sinogram_columns"]),
+                "n_rays_per_proj_row": int(self.cfg["num_sinogram_columns"]),
                 "beg_sinogram": beg_sinogram,
                 "tn_sinograms": total_sinograms,
                 "window_step": int(self.cfg["window_step"]),
