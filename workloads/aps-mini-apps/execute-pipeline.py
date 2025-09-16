@@ -259,7 +259,7 @@ class DistOperator(FlatMapFunction):
         if not self.running:
             return
         
-        print(f"DistOperator: Received msg: {metadata}, size {len(data)} bytes")
+        # print(f"DistOperator: Received msg: {metadata}, size {len(data)} bytes")
 
         sequence_id = metadata["sequence_id"]
         self.total_received += 1
@@ -310,7 +310,7 @@ class DistOperator(FlatMapFunction):
                                              self.args.ntask_sirt, center, sequence_id)
             for i in range(self.args.ntask_sirt):
                 md = msgs[i][0]
-                print(f"Task {i}: seq_id {md['seq_n']} proj_id {md['projection_id']}, theta: {md['theta']} center: {md['center']}")
+                # print(f"Task {i}: seq_id {md['seq_n']} proj_id {md['projection_id']}, theta: {md['theta']} center: {md['center']}")
                 yield msgs[i]
 
         if read_image.Itype() is self.serializer.ITypes.White:
@@ -387,9 +387,9 @@ class SirtOperator(KeyedProcessFunction):
         try:
             snap_desc = ValueStateDescriptor("sirt_engine_snapshot_v1",
                                              Types.PRIMITIVE_ARRAY(Types.BYTE()))
-            self.snap_state = ctx.get_value_state(snap_desc)
+            self.snap_state = ctx.get_state(snap_desc)
             count_desc = ValueStateDescriptor("processed_count_v1", Types.LONG())
-            self.count_state = ctx.get_value_state(count_desc)
+            self.count_state = ctx.get_state(count_desc)
         except Exception as e:
             print("[SirtOperator.open] state init failed:", e, file=sys.stderr)
             traceback.print_exc()
@@ -535,7 +535,7 @@ def _ship_local_modules(env):
 def task_key_selector(value):
     md = value[0] if isinstance(value, (list, tuple)) and value else {}
     tid = md.get("task_id", 0)  # default 0 for FIN or unexpected msgs
-    print(f"Key selector received meta: {md}")
+    # print(f"Key selector received meta: {md}")
     return int(tid)
 
 class VersionProbe(MapFunction):
