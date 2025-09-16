@@ -543,7 +543,10 @@ def main():
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("Data Distributor").set_parallelism(1)
 
-    probe = dist.map(
+    probe = dist.key_by(
+        task_key_selector,
+        key_type=Types.INT()
+    ).map(
         PrintProbe(),
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("Probe after keyBy").disable_chaining()
@@ -560,7 +563,7 @@ def main():
     # ).map(
     #     SirtOperator(cfg=args),
     #     output_type=Types.PICKLED_BYTE_ARRAY()
-    # ).name("SIRT Operator").set_parallelism(args.ntask_sirt)
+    # ).name("SIRT Operator").set_parallelism(max(1, args.ntask_sirt))
 
     den = sirt.flat_map(
         DenoiserOperator(args),
