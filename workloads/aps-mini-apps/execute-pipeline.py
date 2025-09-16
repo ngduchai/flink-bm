@@ -585,27 +585,27 @@ def main():
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("Data Distributor").set_parallelism(1)
 
-    probe = dist.key_by(
-        task_key_selector,
-        key_type=Types.INT()
-    ).map(
-        PrintProbe(),
-        output_type=Types.PICKLED_BYTE_ARRAY()
-    ).name("Probe after keyBy").disable_chaining()
-
-    # then feed SIRT from probe instead of directly from keyed
-    sirt = probe.map(
-        SirtOperator(cfg=args),
-        output_type=Types.PICKLED_BYTE_ARRAY()
-    ).name("SIRT Operator").set_parallelism(max(1, args.ntask_sirt)).disable_chaining()
-
-    # sirt = dist.key_by(
+    # probe = dist.key_by(
     #     task_key_selector,
     #     key_type=Types.INT()
     # ).map(
+    #     PrintProbe(),
+    #     output_type=Types.PICKLED_BYTE_ARRAY()
+    # ).name("Probe after keyBy").disable_chaining()
+
+    # # then feed SIRT from probe instead of directly from keyed
+    # sirt = probe.map(
     #     SirtOperator(cfg=args),
     #     output_type=Types.PICKLED_BYTE_ARRAY()
-    # ).name("SIRT Operator").set_parallelism(max(1, args.ntask_sirt))
+    # ).name("SIRT Operator").set_parallelism(max(1, args.ntask_sirt)).disable_chaining()
+
+    sirt = dist.key_by(
+        task_key_selector,
+        key_type=Types.INT()
+    ).process(
+        SirtOperator(cfg=args),
+        output_type=Types.PICKLED_BYTE_ARRAY()
+    ).name("SIRT Operator").set_parallelism(args.ntask_sirt)
 
     den = sirt.flat_map(
         DenoiserOperator(args),
