@@ -527,7 +527,7 @@ def main():
 
     sirt = dist.key_by(
         task_key_selector,
-        key_type_info=Types.INT()
+        key_type=Types.INT()
     ).map(
         SirtOperator(cfg=args),
         output_type=Types.PICKLED_BYTE_ARRAY()
