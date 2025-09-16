@@ -581,10 +581,10 @@ def main():
     cfg.set_integer("python.fn-execution.bundle.time", 0)     # don't wait on time
     cfg.set_integer("python.fn-execution.arrow.batch.size", 1)  # smallest Arrow batch
 
-    cfg.set_string("state.backend", "embedded_rocksdb")
+    cfg.set_string("state.backend", "rocksdb")
     cfg.set_string("state.checkpoint-storage", "filesystem")
-    cfg.set_string("state.checkpoints.dir", "file:///tmp/flink/ckpts")
-    cfg.set_string("state.savepoints.dir", "file:///tmp/flink/savepoints")
+    cfg.set_string("state.checkpoints.dir", "file:///mnt/ckpts/")
+    cfg.set_string("state.savepoints.dir", "file:///mnt/ckpts/")
 
     env = StreamExecutionEnvironment.get_execution_environment(cfg)
     env.enable_checkpointing(10_000, CheckpointingMode.EXACTLY_ONCE)

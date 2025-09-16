@@ -2,7 +2,10 @@ Bootstrap: docker
 From: ubuntu:22.04
 
 %files
+    # Replace these with path to Flink tar ball and RocksDB for checkpointing
     /home/ndhai/diaspora/zip/flink-2.0.0-bin-scala_2.12.tgz  /opt/src/flink.tgz
+    /home/ndhai/diaspora/zip/flink-statebackend-rocksdb-2.0.0.jar /opt/src/flink-statebackend-rocksdb-2.0.0.jar
+    /home/ndhai/diaspora/zip/rocksdbjni-8.11.4.jar /opt/src/rocksdbjni-8.11.4.jar
 
 %post
 bash -euxo pipefail <<'BASH'
@@ -24,6 +27,8 @@ bash -euxo pipefail <<'BASH'
   mkdir -p /opt
   tar -xzf /opt/src/flink.tgz -C /opt
   ln -s /opt/flink-2.0.0 /opt/flink
+  mv /opt/src/*.jar /opt/flink/lib
+  rm /opt/src/*
 
   # --- micromamba + env (/opt/micromamba/envs/aps) ---
   MAMBA_ROOT=/opt/micromamba

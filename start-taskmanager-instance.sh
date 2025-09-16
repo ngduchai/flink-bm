@@ -13,6 +13,7 @@ apptainer instance start --cleanenv --fakeroot --writable-tmpfs \
         --bind $CFG_FILE:/opt/flink/conf/config.yaml \
         --bind $img_dir/workloads:/opt/workloads \
         --bind /soft/xalt/:/soft/xalt/ \
+        --bind /eagle/Diaspora/ndhai/flink/ckpts/ /mnt/ckpts/ \
         $img_dir/flink_img flink-taskmanager-$INSTANCE_NAME
 
 apptainer exec \
