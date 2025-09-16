@@ -372,6 +372,7 @@ class SirtOperator(MapFunction):
 
     def map(self, value):
         meta_in, payload = value
+        print(f"SirtOperator: Received msg: {meta_in}, size {len(payload)} bytes")
         if isinstance(meta_in, dict) and meta_in.get("Type") == "FIN":
             return value
         out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
@@ -410,6 +411,8 @@ class DenoiserOperator(FlatMapFunction):
             self.waiting_data[iteration_stream] = {}
         self.waiting_metadata[iteration_stream][rank] = meta
         self.waiting_data[iteration_stream][rank] = dd
+
+        print(f"DenoiserOperator: Received msg: {meta}, size {len(data)} bytes; waiting for {len(self.waiting_metadata[iteration_stream])}/{nproc_sirt} ranks")
 
         if len(self.waiting_metadata[iteration_stream]) == nproc_sirt:
             sorted_ranks = sorted(self.waiting_metadata[iteration_stream].keys())
@@ -510,9 +513,9 @@ def main():
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("DAQ Emitter")
 
-    probe = daq.map(VersionProbe(), output_type=Types.PICKLED_BYTE_ARRAY()).name("Version Probe")
-
-    dist = probe.flat_map(
+    # probe = daq.map(VersionProbe(), output_type=Types.PICKLED_BYTE_ARRAY()).name("Version Probe")
+    # dist = probe.flat_map(
+    dist = daq.flat_map(
         DistOperator(args),
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("Data Distributor")
