@@ -21,7 +21,7 @@ except ModuleNotFoundError:
 
 from pyflink.common import Types, Configuration
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
-from pyflink.datastream.functions import FlatMapFunction, MapFunction, RichMapFunction, RuntimeContext
+from pyflink.datastream.functions import FlatMapFunction, MapFunction, RuntimeContext
 from pyflink.datastream.state import ListStateDescriptor
 
 # -------------------------
@@ -324,7 +324,7 @@ class DistOperator(FlatMapFunction):
 # -------------------------
 # Map: SIRT
 # -------------------------
-class SirtOperator(RichMapFunction):
+class SirtOperator(MapFunction):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = {
@@ -491,6 +491,17 @@ class VersionProbe(MapFunction):
             print("[probe] version check failed:", e)
         return x
 
+class PrintProbe(MapFunction):
+    def open(self, ctx: RuntimeContext):
+        print(f"[PrintProbe] open subtask={ctx.get_index_of_this_subtask()} / "
+              f"{ctx.get_number_of_parallel_subtasks()}")
+
+    def map(self, value):
+        meta, payload = value
+        print(f"[PrintProbe] got Type={meta.get('Type')} task={meta.get('task_id')} "
+              f"seq={meta.get('seq_n')} bytes={len(payload)}")
+        return value
+
 PY_EXEC = "/opt/micromamba/envs/aps/bin/python"
 
 def main():
@@ -532,13 +543,24 @@ def main():
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("Data Distributor").set_parallelism(1)
 
-    sirt = dist.key_by(
-        task_key_selector,
-        key_type=Types.INT()
-    ).map(
+    probe = dist.map(
+        PrintProbe(),
+        output_type=Types.PICKLED_BYTE_ARRAY()
+    ).name("Probe after keyBy").disable_chaining()
+
+    # then feed SIRT from probe instead of directly from keyed
+    sirt = probe.map(
         SirtOperator(cfg=args),
         output_type=Types.PICKLED_BYTE_ARRAY()
-    ).name("SIRT Operator").set_parallelism(args.ntask_sirt)
+    ).name("SIRT Operator").set_parallelism(max(1, args.ntask_sirt)).disable_chaining()
+
+    # sirt = dist.key_by(
+    #     task_key_selector,
+    #     key_type=Types.INT()
+    # ).map(
+    #     SirtOperator(cfg=args),
+    #     output_type=Types.PICKLED_BYTE_ARRAY()
+    # ).name("SIRT Operator").set_parallelism(args.ntask_sirt)
 
     den = sirt.flat_map(
         DenoiserOperator(args),
