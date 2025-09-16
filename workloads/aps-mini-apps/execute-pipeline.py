@@ -523,14 +523,14 @@ def main():
             save_after_serialize=False
         ),
         output_type=Types.PICKLED_BYTE_ARRAY()
-    ).name("DAQ Emitter")
+    ).name("DAQ Emitter").set_parallelism(1)
 
     # probe = daq.map(VersionProbe(), output_type=Types.PICKLED_BYTE_ARRAY()).name("Version Probe")
     # dist = probe.flat_map(
     dist = daq.flat_map(
         DistOperator(args),
         output_type=Types.PICKLED_BYTE_ARRAY()
-    ).name("Data Distributor")
+    ).name("Data Distributor").set_parallelism(1)
 
     sirt = dist.key_by(
         task_key_selector,
