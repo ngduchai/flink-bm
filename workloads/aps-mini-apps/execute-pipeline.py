@@ -382,10 +382,17 @@ class SirtOperator(MapFunction):
     def map(self, value):
         meta_in, payload = value
         print(f"SirtOperator: Received msg: {meta_in}, size {len(payload)} bytes")
+        # Early exit for FIN
         if isinstance(meta_in, dict) and meta_in.get("Type") == "FIN":
             return value
-        out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
-        return [dict(out_meta), bytes(out_bytes)]
+        try:
+            out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
+            return [dict(out_meta), bytes(out_bytes)]
+        except Exception as e:
+            print("[SirtOperator] EXCEPTION in engine.process:", e, file=sys.stderr)
+            traceback.print_exc()
+            sys.stderr.flush(); sys.stdout.flush()
+            raise
 
 # -------------------------
 # Sink: Denoiser (yield-style)
@@ -508,9 +515,16 @@ def main():
     args = parse_arguments()
     logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 
+    os.environ.setdefault("PYTHONFAULTHANDLER", "1")
+    os.environ.setdefault("OMP_NUM_THREADS", "1")  # reduce native threading surprises
+
     cfg = Configuration()
     cfg.set_string("python.client.executable", PY_EXEC)
     cfg.set_string("python.executable", PY_EXEC)
+
+    cfg.set_integer("python.fn-execution.bundle.size", 1)     # flush every record
+    cfg.set_integer("python.fn-execution.bundle.time", 0)     # don't wait on time
+    cfg.set_integer("python.fn-execution.arrow.batch.size", 1)  # smallest Arrow batch
 
     env = StreamExecutionEnvironment.get_execution_environment(cfg)
     env.enable_checkpointing(10_000, CheckpointingMode.EXACTLY_ONCE)
