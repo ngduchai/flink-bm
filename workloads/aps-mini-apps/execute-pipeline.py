@@ -23,8 +23,9 @@ from pyflink.common import Types, Configuration
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
 from pyflink.datastream.functions import FlatMapFunction, MapFunction, RuntimeContext
 from pyflink.datastream.state import ListStateDescriptor
-from pyflink.datastream.functions import KeyedProcessFunction
+from pyflink.datastream.functions import KeyedProcessFunction, CheckpointedFunction
 from pyflink.datastream.state import ValueStateDescriptor   # or ListStateDescriptor if you prefer
+
 
 # -------------------------
 # Args
@@ -326,7 +327,7 @@ class DistOperator(FlatMapFunction):
 # -------------------------
 # Map: SIRT
 # -------------------------
-class SirtOperator(KeyedProcessFunction):
+class SirtOperator(MapFunction, CheckpointedFunction):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = {
@@ -341,7 +342,34 @@ class SirtOperator(KeyedProcessFunction):
             "num_sinograms": cfg.num_sinograms,
         }
         self.engine = None
-        self.state = None
+        self._op_state = None          # operator ListState that stores one bytes blob
+        self._restored_blob = None     # temp holder to restore in open()
+
+    # ---------- CheckpointedFunction: called when state is (re)initialized ----------
+    def initialize_state(self, context):
+        # IMPORTANT: use a new, unique name that you never use for keyed state
+        desc = ListStateDescriptor(
+            "sirt_engine_op_bytes_v1",
+            Types.PRIMITIVE_ARRAY(Types.BYTE())   # store raw bytes
+            # If you prefer Python pickled bytes, you can use Types.PICKLED_BYTE_ARRAY()
+        )
+        self._op_state = context.get_operator_state_store().get_list_state(desc)
+
+        # If we are recovering, read the previously stored snapshot bytes
+        restored = list(self._op_state.get())
+        if restored:
+            # We store a single element -> the latest snapshot bytes
+            self._restored_blob = bytes(restored[0])
+
+    # ---------- CheckpointedFunction: called on every checkpoint ----------
+    def snapshot_state(self, context):
+        # Ask the C++ engine for a bytes snapshot and store it as operator state
+        if self.engine is not None:
+            snap = self.engine.snapshot()  # must return 'bytes' or bytearray
+            # keep only one element to avoid unbounded growth
+            self._op_state.clear()
+            # make sure it is bytes-like; bytearray(...) is fine too
+            self._op_state.add(bytearray(snap))
 
     def open(self, ctx: RuntimeContext):
 
@@ -383,9 +411,9 @@ class SirtOperator(KeyedProcessFunction):
         # if saved:
         #     self.engine.restore(bytes(saved[0]))
         print("Restoring from previous run")
-        saved = self.state.value()
-        if saved is not None:
-            self.engine.restore(saved)
+        if self._restored_blob:
+            self.engine.restore(self._restored_blob)
+            print("SirtOperator: restored engine from checkpoint")
 
         print(f"SirtOperator initialized: task_id {task_id}/{num_tasks}, "
               f"sinograms {n_sinograms} starting at {beg_sinogram}, "
@@ -406,21 +434,21 @@ class SirtOperator(KeyedProcessFunction):
             sys.stderr.flush(); sys.stdout.flush()
             raise
     
-    def process_element(self, value, ctx):
-        meta_in, payload = value
-        print(f"SirtOperator: Received msg: {meta_in}, size {len(payload)} bytes")
-        if isinstance(meta_in, dict) and meta_in.get("Type") == "FIN":
-            # pass FIN through
-            yield value
-            return
-        try:
-            out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
-            yield [dict(out_meta), bytes(out_bytes)]
-        except Exception as e:
-            print("[SirtOperator] EXCEPTION in engine.process:", e, file=sys.stderr)
-            traceback.print_exc()
-            sys.stderr.flush(); sys.stdout.flush()
-            raise
+    # def process_element(self, value, ctx):
+    #     meta_in, payload = value
+    #     print(f"SirtOperator: Received msg: {meta_in}, size {len(payload)} bytes")
+    #     if isinstance(meta_in, dict) and meta_in.get("Type") == "FIN":
+    #         # pass FIN through
+    #         yield value
+    #         return
+    #     try:
+    #         out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
+    #         yield [dict(out_meta), bytes(out_bytes)]
+    #     except Exception as e:
+    #         print("[SirtOperator] EXCEPTION in engine.process:", e, file=sys.stderr)
+    #         traceback.print_exc()
+    #         sys.stderr.flush(); sys.stdout.flush()
+    #         raise
 
 # -------------------------
 # Sink: Denoiser (yield-style)
@@ -554,6 +582,14 @@ def main():
     cfg.set_integer("python.fn-execution.bundle.time", 0)     # don't wait on time
     cfg.set_integer("python.fn-execution.arrow.batch.size", 1)  # smallest Arrow batch
 
+    cfg.set_string("state.checkpoints.dir", "file:///tmp/flink/ckpts")   # or hdfs://...
+    cfg.set_string("execution.checkpointing.mode", "EXACTLY_ONCE")
+    cfg.set_string("execution.checkpointing.interval", "10000")          # ms
+    cfg.set_string("execution.checkpointing.timeout", "5 min")
+    cfg.set_string("restart-strategy", "fixed-delay")
+    cfg.set_string("restart-strategy.fixed-delay.attempts", "10")
+    cfg.set_string("restart-strategy.fixed-delay.delay", "10 s")
+
     env = StreamExecutionEnvironment.get_execution_environment(cfg)
     env.enable_checkpointing(10_000, CheckpointingMode.EXACTLY_ONCE)
 
@@ -599,10 +635,17 @@ def main():
     #     output_type=Types.PICKLED_BYTE_ARRAY()
     # ).name("SIRT Operator").set_parallelism(max(1, args.ntask_sirt)).disable_chaining()
 
+    # sirt = dist.key_by(
+    #     task_key_selector,
+    #     key_type=Types.INT()
+    # ).process(
+    #     SirtOperator(cfg=args),
+    #     output_type=Types.PICKLED_BYTE_ARRAY()
+    # ).name("SIRT Operator").set_parallelism(args.ntask_sirt)
     sirt = dist.key_by(
         task_key_selector,
         key_type=Types.INT()
-    ).process(
+    ).map(
         SirtOperator(cfg=args),
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("SIRT Operator").set_parallelism(args.ntask_sirt)
