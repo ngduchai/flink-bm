@@ -342,10 +342,11 @@ class SirtOperator(MapFunction):
         self.state = None
 
     def open(self, ctx: RuntimeContext):
-        import sirt_ops
-        self.engine = sirt_ops.SirtEngine()
 
         print("SirtOperator initializing...")
+
+        import sirt_ops
+        self.engine = sirt_ops.SirtEngine()
 
         desc = ListStateDescriptor("sirt_state", Types.PRIMITIVE_ARRAY(Types.BYTE()))
         self.state = ctx.get_list_state(desc)
