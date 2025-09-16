@@ -462,7 +462,7 @@ def _ship_local_modules(env):
 
 # top-level key selector
 def task_key_selector(value):
-    print(f"Key selector received: {value}")
+    print(f"Key selector received: {value[0]}")
     return int(value[0]["task_id"])
 
 class VersionProbe(MapFunction):
