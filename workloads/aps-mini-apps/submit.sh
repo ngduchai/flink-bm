@@ -46,16 +46,32 @@ with open(cfg_path, 'r') as f:
 
 CONT_BASE = "/opt/workloads/aps-mini-apps"
 
+def is_empty(x):
+    # treat None / "" / [] / {} as empty (skip)
+    return x is None or x == "" or x == [] or x == {}
+
 args = []
 for k, v in d.items():
     key = f"--{k}"  # underscores preserved
+
+    # normalize simulation_file path inside container if relative
     if k == "simulation_file" and isinstance(v, str) and not os.path.isabs(v):
         v = os.path.normpath(os.path.join(CONT_BASE, v.lstrip("./")))
+
+    # boolean-as-flag behavior
     if isinstance(v, bool):
-        v = "1" if v else "0"
-    else:
-        v = str(v)
-    args.extend([key, v])
+        if v:
+            args.append(key)     # include flag only if true
+        else:
+            continue             # omit entirely if false
+        continue
+
+    # skip empties
+    if is_empty(v):
+        continue
+
+    # everything else is --key value
+    args.extend([key, str(v)])
 
 print(" ".join(shlex.quote(x) for x in args))
 PY
