@@ -13,5 +13,5 @@
     "window_iter" : 1,
     "thread_count" : 4,
     "center" : 1427,
-    "cast_to_float32" : true
+    "uint8_to_float32" : true
 }
