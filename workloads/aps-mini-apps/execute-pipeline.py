@@ -345,6 +345,8 @@ class SirtOperator(MapFunction):
         import sirt_ops
         self.engine = sirt_ops.SirtEngine()
 
+        print("SirtOperator initializing...")
+
         desc = ListStateDescriptor("sirt_state", Types.PRIMITIVE_ARRAY(Types.BYTE()))
         self.state = ctx.get_list_state(desc)
 
@@ -371,6 +373,10 @@ class SirtOperator(MapFunction):
         saved = list(self.state.get())
         if saved:
             self.engine.restore(bytes(saved[0]))
+
+        print(f"SirtOperator initialized: task_id {task_id}/{num_tasks}, "
+              f"sinograms {n_sinograms} starting at {beg_sinogram}, "
+              f"thread_count {self.cfg['thread_count']}")
 
     def map(self, value):
         meta_in, payload = value
