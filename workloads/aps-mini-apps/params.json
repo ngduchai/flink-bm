@@ -5,7 +5,7 @@
     "iteration_sleep" : 1,
     "proj_sleep" : 0.1,
     "beg_sinogram" : 1000,
-    "num_sinograms" : 1,
+    "num_sinograms" : 2,
     "num_sinogram_columns" : 2560,
     "write_freq" : 4,
     "window_length" : 4,
