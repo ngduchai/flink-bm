@@ -1,16 +1,22 @@
-import sys, os, glob, argparse, logging, math, time
+import sys, os, glob, argparse, logging, math, time, tempfile, zipfile, shutil
 import numpy as np, h5py, dxchange, tomopy as tp
 
-# Make sure local modules are findable when launched by Flink
-sys.path.append(os.path.join(os.path.dirname(__file__), 'common'))
-sys.path.append(os.path.join(os.path.dirname(__file__), 'common', 'local'))
+# Only add 'common' (we'll ship a filtered zip via env.add_python_file)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+COMMON_DIR = os.path.join(BASE_DIR, "common")
+TRACE_SERIALIZER_PATH = os.path.join(BASE_DIR, "TraceSerializer.py")
+
+# Do NOT append common/local to sys.path (it contains a vendored 'flatbuffers' we must avoid)
+if os.path.isdir(COMMON_DIR):
+    sys.path.append(COMMON_DIR)
+if os.path.isfile(TRACE_SERIALIZER_PATH):
+    sys.path.append(BASE_DIR)
 
 import TraceSerializer
 from pyflink.common import Types, Configuration
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
 from pyflink.datastream.functions import FlatMapFunction, MapFunction, RuntimeContext
 from pyflink.datastream.state import ListStateDescriptor
-
 
 # -------------------------
 # Args
@@ -48,7 +54,6 @@ def parse_arguments():
     p.add_argument('--center', type=float, default=0.0)
     return p.parse_args()
 
-
 # -------------------------
 # IO helpers
 # -------------------------
@@ -74,7 +79,6 @@ def setup_simulation_data(input_f, beg_sinogram=0, num_sinograms=0):
     print(f"Projection dataset IO time={time.time()-t0:.2f}; "
           f"dataset shape={idata.shape}; size={idata.size}; Theta shape={itheta.shape};")
     return idata, flat, dark, itheta
-
 
 def serialize_dataset(idata, flat, dark, itheta, seq=0):
     data, start_index, time_ser = [], 0, 0.0
@@ -111,14 +115,12 @@ def serialize_dataset(idata, flat, dark, itheta, seq=0):
     print(f"Serialization time={time_ser:.2f}")
     return np.array(data, dtype=object)
 
-
 def ordered_subset(max_ind, nelem):
     nsubsets = int(np.ceil(max_ind / nelem))
     all_arr = np.array([], dtype=int)
     for i in np.arange(nsubsets):
         all_arr = np.append(all_arr, np.arange(start=i, stop=max_ind, step=nsubsets))
     return all_arr.astype(int)
-
 
 # -------------------------
 # DAQ emitter (yield-style flatMap)
@@ -176,7 +178,6 @@ class DaqEmitter(FlatMapFunction):
         nproj = self.d_iteration * len(serialized_data)
         print(f"Sent projections: {nproj}; Size (MiB): {tot_MiBs:.2f}; Elapsed (s): {elapsed:.2f}")
         print(f"Rate (MiB/s): {tot_MiBs / elapsed:.2f}; (msg/s): {nproj / elapsed:.2f}")
-
 
 # -------------------------
 # FlatMap distributor (yield-style)
@@ -310,7 +311,6 @@ class DistOperator(FlatMapFunction):
 
         self.seq += 1
 
-
 # -------------------------
 # Map: SIRT
 # -------------------------
@@ -369,7 +369,6 @@ class SirtOperator(MapFunction):
         out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
         return [dict(out_meta), bytes(out_bytes)]
 
-
 # -------------------------
 # Sink: Denoiser (yield-style)
 # -------------------------
@@ -414,22 +413,45 @@ class DenoiserOperator(FlatMapFunction):
             del self.waiting_data[iteration_stream]
             yield ("DENOISED", str(iteration_stream))
 
-
+# -------------------------
+# Ship local modules, excluding vendored flatbuffers
+# -------------------------
 def _ship_local_modules(env):
-    base = os.path.dirname(os.path.abspath(__file__))
-    to_ship = [
-        os.path.join(base, "common"),
-        os.path.join(base, "common", "local"),
-        os.path.join(base, "TraceSerializer.py"),
-    ]
-    for p in to_ship:
-        if os.path.exists(p):
-            env.add_python_file(p)
+    """
+    Add TraceSerializer.py and a filtered zip of 'common' that EXCLUDES:
+      - common/local/flatbuffers/**  (so pip 'flatbuffers' is used)
+    """
+    # 1) Ship TraceSerializer.py (if present)
+    if os.path.isfile(TRACE_SERIALIZER_PATH):
+        env.add_python_file(TRACE_SERIALIZER_PATH)
 
+    # 2) Ship a filtered zip of 'common'
+    if os.path.isdir(COMMON_DIR):
+        tmpdir = tempfile.mkdtemp(prefix="pyship_")
+        zip_path = os.path.join(tmpdir, "common_filtered.zip")
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for root, dirs, files in os.walk(COMMON_DIR):
+                # Skip the vendored flatbuffers tree
+                rel_root = os.path.relpath(root, COMMON_DIR).replace("\\", "/")
+                if rel_root.startswith(os.path.join("local", "flatbuffers").replace("\\", "/")):
+                    continue
+                if rel_root == "local/flatbuffers":
+                    continue
+                # Also skip any path containing /local/flatbuffers/ deeper down
+                if "/local/flatbuffers/" in (rel_root + "/"):
+                    continue
+                for f in files:
+                    abs_f = os.path.join(root, f)
+                    rel_f = os.path.relpath(abs_f, COMMON_DIR).replace("\\", "/")
+                    # Final guard against stray entries
+                    if rel_f.startswith("local/flatbuffers/") or "/local/flatbuffers/" in rel_f:
+                        continue
+                    zf.write(abs_f, arcname=os.path.join("common", rel_f))
+        env.add_python_file(zip_path)
 
+# top-level key selector
 def task_key_selector(value):
     return int(value[0]["task_id"])
-
 
 class VersionProbe(MapFunction):
     def map(self, x):
@@ -446,9 +468,7 @@ class VersionProbe(MapFunction):
             print("[probe] version check failed:", e)
         return x
 
-
 PY_EXEC = "/opt/micromamba/envs/aps/bin/python"
-
 
 def main():
     args = parse_arguments()
@@ -504,7 +524,6 @@ def main():
     den.print().name("Denoiser Sink").set_parallelism(1)
 
     env.execute("APS Mini-Apps Pipeline")
-
 
 if __name__ == '__main__':
     main()
