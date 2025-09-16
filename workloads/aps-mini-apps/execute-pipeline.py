@@ -244,7 +244,7 @@ class DistOperator(FlatMapFunction):
             offset_rows += rows_here
         return msgs
 
-     def flat_map(self, value):
+    def flat_map(self, value):
         metadata, data = value
 
         if metadata["Type"] == "FIN":
