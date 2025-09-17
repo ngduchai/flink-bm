@@ -191,7 +191,7 @@ ProcessResult SirtEngine::process(
     // MPI_Barrier(MPI_COMM_WORLD);
     
     std::string outputpath = iteration_stream.str() + "-recon.h5";
-    saveAsHDF5(outputpath.c_str(), 
+    saveAsHDF5("/root/" + outputpath.c_str(), 
         &recon[recon_slice_data_index], app_dims);
 
   }
