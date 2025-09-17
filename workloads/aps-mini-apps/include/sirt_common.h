@@ -14,7 +14,7 @@ static const int64_t require_int(
       const char* k) {
   auto it = m.find(k);
   if (it == m.end())
-      throw std::runtime_error(std::string("load config/metadata: missing key '") + k + "'");
+      throw std::runtime_error(std::string("load int config/metadata: missing key '") + k + "'");
   return it->second;
 }
 
@@ -27,7 +27,7 @@ static const std::string& require_str(
       const char* k) {
   auto it = m.find(k);
   if (it == m.end())
-      throw std::runtime_error(std::string("load config/metadata: missing key '") + k + "'");
+      throw std::runtime_error(std::string("load str config/metadata: missing key '") + k + "'");
   return it->second;
 }
 

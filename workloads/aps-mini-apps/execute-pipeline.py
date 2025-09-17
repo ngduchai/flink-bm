@@ -479,7 +479,7 @@ class DenoiserOperator(FlatMapFunction):
         meta, data = value
         print(f"DenOperator: Received msg: {meta}, size {len(data)} bytes")
         if len(data) == 0:
-            print("Receive empty message, skipping")
+            print("DenOperator: Receive empty message, skipping")
             return
 
         if meta.get("Type") == "FIN":
