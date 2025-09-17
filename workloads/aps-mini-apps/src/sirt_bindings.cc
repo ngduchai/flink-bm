@@ -5,30 +5,54 @@
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
+#include <vector>
+#include <cstdlib>   // std::strtoull, std::strtoll
 
 namespace py = pybind11;
 
-static std::pair<const float*, std::size_t>
-as_ro_float_buffer(py::object obj, py::buffer_info& info) {
-    py::buffer buf = py::reinterpret_borrow<py::buffer>(obj);
-    info = buf.request(false);
+// Normalizes any bytes/bytearray/memoryview/ndarray(float32, C) to an aligned float vector.
+static std::vector<float> to_float_vector(py::object obj) {
+    // Fast path: numpy array of float32, C contiguous
+    if (py::isinstance<py::array>(obj)) {
+        py::array arr = py::cast<py::array>(obj);
+        // forcecast will convert e.g. float64 -> float32; c_style ensures contiguous
+        auto a = arr.cast<py::array_t<float, py::array::c_style | py::array::forcecast>>();
+        auto* p = a.data();
+        const auto n = static_cast<std::size_t>(a.size());
+        return std::vector<float>(p, p + n);
+    }
 
-    const void* ptr = info.ptr;
-    if (!ptr) throw std::runtime_error("Null buffer pointer.");
+    // Generic buffer (bytes/bytearray/memoryview)
+    py::buffer buf = py::reinterpret_borrow<py::buffer>(obj);
+    py::buffer_info info = buf.request(false);
+    if (!info.ptr) throw std::runtime_error("Null buffer pointer.");
 
     const std::size_t itemsize = static_cast<std::size_t>(info.itemsize);
     const std::size_t nitems   = static_cast<std::size_t>(info.size);
 
-    if (itemsize == sizeof(float)) {
-        return { static_cast<const float*>(ptr), nitems };
-    }
     if (itemsize == 1) {
-        const std::size_t nbytes = nitems;
-        if (nbytes % sizeof(float) != 0)
+        // Raw bytes: length must be multiple of 4
+        if (nitems % sizeof(float) != 0)
             throw std::runtime_error("Byte payload length is not a multiple of 4 (float32).");
-        return { reinterpret_cast<const float*>(ptr), nbytes / sizeof(float) };
+        const auto nfloat = nitems / sizeof(float);
+        std::vector<float> out(nfloat);
+        std::memcpy(out.data(), info.ptr, nitems);
+        return out;
     }
-    throw std::runtime_error("Unsupported payload: expected bytes/bytearray or float32 array.");
+    if (itemsize == sizeof(float)) {
+        const auto* p = static_cast<const float*>(info.ptr);
+        return std::vector<float>(p, p + nitems);
+    }
+    throw std::runtime_error("Unsupported payload: expected bytes/bytearray/memoryview or float32 ndarray.");
+}
+
+static std::size_t expect_len_from_meta(const std::unordered_map<std::string, std::string>& meta) {
+    auto it_cols = meta.find("n_rays_per_proj_row");
+    auto it_rows = meta.find("n_sinograms_rank");
+    if (it_cols == meta.end() || it_rows == meta.end()) return 0; // can’t validate
+    const std::size_t cols = std::strtoull(it_cols->second.c_str(), nullptr, 10);
+    const std::size_t rows = std::strtoull(it_rows->second.c_str(), nullptr, 10);
+    return cols * rows;
 }
 
 PYBIND11_MODULE(sirt_ops, m) {
@@ -42,24 +66,24 @@ PYBIND11_MODULE(sirt_ops, m) {
                const std::unordered_map<std::string, std::string>& meta_in,
                py::object payload) {
                 py::buffer_info info;
-                // your robust as_ro_float_buffer(payload, info) here:
-                auto [ptr, n] = as_ro_float_buffer(payload, info);
-        
-                if (!ptr || n == 0) {
-                    throw std::runtime_error("process(): empty payload");
-                }
 
                 try {
-                    py::buffer_info info;
-                    auto [ptr, n] = as_ro_float_buffer(payload, info);
-                    if (!ptr || n == 0) {
-                        throw std::runtime_error("process(): empty payload");
+                    // Normalize input to an aligned, owned vector
+                    auto data = to_float_vector(payload);
+                    if (data.empty()) throw std::runtime_error("process(): empty payload");
+
+                    // Shape sanity-check (catches most “misinterpretation” issues)
+                    if (const auto expect = expect_len_from_meta(meta_in); expect && expect != data.size()) {
+                        throw std::runtime_error(
+                            "process(): payload length mismatch: got " + std::to_string(data.size()) +
+                            " floats, expected " + std::to_string(expect) +
+                            " (= n_sinograms_rank * n_rays_per_proj_row).");
                     }
             
                     ProcessResult r;
                     {   // release GIL only while calling into C++
                         py::gil_scoped_release nogil;
-                        r = self.process(cfg, meta_in, ptr, n);
+                        r = self.process(cfg, meta_in, data.data(), data.size());
                     }
             
                     // GIL is re-acquired here (nogil dtor ran)
