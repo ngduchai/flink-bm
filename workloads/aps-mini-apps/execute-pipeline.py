@@ -331,15 +331,15 @@ class SirtOperator(KeyedProcessFunction):
     def __init__(self, cfg, every_n: int = 1000):
         super().__init__()
         self.cfg = {
-            "thread_count": cfg.thread_count,
-            "window_step": cfg.window_step,
-            "beg_sinogram": cfg.beg_sinogram,
-            "center": cfg.center,
-            "write_freq": cfg.write_freq,
-            "window_iter": cfg.window_iter,
-            "window_length": cfg.window_length,
-            "num_sinogram_columns": cfg.num_sinogram_columns,
-            "num_sinograms": cfg.num_sinograms,
+            "thread_count": int(cfg.thread_count),
+            "window_step": int(cfg.window_step),
+            "beg_sinogram": int(cfg.beg_sinogram),
+            "center": int(cfg.center),
+            "write_freq": int(cfg.write_freq),
+            "window_iter": int(cfg.window_iter),
+            "window_length": int(cfg.window_length),
+            "num_sinogram_columns": int(cfg.num_sinogram_columns),
+            "num_sinograms": int(cfg.num_sinograms),
         }
         self.every_n = int(every_n)
         self.engine = None
