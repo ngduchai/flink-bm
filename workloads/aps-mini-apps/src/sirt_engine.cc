@@ -16,6 +16,8 @@
 #include <csignal>
 #include "sirt_common.h"
 
+#include "hdf5.h"
+
 #include <boost/serialization/export.hpp>
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
@@ -24,6 +26,20 @@
 using DISPEngineReductionSIRT = DISPEngineReduction<SIRTReconSpace, float>;
 using DISPEngineBaseSIRT = DISPEngineBase<SIRTReconSpace, float>;
 using AReductionSpaceBaseSIRT = AReductionSpaceBase<SIRTReconSpace, float>;
+
+int saveAsHDF5(const char* fname, float* recon, hsize_t* output_dims) {
+  hid_t output_file_id = H5Fcreate(fname, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+  if (output_file_id < 0) {
+      return 1;
+  }
+  hid_t output_dataspace_id = H5Screate_simple(3, output_dims, NULL);
+  hid_t output_dataset_id = H5Dcreate(output_file_id, "/data", H5T_NATIVE_FLOAT, output_dataspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+  H5Dwrite(output_dataset_id, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, recon);
+  H5Dclose(output_dataset_id);
+  H5Sclose(output_dataspace_id);
+  H5Fclose(output_file_id);
+  return 0;
+}
 
 void SirtEngine::setup(const std::unordered_map<std::string, int64_t>& tmetadata) {
 
@@ -173,6 +189,11 @@ ProcessResult SirtEngine::process(
         &recon[recon_slice_data_index] +  data_size);
     result.meta = md;
     // MPI_Barrier(MPI_COMM_WORLD);
+    
+    std::string outputpath = iteration_stream.str() + "-recon.h5";
+    saveAsHDF5(outputpath.c_str(), 
+        &recon[recon_slice_data_index], app_dims);
+
   }
 
   //delete curr_slices->metadata(); //TODO Check for memory leak
