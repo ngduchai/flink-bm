@@ -346,6 +346,7 @@ class SirtOperator(KeyedProcessFunction):
         self.snap_state = None
         self.count_state = None
         self.processed_local = 0
+        self._restored = False
 
     def open(self, ctx: RuntimeContext):
         print("SirtOperator initializing (keyed)...")
@@ -385,8 +386,9 @@ class SirtOperator(KeyedProcessFunction):
 
         # --- managed state ---
         try:
-            snap_desc = ValueStateDescriptor("sirt_engine_snapshot_v1",
-                                             Types.PRIMITIVE_ARRAY(Types.BYTE()))
+            snap_desc = ValueStateDescriptor(
+                "sirt_engine_snapshot_v1", Types.PICKLED_BYTE_ARRAY()
+            )
             self.snap_state = ctx.get_state(snap_desc)
             count_desc = ValueStateDescriptor("processed_count_v1", Types.LONG())
             self.count_state = ctx.get_state(count_desc)
@@ -395,29 +397,36 @@ class SirtOperator(KeyedProcessFunction):
             traceback.print_exc()
             raise
 
-        # --- restore if present ---
-        try:
-            raw = self.snap_state.value()
-            if raw:
-                self.engine.restore(bytes(raw))
-                print(f"[SirtOperator.open] restored {len(raw)} bytes from state")
-            self.processed_local = self.count_state.value() or 0
-        except Exception as e:
-            print("[SirtOperator.open] engine.restore failed:", e, file=sys.stderr)
-            traceback.print_exc()
-            raise
-
         print(f"SirtOperator initialized: every_n={self.every_n}, "
-              f"restored_count={self.processed_local}, "
+              f"restored_count=deferred, "
               f"thread_count={self.cfg['thread_count']}")
     
+    def _maybe_restore(self):
+        """Run exactly once per subtask, after a ProcessBundle is active."""
+        if self._restored:
+            return
+        try:
+            raw = self.snap_state.value()   # safe now (inside bundle)
+            if raw:
+                raw_bytes = raw if isinstance(raw, (bytes, bytearray)) else bytes(raw)
+                self.engine.restore(raw_bytes)
+                print(f"[SirtOperator] restored {len(raw_bytes)} bytes from state")
+            cnt = self.count_state.value()
+            self.processed_local = int(cnt) if cnt is not None else 0
+        except Exception as e:
+            print("[SirtOperator] restore step failed:", e, file=sys.stderr)
+            traceback.print_exc()
+            raise
+        self._restored = True
+
     def _do_snapshot(self):
         """Snapshot engine & persist to Flink state. Crash if it fails so Flink restores."""
         try:
             snap = self.engine.snapshot()
-            self.snap_state.update(snap)
+            snap_bytes = snap if isinstance(snap, (bytes, bytearray)) else bytes(snap)
+            self.snap_state.update(snap_bytes)
             self.count_state.update(self.processed_local)
-            print(f"[SirtOperator] snapshot at {self.processed_local} tuples ({len(snap)} bytes)")
+            print(f"[SirtOperator] snapshot at {self.processed_local} tuples ({len(snap_bytes)} bytes)")
         except Exception as e:
             print("[SirtOperator] engine.snapshot failed:", e, file=sys.stderr)
             traceback.print_exc()
@@ -425,6 +434,7 @@ class SirtOperator(KeyedProcessFunction):
 
     def process_element(self, value, ctx):
         meta_in, payload = value
+        self._maybe_restore()
         print(f"SirtOperator: Received msg: {meta_in}, size {len(payload)} bytes")
 
         # FIN: persist one final snapshot then pass through
