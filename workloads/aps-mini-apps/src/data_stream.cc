@@ -16,7 +16,7 @@
 void DataStream::addTomoMsg(DataStreamEvent event){
   pending_events.push_back(event);
   // vmeta.push_back(event.metadata); /// Setup metadata
-  vcenters.push_back(std::stof(require_str(event.metadata, "center")));
+  vcenters.push_back(event.center);
   vtheta.push_back(event.theta);
   // spdlog::info("Received data {}", metadata.string());
 
