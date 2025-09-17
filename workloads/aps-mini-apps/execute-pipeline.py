@@ -357,7 +357,7 @@ class SirtOperator(KeyedProcessFunction):
         except Exception as e:
             print("[SirtOperator.open] failed to import/create engine:", e, file=sys.stderr)
             traceback.print_exc()
-            raise
+            return
 
         # --- partitioning / setup ---
         try:
@@ -382,7 +382,7 @@ class SirtOperator(KeyedProcessFunction):
         except Exception as e:
             print("[SirtOperator.open] engine.setup failed:", e, file=sys.stderr)
             traceback.print_exc()
-            raise
+            return
 
         # --- managed state ---
         try:
@@ -395,7 +395,7 @@ class SirtOperator(KeyedProcessFunction):
         except Exception as e:
             print("[SirtOperator.open] state init failed:", e, file=sys.stderr)
             traceback.print_exc()
-            raise
+            return
 
         print(f"SirtOperator initialized: every_n={self.every_n}, "
               f"restored_count=deferred, "
@@ -416,7 +416,7 @@ class SirtOperator(KeyedProcessFunction):
         except Exception as e:
             print("[SirtOperator] restore step failed:", e, file=sys.stderr)
             traceback.print_exc()
-            raise
+            # return
         self._restored = True
 
     def _do_snapshot(self):
@@ -430,7 +430,7 @@ class SirtOperator(KeyedProcessFunction):
         except Exception as e:
             print("[SirtOperator] engine.snapshot failed:", e, file=sys.stderr)
             traceback.print_exc()
-            raise
+            return
 
     def process_element(self, value, ctx):
         meta_in, payload = value
@@ -449,7 +449,7 @@ class SirtOperator(KeyedProcessFunction):
         except Exception as e:
             print("[SirtOperator] engine.process failed. meta=", meta_in, file=sys.stderr)
             traceback.print_exc()
-            raise
+            return
 
         self.processed_local += 1
 
