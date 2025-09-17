@@ -475,6 +475,8 @@ class DenoiserOperator(FlatMapFunction):
 
     def flat_map(self, value):
         meta, data = value
+        print(f"DenOperator: Received msg: {meta}, size {len(data)} bytes")
+
         if meta.get("Type") == "FIN":
             self.running = False
             yield ("FIN", None)
@@ -483,7 +485,7 @@ class DenoiserOperator(FlatMapFunction):
             return
         nproc_sirt = self.args.ntask_sirt
         recon_path = self.args.logdir
-        rank_dims = (meta["rank_dims_0"], meta["rank_dims_1"], meta["rank_dims_2"])
+        rank_dims = (int(meta["rank_dims_0"]), int(meta["rank_dims_1"]), int(meta["rank_dims_2"]))
         dd = np.frombuffer(data, dtype=np.float32).reshape(rank_dims)
         iteration_stream = meta["iteration_stream"]
         rank = meta["rank"]
