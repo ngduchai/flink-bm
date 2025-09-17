@@ -457,7 +457,9 @@ class SirtOperator(KeyedProcessFunction):
         if self.processed_local % self.every_n == 0:
             self._do_snapshot()
 
-        yield [dict(out_meta), bytes(out_bytes)]
+        if len(out_bytes):
+            print(f"SirtOperator: Emitting msg: {meta_in}, size {len(payload)} bytes")
+            yield [dict(out_meta), bytes(out_bytes)]
 
 # -------------------------
 # Sink: Denoiser (yield-style)
@@ -496,7 +498,7 @@ class DenoiserOperator(FlatMapFunction):
         self.waiting_metadata[iteration_stream][rank] = meta
         self.waiting_data[iteration_stream][rank] = dd
 
-        print(f"DenoiserOperator: Received msg: {meta}, size {len(data)} bytes; waiting for {len(self.waiting_metadata[iteration_stream])}/{nproc_sirt} ranks")
+        # print(f"DenoiserOperator: Received msg: {meta}, size {len(data)} bytes; waiting for {len(self.waiting_metadata[iteration_stream])}/{nproc_sirt} ranks")
 
         if len(self.waiting_metadata[iteration_stream]) == nproc_sirt:
             sorted_ranks = sorted(self.waiting_metadata[iteration_stream].keys())
