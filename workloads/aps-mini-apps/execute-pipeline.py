@@ -222,11 +222,11 @@ class DistOperator(FlatMapFunction):
                              center: float, data: np.ndarray) -> list:
         meta = {
             "Type": "MSG_DATA_REP",
-            "task_id": task_id,
-            "seq_n": seq,
-            "projection_id": projection_id,
-            "theta": float(theta),
-            "center": float(center),
+            "task_id": str(task_id),
+            "seq_n": str(seq),
+            "projection_id": str(projection_id),
+            "theta": str(float(theta)),
+            "center": str(float(center)),
             "dtype": str(data.dtype),
         }
         data_bytes = data.astype(np.float32, copy=False).tobytes()
@@ -253,7 +253,7 @@ class DistOperator(FlatMapFunction):
          # Broadcast FIN to all SIRT ranks and include task_id so key_by works
         if metadata.get("Type") == "FIN":
             for rank in range(int(self.args.ntask_sirt)):
-                yield [{"Type": "FIN", "task_id": rank}, b""]
+                yield [{"Type": "FIN", "task_id": str(rank)}, b""]
             self.running = False
             return
         if not self.running:
