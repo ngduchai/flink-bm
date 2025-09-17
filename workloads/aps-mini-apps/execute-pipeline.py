@@ -599,6 +599,10 @@ def main():
     cfg.set_integer("python.fn-execution.bundle.time", 0)     # don't wait on time
     cfg.set_integer("python.fn-execution.arrow.batch.size", 1)  # smallest Arrow batch
 
+    cfg.set_boolean("python.fn-execution.debug.logging", True)
+    os.environ.setdefault("PYTHONUNBUFFERED", "1")
+
+
     cfg.set_string("state.backend", "rocksdb")
     cfg.set_string("state.checkpoint-storage", "filesystem")
     cfg.set_string("state.checkpoints.dir", "file:///mnt/ckpts/")
