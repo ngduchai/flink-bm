@@ -409,7 +409,7 @@ class SirtOperator(KeyedProcessFunction):
             raw = self.snap_state.value()   # safe now (inside bundle)
             if raw:
                 raw_bytes = raw if isinstance(raw, (bytes, bytearray)) else bytes(raw)
-                self.engine.restore(raw_bytes)
+                # self.engine.restore(raw_bytes)
                 print(f"[SirtOperator] restored {len(raw_bytes)} bytes from state")
             cnt = self.count_state.value()
             self.processed_local = int(cnt) if cnt is not None else 0
@@ -422,7 +422,7 @@ class SirtOperator(KeyedProcessFunction):
     def _do_snapshot(self):
         """Snapshot engine & persist to Flink state. Crash if it fails so Flink restores."""
         try:
-            snap = self.engine.snapshot()
+            snap = bytes() # self.engine.snapshot()
             snap_bytes = snap if isinstance(snap, (bytes, bytearray)) else bytes(snap)
             self.snap_state.update(snap_bytes)
             self.count_state.update(self.processed_local)
