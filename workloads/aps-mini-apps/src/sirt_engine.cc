@@ -197,10 +197,9 @@ ProcessResult SirtEngine::process(
     std::string outputpath = iteration_stream.str() + "-recon.h5";
     saveAsHDF5(outputpath.c_str(), 
         &recon[recon_slice_data_index], app_dims);
-
-    passes++;
-
   }
+
+  passes++;
 
   //delete curr_slices->metadata(); //TODO Check for memory leak
   delete curr_slices;
