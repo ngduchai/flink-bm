@@ -448,7 +448,9 @@ class SirtOperator(KeyedProcessFunction):
         # main processing
         try:
             print(f"SirtOperator: Process: {meta_in}, first data float: {payload[0]}")
-            out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
+            import sirt_ops
+            with sirt_ops.ostream_redirect():  # RAII context from pybind11
+                out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
         except Exception as e:
             print("[SirtOperator] engine.process failed. meta=", meta_in, file=sys.stderr)
             traceback.print_exc()
