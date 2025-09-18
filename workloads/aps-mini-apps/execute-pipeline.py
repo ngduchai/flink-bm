@@ -379,6 +379,7 @@ class SirtOperator(KeyedProcessFunction):
                 "tn_sinograms": total_sinograms,
                 "window_step": int(self.cfg["window_step"]),
                 "thread_count": int(self.cfg["thread_count"]),
+                "window_length": int(self.cfg["window_length"])
             }
             self.engine.setup(tmetadata)
         except Exception as e:

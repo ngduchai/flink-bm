@@ -50,6 +50,7 @@ void SirtEngine::setup(const std::unordered_map<std::string, int64_t>& tmetadata
   ds.n_rays_per_proj_row= require_int(tmetadata, "n_rays_per_proj_row");
   ds.beg_sinograms      = require_int(tmetadata, "beg_sinogram");
   ds.tn_sinograms       = require_int(tmetadata, "tn_sinograms");
+  ds.window_len         = require_int(tmetadata, "window_length");
 
   const int64_t n_blocks = ds.n_sinograms;
   const int64_t num_cols = ds.n_rays_per_proj_row;
