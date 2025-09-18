@@ -115,7 +115,7 @@ DataRegionBase<float, TraceMetadata>* DataStream::readSlidingWindow(
   std::cout << "[Task-" << getRank() << "]: seq_id: " << sequence_id << " projection_id: " << proj_id << " theta: " << theta << " center: " << center << ", progress = " << progress << std::endl;
   pending_events.push_back(DataStreamEvent(metadata, sequence_id, proj_id, theta, center, data, data_size));
 
-  std::cout << "[Task-" << getRank() << "]: Queue len: pending_events: " << pending_events.size() << " vtheta: " << vtheta.size() << std::endl;
+  // std::cout << "[Task-" << getRank() << "]: Queue len: pending_events: " << pending_events.size() << " vtheta: " << vtheta.size() << std::endl;
 
   if (pending_events.size() < step) {
     return nullptr; // Not collecting enough messages to process
@@ -131,12 +131,12 @@ DataRegionBase<float, TraceMetadata>* DataStream::readSlidingWindow(
       if(vtheta.size()>0) eraseBegTraceMsg();
       else break;
     }
-    std::cout << "End of messages, but there might be data in window:" << vtheta.size() << std::endl;
+    // std::cout << "End of messages, but there might be data in window:" << vtheta.size() << std::endl;
     if(vtheta.size()==0) return nullptr;
   }
   /// New message(s) arrived, there is space in window
   else if(pending_events.size()>0 && vtheta.size()<window_len){
-    std::cout << "New message(s) arrived, there is space in window: " << window_len - vtheta.size() << std::endl;
+    // std::cout << "New message(s) arrived, there is space in window: " << window_len - vtheta.size() << std::endl;
     for(auto msg : pending_events){
       addTomoMsg(msg);
       ++counter;
@@ -145,7 +145,7 @@ DataRegionBase<float, TraceMetadata>* DataStream::readSlidingWindow(
   }
   /// New message arrived, there is no space in window
   else if(pending_events.size()>0 && vtheta.size()>=window_len){
-    std::cout << "New message arrived, there is no space in window: " << vtheta.size() << std::endl;
+    // std::cout << "New message arrived, there is no space in window: " << vtheta.size() << std::endl;
     for(int i=0; i<step; ++i) {
       if(vtheta.size()>0) eraseBegTraceMsg();
       else break;

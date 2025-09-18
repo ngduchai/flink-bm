@@ -102,17 +102,17 @@ ProcessResult SirtEngine::process(
   int window_iter = require_int(config, "window_iter");
   int write_freq = require_int(config, "write_freq");
 
-  std::cout << "[Task-" << task_id << "] passes = " << passes << " -- Processing window with " 
-            << (curr_slices ? curr_slices->metadata().num_projs() : 0) 
-            << " projections, center=" << center 
-            << ", window_iter=" << window_iter 
-            << ", write_freq=" << write_freq 
-            << ", data len=" << len
-            << std::endl;
-  if (data && len > 0) {
-    auto p = reinterpret_cast<const unsigned char*>(data);
-    std::cout << "First float value: " << data[0] << " First value: " << static_cast<unsigned>(p[0]) << std::endl;
-  }
+  // std::cout << "[Task-" << task_id << "] passes = " << passes << " -- Processing window with " 
+  //           << (curr_slices ? curr_slices->metadata().num_projs() : 0) 
+  //           << " projections, center=" << center 
+  //           << ", window_iter=" << window_iter 
+  //           << ", write_freq=" << write_freq 
+  //           << ", data len=" << len
+  //           << std::endl;
+  // if (data && len > 0) {
+  //   auto p = reinterpret_cast<const unsigned char*>(data);
+  //   std::cout << "First float value: " << data[0] << " First value: " << static_cast<unsigned>(p[0]) << std::endl;
+  // }
 
 
   if(center !=0 && curr_slices!=nullptr)
@@ -146,12 +146,10 @@ ProcessResult SirtEngine::process(
     curr_slices->ResetMirroredRegionIter();
     // std::cout << "[Task-" << task_id << "] ---- Complete resetting mirrored region iter ---- " << std::endl;
   }
-
-  passes++;
   /* Emit reconstructed data */
   if(!(passes%write_freq)){
 
-    std::cout << "[Task-" << task_id << "] passes = " << passes-1 << " -- Emitting reconstructed image" << std::endl;
+    std::cout << "[Task-" << task_id << "] passes = " << passes << " -- Emitting reconstructed image" << std::endl;
 
     std::stringstream iteration_stream;
     iteration_stream << std::setfill('0') << std::setw(6) << passes;
@@ -199,6 +197,8 @@ ProcessResult SirtEngine::process(
     std::string outputpath = iteration_stream.str() + "-recon.h5";
     saveAsHDF5(outputpath.c_str(), 
         &recon[recon_slice_data_index], app_dims);
+
+    passes++;
 
   }
 
