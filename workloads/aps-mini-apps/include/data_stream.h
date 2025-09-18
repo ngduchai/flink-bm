@@ -22,7 +22,6 @@ class DataStreamEvent {
     double center;
     const float* data; // Pointer to the data segment
     std::size_t data_size;
-    uint32_t window_len;
 
     DataStreamEvent(std::unordered_map<std::string, std::string> metadata,
       int seq_id, int proj_id, double th, double cen, const float* dat, std::size_t size)
@@ -72,6 +71,7 @@ class DataStream
     int64_t n_rays_per_proj_row = 0;
     int64_t beg_sinograms = 0;
     int64_t tn_sinograms = 0;
+    uint32_t window_len = 0;
 
     DataStream(uint32_t window_len, int rank, int progress=0);
 
