@@ -109,7 +109,7 @@ ProcessResult SirtEngine::process(
             << ", data len=" << len
             << std::endl;
   if (len > 0) {
-    std::cout << "First float value: " << data[0] << std::endl;
+    std::cout << "First float value: " << ((const uint8_t*)data)[0] << std::endl;
   }
 
 
