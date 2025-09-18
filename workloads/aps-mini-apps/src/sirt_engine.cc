@@ -106,7 +106,11 @@ ProcessResult SirtEngine::process(
             << " projections, center=" << center 
             << ", window_iter=" << window_iter 
             << ", write_freq=" << write_freq 
+            << ", data len=" << len
             << std::endl;
+  if (len > 0) {
+    std::cout << "First float value: " << data[0] << std::endl;
+  }
 
 
   if(center !=0 && curr_slices!=nullptr)
