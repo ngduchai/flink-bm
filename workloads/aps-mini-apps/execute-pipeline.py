@@ -175,6 +175,7 @@ class DaqEmitter(FlatMapFunction):
             for index in indices:
                 time.sleep(self.proj_sleep)
                 md = {"index": int(index), "Type": "DATA", "sequence_id": seq}
+                print(f"DenOperator: Sent: {md}, first data float: {serialized_data[index][0]}")
                 yield [md, serialized_data[index]]
                 tot_transfer_size += len(serialized_data[index])
                 seq += 1
@@ -311,6 +312,7 @@ class DistOperator(FlatMapFunction):
             for i in range(self.args.ntask_sirt):
                 md = msgs[i][0]
                 # print(f"Task {i}: seq_id {md['seq_n']} proj_id {md['projection_id']}, theta: {md['theta']} center: {md['center']}")
+                print(f"DistOperator: Sent: {md}, first data float: {msgs[i][1][0]}")
                 yield msgs[i]
 
         if read_image.Itype() is self.serializer.ITypes.White:
@@ -445,6 +447,7 @@ class SirtOperator(KeyedProcessFunction):
 
         # main processing
         try:
+            print(f"SirtOperator: Process: {meta_in}, first data float: {payload[0]}")
             out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
         except Exception as e:
             print("[SirtOperator] engine.process failed. meta=", meta_in, file=sys.stderr)
@@ -458,7 +461,8 @@ class SirtOperator(KeyedProcessFunction):
             self._do_snapshot()
 
         if len(out_bytes):
-            print(f"SirtOperator: Emitting msg: {meta_in}, size {len(payload)} bytes")
+            # print(f"SirtOperator: Emitting msg: {meta_in}, size {len(out_bytes)} bytes")
+            print(f"SirtOperator: Sent: {meta_in}, first data float: {out_bytes[0]}")
             yield [dict(out_meta), bytes(out_bytes)]
 
 # -------------------------
@@ -477,7 +481,8 @@ class DenoiserOperator(FlatMapFunction):
 
     def flat_map(self, value):
         meta, data = value
-        print(f"DenOperator: Received msg: {meta}, size {len(data)} bytes")
+        # print(f"DenOperator: Received msg: {meta}, size {len(data)} bytes")
+        print(f"DenOperator: Sent: {meta}, first data float: {data[0]}")
         if len(data) == 0:
             print("DenOperator: Receive empty message, skipping")
             return
