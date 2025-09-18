@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <vector>
 #include <cstdlib>   // std::strtoull, std::strtoll
+#include <pybind11/iostream.h>
 
 namespace py = pybind11;
 
@@ -56,6 +57,9 @@ static std::size_t expect_len_from_meta(const std::unordered_map<std::string, st
 }
 
 PYBIND11_MODULE(sirt_ops, m) {
+
+    py::add_ostream_redirect(m, "ostream_redirect");
+
     py::class_<SirtEngine>(m, "SirtEngine")
         .def(py::init<>())                         // <-- only default ctor
         .def("setup", &SirtEngine::setup)          // expose setup so you can init later
@@ -66,6 +70,9 @@ PYBIND11_MODULE(sirt_ops, m) {
                const std::unordered_map<std::string, std::string>& meta_in,
                py::object payload) {
                 py::buffer_info info;
+
+                py::scoped_ostream_redirect out(std::cout, py::module_::import("sys").attr("stdout"));
+                py::scoped_ostream_redirect err(std::cerr, py::module_::import("sys").attr("stderr"));
 
                 try {
                     // Normalize input to an aligned, owned vector
