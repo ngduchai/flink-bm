@@ -115,6 +115,8 @@ DataRegionBase<float, TraceMetadata>* DataStream::readSlidingWindow(
   std::cout << "[Task-" << getRank() << "]: seq_id: " << sequence_id << " projection_id: " << proj_id << " theta: " << theta << " center: " << center << ", progress = " << progress << std::endl;
   pending_events.push_back(DataStreamEvent(metadata, sequence_id, proj_id, theta, center, data, data_size));
 
+  std::cout << "[Task-" << getRank() << "]: Queue len: pending_events: " << pending_events.size() << " vtheta: " << vtheta.size() << std::endl;
+
   if (pending_events.size() < step) {
     return nullptr; // Not collecting enough messages to process
   }
