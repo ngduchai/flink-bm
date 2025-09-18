@@ -21,11 +21,12 @@ class DataStreamEvent {
     double theta;
     double center;
     const float* data; // Pointer to the data segment
+    std::size_t data_size;
 
     DataStreamEvent(std::unordered_map<std::string, std::string> metadata,
-      int seq_id, int proj_id, double th, double cen, const float* dat)
+      int seq_id, int proj_id, double th, double cen, const float* dat, std::size_t size)
       : metadata(metadata), sequence_id(seq_id), projection_id(proj_id),
-      theta(th), center(cen), data(dat) {}
+      theta(th), center(cen), data(dat), data_size(size) {}
 };
 
 class DataStream
@@ -85,7 +86,8 @@ class DataStream
     */
     DataRegionBase<float, TraceMetadata>* readSlidingWindow(
       DataRegionBareBase<float> &recon_image, int step,
-      const std::unordered_map<std::string, std::string>& metadata, const float *data);
+      const std::unordered_map<std::string, std::string>& metadata,
+      const float *data, std::size_t data_size);
 
     int getRank();
 

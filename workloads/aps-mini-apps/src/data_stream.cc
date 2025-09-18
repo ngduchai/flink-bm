@@ -21,6 +21,8 @@ void DataStream::addTomoMsg(DataStreamEvent event){
   // spdlog::info("Received data {}", metadata.string());
 
   size_t n_rays_per_proj = n_sinograms * n_rays_per_proj_row;
+  assert(n_rays_per_proj == event.data_size && "Data size does not match n_rays_per_projection");
+
   vproj.insert(vproj.end(), event.data, event.data + n_rays_per_proj);
 }
 
@@ -91,7 +93,8 @@ DataStream::DataStream(uint32_t window_len, int rank, int progress) // Removed d
 
 DataRegionBase<float, TraceMetadata>* DataStream::readSlidingWindow(
   DataRegionBareBase<float> &recon_image, int step,
-  const std::unordered_map<std::string, std::string>& metadata, const float *data) {
+  const std::unordered_map<std::string, std::string>& metadata,
+  const float *data, std::size_t data_size) {
   // Dynamically meet sizes
   while(vtheta.size() > window_len) {
     eraseBegTraceMsg();
@@ -110,7 +113,7 @@ DataRegionBase<float, TraceMetadata>* DataStream::readSlidingWindow(
   double theta = std::stod(require_str(metadata, "theta"));
   double center = std::stod(require_str(metadata, "center"));
   std::cout << "[Task-" << getRank() << "]: seq_id: " << sequence_id << " projection_id: " << proj_id << " theta: " << theta << " center: " << center << ", progress = " << progress << std::endl;
-  pending_events.push_back(DataStreamEvent(metadata, sequence_id, proj_id, theta, center, data));
+  pending_events.push_back(DataStreamEvent(metadata, sequence_id, proj_id, theta, center, data, data_size));
 
   if (pending_events.size() < step) {
     return nullptr; // Not collecting enough messages to process

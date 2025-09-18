@@ -95,7 +95,7 @@ ProcessResult SirtEngine::process(
   float init_val=0.;
   int64_t req_number = ds.n_rays_per_proj_row;
 
-  DataRegionBase<float, TraceMetadata> *curr_slices = ds.readSlidingWindow(*recon_image, window_step, metadata, data);
+  DataRegionBase<float, TraceMetadata> *curr_slices = ds.readSlidingWindow(*recon_image, window_step, metadata, data, len);
   
   int center = require_int(config, "center");
   int window_iter = require_int(config, "window_iter");
