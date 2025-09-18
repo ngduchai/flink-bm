@@ -108,8 +108,9 @@ ProcessResult SirtEngine::process(
             << ", write_freq=" << write_freq 
             << ", data len=" << len
             << std::endl;
-  if (len > 0) {
-    std::cout << "First float value: " << ((const uint8_t*)data)[0] << std::endl;
+  if (data && len > 0) {
+    auto p = reinterpret_cast<const unsigned char*>(data);
+    std::cout << "First float value: " << data[0] << " First value: " << static_cast<unsigned>(p[0]) << std::endl;
   }
 
 
