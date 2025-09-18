@@ -629,14 +629,16 @@ def main():
             logdir=args.logdir,
             save_after_serialize=False
         ),
-        output_type=Types.PICKLED_BYTE_ARRAY()
+        # output_type=Types.PICKLED_BYTE_ARRAY()
+        output_type=Types.BASIC_ARRAY()
     ).name("DAQ Emitter").set_parallelism(1)
 
     # probe = daq.map(VersionProbe(), output_type=Types.PICKLED_BYTE_ARRAY()).name("Version Probe")
     # dist = probe.flat_map(
     dist = daq.flat_map(
         DistOperator(args),
-        output_type=Types.PICKLED_BYTE_ARRAY()
+        # output_type=Types.PICKLED_BYTE_ARRAY()
+        output_type=Types.BASIC_ARRAY()
     ).name("Data Distributor").set_parallelism(1)
 
     # probe = dist.key_by(
@@ -655,13 +657,15 @@ def main():
 
     sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
         .process(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
-            output_type=Types.PICKLED_BYTE_ARRAY()) \
+            # output_type=Types.PICKLED_BYTE_ARRAY()) \
+            output_type=Types.BASIC_ARRAY()) \
         .name("SIRT Operator") \
         .set_parallelism(max(1, args.ntask_sirt))
 
     den = sirt.flat_map(
         DenoiserOperator(args),
-        output_type=Types.PICKLED_BYTE_ARRAY()
+        # output_type=Types.PICKLED_BYTE_ARRAY()
+        output_type=Types.BASIC_ARRAY()
     ).name("Denoiser Operator").set_parallelism(1)
 
     den.print().name("Denoiser Sink").set_parallelism(1)
