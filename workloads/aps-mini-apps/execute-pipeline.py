@@ -174,7 +174,7 @@ class DaqEmitter(FlatMapFunction):
             print(f"Current iteration over dataset: {it + 1}/{self.d_iteration}")
             for index in indices:
                 time.sleep(self.proj_sleep)
-                md = {"index": int(index), "Type": "DATA", "sequence_id": seq}
+                md = {"index": int(index), "Type": "DATA", "seq_n": seq}
                 print(f"DenOperator: Sent: {md}, first data float: {serialized_data[index][0]}")
                 yield [md, serialized_data[index]]
                 tot_transfer_size += len(serialized_data[index])
@@ -262,7 +262,7 @@ class DistOperator(FlatMapFunction):
         
         # print(f"DistOperator: Received msg: {metadata}, size {len(data)} bytes")
 
-        sequence_id = metadata["sequence_id"]
+        sequence_id = metadata["seq_n"]
         self.total_received += 1
         self.total_size += len(data)
 
