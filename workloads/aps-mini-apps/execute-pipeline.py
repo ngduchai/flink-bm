@@ -381,7 +381,9 @@ class SirtOperator(KeyedProcessFunction):
                 "thread_count": int(self.cfg["thread_count"]),
                 "window_length": int(self.cfg["window_length"])
             }
-            self.engine.setup(tmetadata)
+            import sirt_ops
+            with sirt_ops.ostream_redirect():  # RAII context from pybind11
+                self.engine.setup(tmetadata)
         except Exception as e:
             print("[SirtOperator.open] engine.setup failed:", e, file=sys.stderr)
             traceback.print_exc()
