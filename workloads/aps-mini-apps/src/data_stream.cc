@@ -136,7 +136,7 @@ DataRegionBase<float, TraceMetadata>* DataStream::readSlidingWindow(
   }
   /// New message(s) arrived, there is space in window
   else if(pending_events.size()>0 && vtheta.size()<window_len){
-    std::cout << "New message(s) arrived, there is space in window: " << window_len_ - vtheta.size() << std::endl;
+    std::cout << "New message(s) arrived, there is space in window: " << window_len - vtheta.size() << std::endl;
     for(auto msg : pending_events){
       addTomoMsg(msg);
       ++counter;
