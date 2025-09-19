@@ -78,7 +78,7 @@ DataRegionBase<float, TraceMetadata>* DataStream::setupTraceDataRegion(
 }
 
 DataStream::DataStream(uint32_t window_len, int rank, int progress) // Removed default argument
-  : window_len {window_len}, comm_rank {rank}, progress {progress} {}
+  : comm_rank {rank}, progress {progress}, window_len {window_len} {}
 
 
 /* Create a data region from sliding window
@@ -117,7 +117,7 @@ DataRegionBase<float, TraceMetadata>* DataStream::readSlidingWindow(
 
   // std::cout << "[Task-" << getRank() << "]: Queue len: pending_events: " << pending_events.size() << " vtheta: " << vtheta.size() << std::endl;
 
-  if (pending_events.size() < step) {
+  if (pending_events.size() < (size_t)step) {
     return nullptr; // Not collecting enough messages to process
   }
 

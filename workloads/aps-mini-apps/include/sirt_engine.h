@@ -22,12 +22,12 @@ private:
     int task_id = -1;
     DataStream ds;
     trace_io::H5Metadata h5md;
-    int passes = 0;
     SIRTReconSpace* main_recon_space = nullptr;
-    DataRegion2DBareBase<float>* main_recon_replica = nullptr;
     DISPEngineBase<SIRTReconSpace, float> *engine = nullptr;
     DataRegionBareBase<float> *recon_image = nullptr;
+    DataRegion2DBareBase<float>* main_recon_replica = nullptr;
     int window_step = 1;
+    int passes = 0;
 
 public:
 

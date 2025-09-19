@@ -491,7 +491,7 @@ class DenoiserOperator(FlatMapFunction):
             print("DenOperator: Receive empty message, skipping")
             return
         
-        print(f"DenOperator: Sent: {meta}, first data float: {data[0]}")
+        print(f"DenOperator: Received : {meta}, first data float: {data[0]}")
 
         if meta.get("Type") == "FIN":
             self.running = False
