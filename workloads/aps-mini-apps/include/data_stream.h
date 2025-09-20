@@ -12,6 +12,7 @@
 #include "trace_data.h"
 #include <csignal>
 #include <functional>
+#include <algorithm>
 
 class DataStreamEvent {
   public:
@@ -20,13 +21,28 @@ class DataStreamEvent {
     int projection_id;
     double theta;
     double center;
-    const float* data; // Pointer to the data segment
+    float* data; // Pointer to the data segment
     std::size_t data_size;
 
+    // DataStreamEvent(std::unordered_map<std::string, std::string> metadata,
+    //   int seq_id, int proj_id, double th, double cen, const float* dat, std::size_t size)
+    //   : metadata(metadata), sequence_id(seq_id), projection_id(proj_id),
+    //   theta(th), center(cen), data(dat), data_size(size) {}
     DataStreamEvent(std::unordered_map<std::string, std::string> metadata,
       int seq_id, int proj_id, double th, double cen, const float* dat, std::size_t size)
       : metadata(metadata), sequence_id(seq_id), projection_id(proj_id),
-      theta(th), center(cen), data(dat), data_size(size) {}
+      theta(th), center(cen), data(nullptr), data_size(size) {
+        if (size > 0) {
+          data = new float [size];
+          std::copy_n(dat, size, data);
+        }
+      }
+
+    ~DataStreamEvent() {
+      if (data != nullptr) {
+        delete [] data;
+      }
+    }
 };
 
 class DataStream
@@ -49,7 +65,7 @@ class DataStream
     /* Add streaming message to buffers
     * @param event: mofka event containing data and metadata
     */
-    void addTomoMsg(DataStreamEvent event);
+    void addTomoMsg(DataStreamEvent& event);
 
 
     /* Erase streaming message to buffers

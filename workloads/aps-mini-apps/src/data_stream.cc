@@ -13,7 +13,7 @@
 //   vproj.insert(vproj.end(), event.data, event.data + n_rays_per_proj);
 // }
 
-void DataStream::addTomoMsg(DataStreamEvent event){
+void DataStream::addTomoMsg(DataStreamEvent& event){
   // pending_events.push_back(event);
   // vmeta.push_back(event.metadata); /// Setup metadata
   vcenters.push_back(event.center);

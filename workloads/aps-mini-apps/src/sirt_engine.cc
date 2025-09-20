@@ -102,13 +102,13 @@ ProcessResult SirtEngine::process(
   int window_iter = require_int(config, "window_iter");
   int write_freq = require_int(config, "write_freq");
 
-  std::cout << "[Task-" << task_id << "] passes = " << passes << " -- Processing window with " 
-            << (curr_slices ? curr_slices->metadata().num_projs() : 0) 
-            << " projections, center=" << center 
-            << ", window_iter=" << window_iter 
-            << ", write_freq=" << write_freq 
-            << ", data len=" << len
-            << std::endl;
+  // std::cout << "[Task-" << task_id << "] passes = " << passes << " -- Processing window with " 
+  //           << (curr_slices ? curr_slices->metadata().num_projs() : 0) 
+  //           << " projections, center=" << center 
+  //           << ", window_iter=" << window_iter 
+  //           << ", write_freq=" << write_freq 
+  //           << ", data len=" << len
+  //           << std::endl;
   if (data && len > 0) {
     auto p = reinterpret_cast<const unsigned char*>(data);
     std::cout << "[Task-" << task_id << "] passes = " << passes << " -- Processing window with " 
