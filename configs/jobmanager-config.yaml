@@ -23,10 +23,10 @@ python.executable: /opt/micromamba/envs/aps/bin/python
 python.client.executable: /opt/micromamba/envs/aps/bin/python
 taskmanager.memory.jvm-overhead.min: 1g
 taskmanager.memory.jvm-overhead.max: 8g   # raises -XX:MaxDirectMemorySize
-taskmanager.memory.process.size: 8g
+taskmanager.memory.process.size: 24g
 taskmanager.memory.task.heap.size: 8g
 taskmanager.memory.task.off-heap.size: 8g
-taskmanager.memory.managed.size: 8g
+taskmanager.memory.managed.size: 6g
 taskmanager.memory.network.min: 256m
 taskmanager.memory.network.max: 256m
 python.fn-execution.bundle.size: 500
