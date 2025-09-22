@@ -34,12 +34,14 @@ class DataStreamEvent {
       : metadata(metadata), sequence_id(seq_id), projection_id(proj_id),
       theta(th), center(cen), data(nullptr), data_size(size) {
 
-        if (size > 0 && dat != nullptr) {
+        if (data_size > 0 && dat != nullptr) {
           auto p = reinterpret_cast<const unsigned char*>(dat);
           std::cout << " first float data: " << dat[0]
-            << " First value: " << static_cast<unsigned>(p[0]) << std::endl;
-          data = new float [size];
-          for (int i = 0; i < size; ++i) {
+            << " First value: " << static_cast<unsigned>(p[0])
+            << " Size: " << data_size << std::endl;
+          data = new float [data_size];
+          for (std::size_t i = 0; i < data_size; ++i) {
+            std::cout << "DataStreamEvent Copying" << i << std::endl;
             data[i] = dat[i];
           }
         }
