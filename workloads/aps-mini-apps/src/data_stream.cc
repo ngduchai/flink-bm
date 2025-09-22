@@ -23,10 +23,10 @@ void DataStream::addTomoMsg(DataStreamEvent& event){
   size_t n_rays_per_proj = n_sinograms * n_rays_per_proj_row;
   assert(n_rays_per_proj == event.data_size && "Data size does not match n_rays_per_projection");
 
-  // auto p = reinterpret_cast<const unsigned char*>(event.data);
-  // std::cout << "SirtDataCheck: "
-  //   << "First float value: " << event.data[0]
-  //   << " First value: " << static_cast<unsigned>(p[0]) << std::endl;
+  auto p = reinterpret_cast<const unsigned char*>(event.data);
+  std::cout << "SirtDataCheck: "
+    << "First float value: " << event.data[0]
+    << " First value: " << static_cast<unsigned>(p[0]) << std::endl;
 
   vproj.insert(vproj.end(), event.data, event.data + n_rays_per_proj);
 }
@@ -80,10 +80,10 @@ DataRegionBase<float, TraceMetadata>* DataStream::setupTraceDataRegion(
       mdata);
   curr_data->ResetMirroredRegionIter();
   
-  // auto p = reinterpret_cast<const unsigned char*>(data);
-  // std::cout << "SirtReconCheck: "
-  //   << "First float value: " << data[0]
-  //   << " First value: " << static_cast<unsigned>(p[0]) << std::endl;
+  auto p = reinterpret_cast<const unsigned char*>(data);
+  std::cout << "SirtReconCheck: "
+    << "First float value: " << data[0]
+    << " First value: " << static_cast<unsigned>(p[0]) << std::endl;
 
   return curr_data;
 }

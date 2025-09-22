@@ -212,7 +212,7 @@ ProcessResult SirtEngine::process(
   passes++;
 
   //delete curr_slices->metadata(); //TODO Check for memory leak
-  // delete curr_slices;
+  delete curr_slices;
 
   return result;
 
