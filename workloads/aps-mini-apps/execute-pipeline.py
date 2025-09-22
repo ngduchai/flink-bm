@@ -427,7 +427,8 @@ class SirtOperator(KeyedProcessFunction):
     def _do_snapshot(self):
         """Snapshot engine & persist to Flink state. Crash if it fails so Flink restores."""
         try:
-            snap = bytes() # self.engine.snapshot()
+            # snap = bytes() # self.engine.snapshot()
+            snap = self.engine.snapshot()
             snap_bytes = snap if isinstance(snap, (bytes, bytearray)) else bytes(snap)
             self.snap_state.update(snap_bytes)
             self.count_state.update(self.processed_local)
