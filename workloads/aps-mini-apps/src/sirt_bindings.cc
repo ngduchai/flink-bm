@@ -106,6 +106,9 @@ PYBIND11_MODULE(sirt_ops, m) {
                     return py::make_tuple(out, r.meta);
                 } catch (const std::exception& e) {
                     throw std::runtime_error(std::string("SirtEngine.process failed: ") + e.what());
+                } catch (...) {
+                    PyErr_SetString(PyExc_RuntimeError, "Unknown C++ exception");
+                    throw py::error_already_set();
                 }
             },
             py::arg("config"), py::arg("metadata"), py::arg("payload"))
