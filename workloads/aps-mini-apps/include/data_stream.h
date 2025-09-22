@@ -21,7 +21,7 @@ class DataStreamEvent {
     int projection_id;
     double theta;
     double center;
-    float* data; // Pointer to the data segment
+    const float* data; // Pointer to the data segment
     std::size_t data_size;
 
     DataStreamEvent(std::unordered_map<std::string, std::string> metadata,
