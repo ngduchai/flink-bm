@@ -41,7 +41,7 @@ class DataStreamEvent {
             << " Size: " << data_size << std::endl;
           data = new float [data_size];
           for (std::size_t i = 0; i < data_size; ++i) {
-            std::cout << "DataStreamEvent Copying" << i << std::endl;
+            std::cout << "DataStreamEvent Copying " << i << std::endl;
             data[i] = dat[i];
           }
         }
