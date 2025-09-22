@@ -219,13 +219,17 @@ ProcessResult SirtEngine::process(
 }
 
 std::vector<std::uint8_t> SirtEngine::snapshot() const {
-  std::vector<std::uint8_t> saved_ckpt;
+  SirtCkpt ckpt(passes, recon_image);
+  std::vector<std::uint8_t> saved_ckpt = ckpt.to_bytes();
   // TODO: replace these with actual boost serialization
   return saved_ckpt;
 }
 
 void SirtEngine::restore(const std::vector<std::uint8_t>& snapshot) {
   // TODO: replace these with actual boost deserialization
+  SirtCkpt ckpt(snapshot);
+  passes = ckpt.progress;
+  recon_image = ckpt.recon_image;
 }
 
 
@@ -243,4 +247,5 @@ SirtEngine::~SirtEngine() {
   //   delete recon_image;
   // }
 }
+
 
