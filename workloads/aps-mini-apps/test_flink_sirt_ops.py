@@ -1,6 +1,7 @@
 from pyflink.datastream import StreamExecutionEnvironment
 from pyflink.common.typeinfo import Types
 from pyflink.datastream.functions import MapFunction, RuntimeContext
+import traceback
 import numpy as np
 import sirt_ops
 
@@ -36,19 +37,32 @@ META_IN = {
 
 class SirtMap(MapFunction):
     def open(self, runtime_ctx):
-        import sirt_ops
-        self.engine = sirt_ops.SirtEngine()
-        self.engine.setup(SETUP_META)  # this now validates keys in the binding
+        try:
+            import sirt_ops
+            self.engine = sirt_ops.SirtEngine()
+            with sirt_ops.ostream_redirect():
+                self.engine.setup(SETUP_META)  # this now validates keys in the binding
+        except Exception as e:
+            print("[SirtOperator.open] failed to import/create engine:", e, file=sys.stderr)
+            traceback.print_exc()
+            return
 
     def map(self, x):
         try:
             cfg = CFG
             meta = META_IN
             # x is a list[float]; send as numpy float32 for contiguous buffer
-            import numpy as np
-            payload = np.asarray(x, dtype=np.float32)
-            out_bytes, out_meta = self.engine.process(cfg, meta, payload)
-            return f"ok {len(out_bytes)}"
+            try:
+                import numpy as np
+                import sirt_ops
+                payload = np.asarray(x, dtype=np.float32)
+                with sirt_ops.ostream_redirect():
+                    out_bytes, out_meta = self.engine.process(cfg, meta, payload)
+                return f"ok {len(out_bytes)}"
+            except Exception as e:
+                print("[SirtOperator] engine.process failed. meta=", meta, file=sys.stderr)
+                traceback.print_exc()
+                return "error"
         except Exception as e:
             # Force a Python traceback to go into TM logs:
             import traceback, sys
