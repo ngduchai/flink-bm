@@ -134,7 +134,7 @@ ProcessResult SirtEngine::process(
   }
   /// Iterate on window
 
-  DataRegion2DBareBase<float> &recon_replica = main_recon_space->reduction_objects();
+  // DataRegion2DBareBase<float> &recon_replica = main_recon_space->reduction_objects();
 
   for(int i=0; i<window_iter; ++i){
 
@@ -146,8 +146,8 @@ ProcessResult SirtEngine::process(
     engine->ParInPlaceLocalSynchWrapper();              /// Local combination
     // std::cout << "[Task-" << task_id << "] ---- Complete par in-place local synch ---- " << std::endl;
    
-    // main_recon_space->UpdateRecon(*recon_image, *main_recon_replica);
-    main_recon_space->UpdateRecon(*recon_image, recon_replica);
+    main_recon_space->UpdateRecon(*recon_image, *main_recon_replica);
+    // main_recon_space->UpdateRecon(*recon_image, recon_replica);
     // std::cout << "[Task-" << task_id << "] ---- Complete updating reconstruction ---- " << std::endl;
     
     engine->ResetReductionSpaces(init_val);
