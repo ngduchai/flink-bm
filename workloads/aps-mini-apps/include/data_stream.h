@@ -35,7 +35,7 @@ class DataStreamEvent {
       theta(th), center(cen), data(nullptr), data_size(size) {
 
         if (size > 0 && dat != nullptr) {
-          std::cout << " first float data: " << dat[0];
+          std::cout << " first float data: " << dat[0] std::endl;
           data = new float [size];
           for (int i = 0; i < size; ++i) {
             data[i] = dat[i];
