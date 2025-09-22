@@ -23,6 +23,10 @@ restart-strategy.fixed-delay.delay: 100ms
 # python.client.executable: /usr/bin/python3
 python.executable: /opt/micromamba/envs/aps/bin/python
 python.client.executable: /opt/micromamba/envs/aps/bin/python
+taskmanager.memory.jvm-overhead.min: 1g
+taskmanager.memory.jvm-overhead.max: 8g   # raises -XX:MaxDirectMemorySize
+python.fn-execution.bundle.size: 500
+python.fn-execution.arrow.batch.size: 500
 parallelism:
   default: 1
 rest:

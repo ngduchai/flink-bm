@@ -175,7 +175,7 @@ class DaqEmitter(FlatMapFunction):
             for index in indices:
                 time.sleep(self.proj_sleep)
                 md = {"index": int(index), "Type": "DATA", "seq_n": seq}
-                print(f"DaqOperator: Sent: {md}, first data float: {serialized_data[index][0]}")
+                # print(f"DaqOperator: Sent: {md}, first data float: {serialized_data[index][0]}")
                 yield [md, serialized_data[index]]
                 tot_transfer_size += len(serialized_data[index])
                 seq += 1
