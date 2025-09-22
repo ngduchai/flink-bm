@@ -312,7 +312,7 @@ class DistOperator(FlatMapFunction):
             for i in range(self.args.ntask_sirt):
                 md = msgs[i][0]
                 # print(f"Task {i}: seq_id {md['seq_n']} proj_id {md['projection_id']}, theta: {md['theta']} center: {md['center']}")
-                print(f"DistOperator: Sent: {md}, first data float: {msgs[i][1][0]}")
+                # print(f"DistOperator: Sent: {md}, first data float: {msgs[i][1][0]}")
                 yield msgs[i]
 
         if read_image.Itype() is self.serializer.ITypes.White:
@@ -451,7 +451,7 @@ class SirtOperator(KeyedProcessFunction):
 
         # main processing
         try:
-            print(f"SirtOperator: Process: {meta_in}, first data float: {payload[0]}")
+            # print(f"SirtOperator: Process: {meta_in}, first data float: {payload[0]}")
             import sirt_ops
             with sirt_ops.ostream_redirect():  # RAII context from pybind11
                 out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
@@ -468,7 +468,7 @@ class SirtOperator(KeyedProcessFunction):
 
         if len(out_bytes):
             # print(f"SirtOperator: Emitting msg: {meta_in}, size {len(out_bytes)} bytes")
-            print(f"SirtOperator: Sent: {meta_in}, first data float: {out_bytes[0]}")
+            # print(f"SirtOperator: Sent: {meta_in}, first data float: {out_bytes[0]}")
             yield [dict(out_meta), bytes(out_bytes)]
 
 # -------------------------
@@ -492,7 +492,7 @@ class DenoiserOperator(FlatMapFunction):
             print("DenOperator: Receive empty message, skipping")
             return
         
-        print(f"DenOperator: Received : {meta}, first data float: {data[0]}")
+        # print(f"DenOperator: Received : {meta}, first data float: {data[0]}")
 
         if meta.get("Type") == "FIN":
             self.running = False
