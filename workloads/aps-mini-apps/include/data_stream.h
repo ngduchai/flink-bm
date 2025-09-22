@@ -22,8 +22,7 @@ class DataStreamEvent {
     double theta;
     double center;
     // const float* data; // Pointer to the data segment
-    float* data; // Pointer to the data segment
-    std::size_t data_size;
+    std::vector<float> data; // Pointer to the data segment
 
     // DataStreamEvent(std::unordered_map<std::string, std::string> metadata,
     //   int seq_id, int proj_id, double th, double cen, const float* dat, std::size_t size)
@@ -32,26 +31,22 @@ class DataStreamEvent {
     DataStreamEvent(std::unordered_map<std::string, std::string> metadata,
       int seq_id, int proj_id, double th, double cen, const float* dat, std::size_t size)
       : metadata(metadata), sequence_id(seq_id), projection_id(proj_id),
-      theta(th), center(cen), data(nullptr), data_size(size) {
+      theta(th), center(cen) {
 
-        if (data_size > 0 && dat != nullptr) {
+        if (size > 0 && dat != nullptr) {
           auto p = reinterpret_cast<const unsigned char*>(dat);
           std::cout << " first float data: " << dat[0]
             << " First value: " << static_cast<unsigned>(p[0])
-            << " Size: " << data_size << std::endl;
-          data = new float [data_size];
-          for (std::size_t i = 0; i < data_size; ++i) {
-            std::cout << "DataStreamEvent Copying " << i << std::endl;
-            data[i] = dat[i];
-          }
+            << " Size: " << size << std::endl;
+          data.insert(data.end(), dat, dat + size);
         }
       }
 
-    ~DataStreamEvent() {
-      if (data != nullptr) {
-        delete [] data;
-      }
-    }
+    // ~DataStreamEvent() {
+    //   if (data != nullptr) {
+    //     delete [] data;
+    //   }
+    // }
 };
 
 class DataStream
