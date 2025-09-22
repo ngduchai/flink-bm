@@ -9,12 +9,23 @@ SETUP_META = {
     "task_id": 0,
     "n_sinograms": 1,
     "n_rays_per_proj_row": 1024,
-    "beg_sinograms": 0,
+    "beg_sinogram": 0,
     "tn_sinograms": 1,
-    "window_step": 1,
-    "thread_count": 1
+    "window_step": 4,
+    "thread_count": 4,
+    "window_length": 4
 }
-CFG = {"rank": 0, "center": 512, "window_iter": 1, "write_freq": 1}
+CFG ={
+    "thread_count": 2,
+    "window_step": 4,
+    "beg_sinogram": 0,
+    "center": 10,
+    "write_freq": 4,
+    "window_iter": 4,
+    "window_length": 4,
+    "num_sinogram_columns": 1024,
+    "num_sinograms": 1
+}
 META_IN = {
     "Type":"DATA",
     "seq_n":"0",
