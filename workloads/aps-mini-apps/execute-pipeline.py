@@ -423,6 +423,7 @@ class SirtOperator(KeyedProcessFunction):
                 self.processed_local = int(cnt) if cnt is not None else self.processed_local
             else:
                 # No bytes yet for this key; don't flip the flag so we can retry
+                print(f"[SirtOperator] cannot find previous state. Start from beginning")
                 return
         except Exception as e:
             print("[SirtOperator] restore step failed:", e, file=sys.stderr)
