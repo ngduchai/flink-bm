@@ -433,26 +433,11 @@ class SirtOperator(KeyedProcessFunction):
     def _do_snapshot(self):
         """Snapshot engine & persist to Flink state. Crash if it fails so Flink restores."""
         try:
-            import psutil
-            process = psutil.Process()
-            mem_before = process.memory_info().rss / 1024 / 1024  # MB
-            
-            t0 = time.time()
             snap = self.engine.snapshot()
-            snap_time = time.time() - t0
-            
             snap_bytes = snap if isinstance(snap, (bytes, bytearray)) else bytes(snap)
-            
-            t1 = time.time()
             self.snap_state.update(snap_bytes)
             self.count_state.update(self.processed_local)
-            persist_time = time.time() - t1
-            
-            mem_after = process.memory_info().rss / 1024 / 1024  # MB
-            
-            print(f"[SirtOperator] snapshot at {self.processed_local} tuples: {len(snap_bytes)} bytes, "
-                f"snap_time={snap_time:.2f}s, persist_time={persist_time:.2f}s, "
-                f"mem_before={mem_before:.1f}MB, mem_after={mem_after:.1f}MB")
+            print(f"[SirtOperator] snapshot at {self.processed_local} tuples: {len(snap_bytes)} bytes, ")
         except Exception as e:
             print("[SirtOperator] engine.snapshot failed:", e, file=sys.stderr)
             traceback.print_exc()
