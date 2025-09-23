@@ -435,7 +435,8 @@ class SirtOperator(KeyedProcessFunction):
         try:
             snap = self.engine.snapshot()
             snap_bytes = snap if isinstance(snap, (bytes, bytearray)) else bytes(snap)
-            self.snap_state.update(snap_bytes)
+            # self.snap_state.update(snap_bytes)
+            self.snap_state.update(bytes([1, 2, 3]))
             self.count_state.update(self.processed_local)
             print(f"[SirtOperator] snapshot at {self.processed_local} tuples: {len(snap_bytes)} bytes, ")
         except Exception as e:
@@ -620,25 +621,25 @@ def main():
     cfg.set_boolean("python.fn-execution.debug.logging", True)
     os.environ.setdefault("PYTHONUNBUFFERED", "1")
 
-    # ckpt_dir = "file:///mnt/ckpts/"
-    # cfg.set_string("state.backend", "rocksdb")
-    # cfg.set_string("state.checkpoint-storage", "filesystem")
-    # cfg.set_boolean("state.backend.rocksdb.predefined-options", "SPINNING_DISK_OPTIMIZED")
-    # cfg.set_integer("state.backend.rocksdb.block.cache-size", 64 * 1024 * 1024)  # 64MB
-    # cfg.set_integer("state.backend.rocksdb.write-buffer-size", 64 * 1024 * 1024)  # 64MB
-    # cfg.set_integer("state.backend.rocksdb.max-write-buffer-number", 4)
-    # cfg.set_string("state.checkpoints.dir", ckpt_dir)
-    # cfg.set_string("state.savepoints.dir", ckpt_dir)
+    ckpt_dir = "file:///mnt/ckpts/"
+    cfg.set_string("state.backend", "rocksdb")
+    cfg.set_string("state.checkpoint-storage", "filesystem")
+    cfg.set_boolean("state.backend.rocksdb.predefined-options", "SPINNING_DISK_OPTIMIZED")
+    cfg.set_integer("state.backend.rocksdb.block.cache-size", 64 * 1024 * 1024)  # 64MB
+    cfg.set_integer("state.backend.rocksdb.write-buffer-size", 64 * 1024 * 1024)  # 64MB
+    cfg.set_integer("state.backend.rocksdb.max-write-buffer-number", 4)
+    cfg.set_string("state.checkpoints.dir", ckpt_dir)
+    cfg.set_string("state.savepoints.dir", ckpt_dir)
 
-    # cfg.set_integer("execution.checkpointing.timeout", 600000)  # 10 minutes
-    # cfg.set_integer("execution.checkpointing.min-pause", 5000)  # 5 seconds between checkpoints
+    cfg.set_integer("execution.checkpointing.timeout", 600000)  # 10 minutes
+    cfg.set_integer("execution.checkpointing.min-pause", 5000)  # 5 seconds between checkpoints
     cfg.set_string("akka.ask.timeout", "60s")
 
     env = StreamExecutionEnvironment.get_execution_environment(cfg)
-    # env.enable_checkpointing(10_000, CheckpointingMode.EXACTLY_ONCE)
-    # checkpoint_config = env.get_checkpoint_config()
-    # checkpoint_config.set_checkpoint_timeout(600000)  # 10 minutes
-    # checkpoint_config.set_min_pause_between_checkpoints(5000)  # 5 seconds
+    env.enable_checkpointing(10_000, CheckpointingMode.EXACTLY_ONCE)
+    checkpoint_config = env.get_checkpoint_config()
+    checkpoint_config.set_checkpoint_timeout(600000)  # 10 minutes
+    checkpoint_config.set_min_pause_between_checkpoints(5000)  # 5 seconds
 
     _ship_local_modules(env)
 
