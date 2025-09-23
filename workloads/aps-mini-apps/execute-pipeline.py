@@ -24,6 +24,7 @@ from pyflink.common import Types, Configuration
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
 from pyflink.datastream.functions import FlatMapFunction, MapFunction, KeyedProcessFunction, RuntimeContext
 from pyflink.datastream.state import ValueStateDescriptor
+from pyflink.datastream.state_backend import EmbeddedRocksDBStateBackend
 
 
 # -------------------------
@@ -416,6 +417,8 @@ class SirtOperator(KeyedProcessFunction):
                 raw_bytes = raw if isinstance(raw, (bytes, bytearray)) else bytes(raw)
                 # self.engine.restore(raw_bytes)
                 print(f"[SirtOperator] restored {len(raw_bytes)} bytes from state")
+            else:
+                print(f"[SirtOperator] No saved state found. Start from begining.")
             cnt = self.count_state.value()
             self.processed_local = int(cnt) if cnt is not None else 0
         except Exception as e:
@@ -613,14 +616,19 @@ def main():
     cfg.set_boolean("python.fn-execution.debug.logging", True)
     os.environ.setdefault("PYTHONUNBUFFERED", "1")
 
-
-    cfg.set_string("state.backend", "rocksdb")
-    cfg.set_string("state.checkpoint-storage", "filesystem")
-    cfg.set_string("state.checkpoints.dir", "file:///mnt/ckpts/")
-    cfg.set_string("state.savepoints.dir", "file:///mnt/ckpts/")
+    ckpt_dir = "file:///mnt/ckpts/"
+    # cfg.set_string("state.backend", "rocksdb")
+    # cfg.set_string("state.checkpoint-storage", "filesystem")
+    # cfg.set_string("state.checkpoints.dir", ckpt_dir)
+    # cfg.set_string("state.savepoints.dir", ckpt_dir)
 
     env = StreamExecutionEnvironment.get_execution_environment(cfg)
+    env.set_state_backend(EmbeddedRocksDBStateBackend())
+    env.get_checkpoint_config().set_checkpoint_storage(checkpoint_dir)
     env.enable_checkpointing(10_000, CheckpointingMode.EXACTLY_ONCE)
+    env.get_checkpoint_config().enable_externalized_checkpoints(
+        'RETAIN_ON_CANCELLATION'
+    )
 
     _ship_local_modules(env)
 
