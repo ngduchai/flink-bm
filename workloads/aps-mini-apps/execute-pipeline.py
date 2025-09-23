@@ -329,7 +329,14 @@ class DistOperator(FlatMapFunction):
 # -------------------------
 # Map: SIRT
 # -------------------------
-class SirtOperator(KeyedProcessFunction):
+from pyflink.datastream.functions import (
+    KeyedProcessFunction, CheckpointedFunction, CheckpointListener
+)
+from pyflink.datastream.state import ValueStateDescriptor, ListStateDescriptor
+from pyflink.common.typeinfo import Types
+
+
+class SirtOperator(KeyedProcessFunction, CheckpointedFunction, CheckpointListener):
     def __init__(self, cfg, every_n: int = 1000):
         super().__init__()
         self.cfg = {
@@ -345,132 +352,145 @@ class SirtOperator(KeyedProcessFunction):
         }
         self.every_n = int(every_n)
         self.engine = None
+
+        # Operator state (per subtask)
+        self._op_snap = None     # ListState[bytes]
+        self._op_count = None    # ListState[long]
+        self._pending_restore_bytes: Optional[bytes] = None
+
+        # Optional keyed counters (not used for restoration)
         self.snap_state = None
         self.count_state = None
+
         self.processed_local = 0
-        self._restored = False
 
-    def open(self, ctx: RuntimeContext):
-        print("SirtOperator initializing (keyed)...")
-        # --- build engine ---
-        try:
-            import sirt_ops
-            self.engine = sirt_ops.SirtEngine()
-        except Exception as e:
-            print("[SirtOperator.open] failed to import/create engine:", e, file=sys.stderr)
-            traceback.print_exc()
-            return
-
-        # --- partitioning / setup ---
-        try:
-            task_id = ctx.get_index_of_this_subtask()
-            num_tasks = ctx.get_number_of_parallel_subtasks()
-            total_sinograms = int(self.cfg["num_sinograms"])
-            nsino = total_sinograms // num_tasks
-            rem = total_sinograms % num_tasks
-            n_sinograms = nsino + (1 if task_id < rem else 0)
-            beg_sinogram = task_id * nsino + min(task_id, rem)
-
-            tmetadata = {
-                "task_id": task_id,
-                "n_sinograms": n_sinograms,
-                "n_rays_per_proj_row": int(self.cfg["num_sinogram_columns"]),
-                "beg_sinogram": beg_sinogram,
-                "tn_sinograms": total_sinograms,
-                "window_step": int(self.cfg["window_step"]),
-                "thread_count": int(self.cfg["thread_count"]),
-                "window_length": int(self.cfg["window_length"])
-            }
-            import sirt_ops
-            with sirt_ops.ostream_redirect():  # RAII context from pybind11
-                self.engine.setup(tmetadata)
-        except Exception as e:
-            print("[SirtOperator.open] engine.setup failed:", e, file=sys.stderr)
-            traceback.print_exc()
-            return
-
-        # --- managed state ---
-        try:
-            snap_desc = ValueStateDescriptor(
-                "sirt_engine_snapshot_v1", Types.PICKLED_BYTE_ARRAY()
+    # ---------- CheckpointedFunction ----------
+    def initialize_state(self, ctx):
+        """
+        Called before open(); create operator/keyed state here.
+        """
+        store = ctx.get_operator_state_store()
+        # Store exactly one bytes object; ListState is the operator-state primitive.
+        self._op_snap = store.get_list_state(
+            ListStateDescriptor(
+                "sirt_engine_snapshot_v1",
+                Types.PRIMITIVE_ARRAY(Types.BYTE())  # byte[] on the JVM side
             )
-            self.snap_state = ctx.get_state(snap_desc)
-            count_desc = ValueStateDescriptor("processed_count_v1", Types.LONG())
-            self.count_state = ctx.get_state(count_desc)
-        except Exception as e:
-            print("[SirtOperator.open] state init failed:", e, file=sys.stderr)
-            traceback.print_exc()
-            return
+        )
+        self._op_count = store.get_list_state(
+            ListStateDescriptor("processed_count_v1", Types.LONG())
+        )
 
-        print(f"SirtOperator initialized: every_n={self.every_n}, "
-              f"restored_count=deferred, "
-              f"thread_count={self.cfg['thread_count']}")
-    
-    def _maybe_restore(self):
-        """Run exactly once per subtask, after a ProcessBundle is active."""
-        if self._restored:
-            return
-        try:
-            raw = self.snap_state.value()   # safe now (inside bundle)
-            if raw:
-                raw_bytes = raw if isinstance(raw, (bytes, bytearray)) else bytes(raw)
-                self.engine.restore(raw_bytes)
-                print(f"[SirtOperator] restored {len(raw_bytes)} bytes from state")
-            cnt = self.count_state.value()
-            self.processed_local = int(cnt) if cnt is not None else 0
-        except Exception as e:
-            print("[SirtOperator] restore step failed:", e, file=sys.stderr)
-            traceback.print_exc()
-            # return
-        self._restored = True
+        # If restoring, fetch the last snapshot/count recorded
+        if ctx.is_restored():
+            snaps = list(self._op_snap.get())
+            if snaps:
+                # we always store a single element; take the last if rescaled
+                self._pending_restore_bytes = bytes(snaps[-1])
+            counts = list(self._op_count.get())
+            if counts:
+                self.processed_local = int(counts[-1])
 
-    def _do_snapshot(self):
-        """Snapshot engine & persist to Flink state. Crash if it fails so Flink restores."""
-        try:
-            # snap = bytes() # self.engine.snapshot()
-            snap = self.engine.snapshot()
-            snap_bytes = snap if isinstance(snap, (bytes, bytearray)) else bytes(snap)
-            self.snap_state.update(snap_bytes)
-            self.count_state.update(self.processed_local)
-            print(f"[SirtOperator] snapshot at {self.processed_local} tuples ({len(snap_bytes)} bytes)")
-        except Exception as e:
-            print("[SirtOperator] engine.snapshot failed:", e, file=sys.stderr)
-            traceback.print_exc()
-            return
+        # (Optional) if you still want keyed state for per-key stats:
+        # ks = ctx.get_keyed_state_store()
+        # self.snap_state  = ks.get_state(ValueStateDescriptor("k_snap", Types.PICKLED_BYTE_ARRAY()))
+        # self.count_state = ks.get_state(ValueStateDescriptor("k_count", Types.LONG()))
+
+    def snapshot_state(self, ctx):
+        """
+        Called at checkpoint time; capture a consistent engine snapshot here.
+        """
+        # Take snapshot bytes from native engine
+        snap = self.engine.snapshot()
+        snap_bytes = snap if isinstance(snap, (bytes, bytearray)) else bytes(snap)
+
+        # Keep only the most recent value in operator state
+        self._op_snap.clear()
+        self._op_snap.add(snap_bytes)
+
+        self._op_count.clear()
+        self._op_count.add(self.processed_local)
+
+        # (Optional) visibility
+        print(f"[SirtOperator] checkpoint snapshot: {len(snap_bytes)} bytes at count={self.processed_local}")
+
+    # ---------- CheckpointListener ----------
+    def notify_checkpoint_complete(self, checkpoint_id: int):
+        # If you persist out-of-band artifacts, finalize/commit them here.
+        pass
+
+    # ---------- Runtime ----------
+    def open(self, ctx):
+        print("SirtOperator initializing (keyed)...")
+
+        # Build native engine
+        import sirt_ops
+        self.engine = sirt_ops.SirtEngine()
+
+        # Partitioning / setup
+        task_id = ctx.get_index_of_this_subtask()
+        num_tasks = ctx.get_number_of_parallel_subtasks()
+        total_sinograms = int(self.cfg["num_sinograms"])
+        nsino = total_sinograms // num_tasks
+        rem = total_sinograms % num_tasks
+        n_sinograms = nsino + (1 if task_id < rem else 0)
+        beg_sinogram = task_id * nsino + min(task_id, rem)
+
+        tmetadata = {
+            "task_id": task_id,
+            "n_sinograms": n_sinograms,
+            "n_rays_per_proj_row": int(self.cfg["num_sinogram_columns"]),
+            "beg_sinogram": beg_sinogram,
+            "tn_sinograms": total_sinograms,
+            "window_step": int(self.cfg["window_step"]),
+            "thread_count": int(self.cfg["thread_count"]),
+            "window_length": int(self.cfg["window_length"]),
+        }
+
+        with sirt_ops.ostream_redirect():
+            self.engine.setup(tmetadata)
+
+        # Apply pending restore bytes captured in initialize_state()
+        if self._pending_restore_bytes:
+            self.engine.restore(self._pending_restore_bytes)
+            print(f"[SirtOperator] restored {len(self._pending_restore_bytes)} bytes from operator state")
+            self._pending_restore_bytes = None
+
+        print(f"SirtOperator initialized: every_n={self.every_n}, restored_count={self.processed_local}")
 
     def process_element(self, value, ctx):
         meta_in, payload = value
-        self._maybe_restore()
-        # print(f"SirtOperator: Received msg: {meta_in}, size {len(payload)} bytes")
 
-        # FIN: persist one final snapshot then pass through
+        # FIN: take a final app-level snapshot (optional; recovery uses checkpoint snapshots)
         if isinstance(meta_in, dict) and meta_in.get("Type") == "FIN":
-            self._do_snapshot()
+            try:
+                snap = self.engine.snapshot()
+                # You can keep this out-of-band; checkpoint snapshots happen in snapshot_state()
+                print(f"[SirtOperator] final snapshot at {self.processed_local} tuples ({len(snap)} bytes)")
+            except Exception:
+                import traceback; traceback.print_exc()
             yield value
             return
 
-        # main processing
+        # Main processing
+        import sirt_ops
         try:
-            # print(f"SirtOperator: Process: {meta_in}, first data float: {payload[0]}")
-            import sirt_ops
-            with sirt_ops.ostream_redirect():  # RAII context from pybind11
+            with sirt_ops.ostream_redirect():
                 out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
-        except Exception as e:
+        except Exception:
+            import sys, traceback
             print("[SirtOperator] engine.process failed. meta=", meta_in, file=sys.stderr)
             traceback.print_exc()
             return
 
         self.processed_local += 1
 
-        # count-based snapshot
-        if self.processed_local % self.every_n == 0:
-            self._do_snapshot()
+        # Optional: keep periodic snapshots for your own monitoring (not used for restore)
+        # if self.processed_local % self.every_n == 0:
+        #     pass
 
-        if len(out_bytes):
-            # print(f"SirtOperator: Emitting msg: {meta_in}, size {len(out_bytes)} bytes")
-            # print(f"SirtOperator: Sent: {meta_in}, first data float: {out_bytes[0]}")
+        if out_bytes:
             yield [dict(out_meta), bytes(out_bytes)]
-
 # -------------------------
 # Sink: Denoiser (yield-style)
 # -------------------------
