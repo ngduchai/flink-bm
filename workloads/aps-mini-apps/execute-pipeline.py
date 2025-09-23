@@ -648,15 +648,15 @@ def main():
     cfg.set_integer("execution.checkpointing.timeout", 600000)  # 10 minutes
     cfg.set_integer("execution.checkpointing.min-pause", 5000)  # 5 seconds between checkpoints
     cfg.set_integer("akka.ask.timeout", "60s")  # Increase actor timeout
-    checkpoint_config = env.get_checkpoint_config()
-    checkpoint_config.set_checkpoint_timeout(600000)  # 10 minutes
-    checkpoint_config.set_min_pause_between_checkpoints(5000)  # 5 seconds
 
     env = StreamExecutionEnvironment.get_execution_environment(cfg)
     env.enable_checkpointing(10_000, CheckpointingMode.EXACTLY_ONCE)
     # env.get_checkpoint_config().enable_externalized_checkpoints(
     #     'RETAIN_ON_CANCELLATION'
     # )
+    checkpoint_config = env.get_checkpoint_config()
+    checkpoint_config.set_checkpoint_timeout(600000)  # 10 minutes
+    checkpoint_config.set_min_pause_between_checkpoints(5000)  # 5 seconds
 
     _ship_local_modules(env)
 
