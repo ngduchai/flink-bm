@@ -415,6 +415,7 @@ class SirtOperator(KeyedProcessFunction):
             raw = self.snap_state.value()   # keyed ValueState for the current key
             if raw:
                 raw_bytes = raw if isinstance(raw, (bytes, bytearray)) else bytes(raw)
+                print(f"[SirtOperator]: found previous state: {len(raw_bytes)} bytes. Restoring")
                 self.engine.restore(raw_bytes)
                 print(f"[SirtOperator] restored {len(raw_bytes)} bytes from state")
                 self._restored = True
