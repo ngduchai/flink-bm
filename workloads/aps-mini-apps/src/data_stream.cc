@@ -13,7 +13,7 @@
 //   vproj.insert(vproj.end(), event.data, event.data + n_rays_per_proj);
 // }
 
-void DataStream::addTomoMsg(DataStreamEvent event){
+void DataStream::addTomoMsg(DataStreamEvent& event){
   // pending_events.push_back(event);
   // vmeta.push_back(event.metadata); /// Setup metadata
   vcenters.push_back(event.center);
@@ -23,7 +23,13 @@ void DataStream::addTomoMsg(DataStreamEvent event){
   size_t n_rays_per_proj = n_sinograms * n_rays_per_proj_row;
   assert(n_rays_per_proj == event.data_size && "Data size does not match n_rays_per_projection");
 
-  vproj.insert(vproj.end(), event.data, event.data + n_rays_per_proj);
+  auto p = reinterpret_cast<const unsigned char*>(&(event.data[0]));
+  std::cout << "SirtDataCheck: "
+    << "First float value: " << event.data[0]
+    << " First value: " << static_cast<unsigned>(p[0]) << std::endl;
+
+  // vproj.insert(vproj.end(), event.data, event.data + n_rays_per_proj);
+  vproj.insert(vproj.end(), event.data.begin(), event.data.end());
 }
 
 /* Erase streaming message to buffers
@@ -47,7 +53,7 @@ void DataStream::eraseBegTraceMsg(){
 DataRegionBase<float, TraceMetadata>* DataStream::setupTraceDataRegion(
   DataRegionBareBase<float> &recon_image){
 
-    std::cout << "[Task-" << getRank() << "]: Setting up data region from sliding window with " << vtheta.size() << " projections" << std::endl;
+    // std::cout << "[Task-" << getRank() << "]: Setting up data region from sliding window with " << vtheta.size() << " projections" << std::endl;
     
     // int center = std::stoi(require_str(vmeta.back(), "center"));
     int center = vcenters.back();
@@ -74,11 +80,17 @@ DataRegionBase<float, TraceMetadata>* DataStream::setupTraceDataRegion(
       mdata->count(),
       mdata);
   curr_data->ResetMirroredRegionIter();
+  
+  auto p = reinterpret_cast<const unsigned char*>(data);
+  std::cout << "SirtReconCheck: "
+    << "First float value: " << data[0]
+    << " First value: " << static_cast<unsigned>(p[0]) << std::endl;
+
   return curr_data;
 }
 
 DataStream::DataStream(uint32_t window_len, int rank, int progress) // Removed default argument
-  : window_len {window_len}, comm_rank {rank}, progress {progress} {}
+  : comm_rank {rank}, progress {progress}, window_len {window_len} {}
 
 
 /* Create a data region from sliding window
@@ -117,7 +129,7 @@ DataRegionBase<float, TraceMetadata>* DataStream::readSlidingWindow(
 
   // std::cout << "[Task-" << getRank() << "]: Queue len: pending_events: " << pending_events.size() << " vtheta: " << vtheta.size() << std::endl;
 
-  if (pending_events.size() < step) {
+  if (pending_events.size() < (size_t)step) {
     return nullptr; // Not collecting enough messages to process
   }
 

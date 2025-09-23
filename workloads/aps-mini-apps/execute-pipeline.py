@@ -176,7 +176,7 @@ class DaqEmitter(FlatMapFunction):
             for index in indices:
                 time.sleep(self.proj_sleep)
                 md = {"index": int(index), "Type": "DATA", "seq_n": seq}
-                print(f"DaqOperator: Sent: {md}, first data float: {serialized_data[index][0]}")
+                # print(f"DaqOperator: Sent: {md}, first data float: {serialized_data[index][0]}")
                 yield [md, serialized_data[index]]
                 tot_transfer_size += len(serialized_data[index])
                 seq += 1
@@ -313,7 +313,7 @@ class DistOperator(FlatMapFunction):
             for i in range(self.args.ntask_sirt):
                 md = msgs[i][0]
                 # print(f"Task {i}: seq_id {md['seq_n']} proj_id {md['projection_id']}, theta: {md['theta']} center: {md['center']}")
-                print(f"DistOperator: Sent: {md}, first data float: {msgs[i][1][0]}")
+                # print(f"DistOperator: Sent: {md}, first data float: {msgs[i][1][0]}")
                 yield msgs[i]
 
         if read_image.Itype() is self.serializer.ITypes.White:
@@ -408,29 +408,32 @@ class SirtOperator(KeyedProcessFunction):
               f"thread_count={self.cfg['thread_count']}")
     
     def _maybe_restore(self):
-        """Run exactly once per subtask, after a ProcessBundle is active."""
+        # Try until we either restored bytes or confirmed there's nothing to restore.
         if self._restored:
             return
         try:
-            raw = self.snap_state.value()   # safe now (inside bundle)
+            raw = self.snap_state.value()   # keyed ValueState for the current key
             if raw:
                 raw_bytes = raw if isinstance(raw, (bytes, bytearray)) else bytes(raw)
-                # self.engine.restore(raw_bytes)
+                self.engine.restore(raw_bytes)
                 print(f"[SirtOperator] restored {len(raw_bytes)} bytes from state")
+                self._restored = True
+                # also restore counter if present
+                cnt = self.count_state.value()
+                self.processed_local = int(cnt) if cnt is not None else self.processed_local
             else:
-                print(f"[SirtOperator] No saved state found. Start from begining.")
-            cnt = self.count_state.value()
-            self.processed_local = int(cnt) if cnt is not None else 0
+                # No bytes yet for this key; don't flip the flag so we can retry
+                return
         except Exception as e:
             print("[SirtOperator] restore step failed:", e, file=sys.stderr)
             traceback.print_exc()
-            # return
-        self._restored = True
+            # keep _restored = False to retry on the next element
 
     def _do_snapshot(self):
         """Snapshot engine & persist to Flink state. Crash if it fails so Flink restores."""
         try:
-            snap = bytes() # self.engine.snapshot()
+            # snap = bytes() # self.engine.snapshot()
+            snap = self.engine.snapshot()
             snap_bytes = snap if isinstance(snap, (bytes, bytearray)) else bytes(snap)
             self.snap_state.update(snap_bytes)
             self.count_state.update(self.processed_local)
@@ -443,7 +446,7 @@ class SirtOperator(KeyedProcessFunction):
     def process_element(self, value, ctx):
         meta_in, payload = value
         self._maybe_restore()
-        print(f"SirtOperator: Received msg: {meta_in}, size {len(payload)} bytes")
+        # print(f"SirtOperator: Received msg: {meta_in}, size {len(payload)} bytes")
 
         # FIN: persist one final snapshot then pass through
         if isinstance(meta_in, dict) and meta_in.get("Type") == "FIN":
@@ -453,7 +456,7 @@ class SirtOperator(KeyedProcessFunction):
 
         # main processing
         try:
-            print(f"SirtOperator: Process: {meta_in}, first data float: {payload[0]}")
+            # print(f"SirtOperator: Process: {meta_in}, first data float: {payload[0]}")
             import sirt_ops
             with sirt_ops.ostream_redirect():  # RAII context from pybind11
                 out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
@@ -470,7 +473,7 @@ class SirtOperator(KeyedProcessFunction):
 
         if len(out_bytes):
             # print(f"SirtOperator: Emitting msg: {meta_in}, size {len(out_bytes)} bytes")
-            print(f"SirtOperator: Sent: {meta_in}, first data float: {out_bytes[0]}")
+            # print(f"SirtOperator: Sent: {meta_in}, first data float: {out_bytes[0]}")
             yield [dict(out_meta), bytes(out_bytes)]
 
 # -------------------------
@@ -494,7 +497,7 @@ class DenoiserOperator(FlatMapFunction):
             print("DenOperator: Receive empty message, skipping")
             return
         
-        print(f"DenOperator: Sent: {meta}, first data float: {data[0]}")
+        # print(f"DenOperator: Received : {meta}, first data float: {data[0]}")
 
         if meta.get("Type") == "FIN":
             self.running = False
@@ -596,6 +599,7 @@ class PrintProbe(MapFunction):
               f"seq={meta.get('seq_n')} bytes={len(payload)}")
         return value
 
+
 PY_EXEC = "/opt/micromamba/envs/aps/bin/python"
 
 def main():
@@ -674,9 +678,11 @@ def main():
 
     sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
         .process(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
-            output_type=Types.PICKLED_BYTE_ARRAY()) \
+                    output_type=Types.PICKLED_BYTE_ARRAY()) \
         .name("SIRT Operator") \
-        .set_parallelism(max(1, args.ntask_sirt))
+        .uid("sirt-operator") \
+        .set_parallelism(max(1, args.ntask_sirt)) \
+        .set_max_parallelism(max(1, args.ntask_sirt))
 
     den = sirt.flat_map(
         DenoiserOperator(args),

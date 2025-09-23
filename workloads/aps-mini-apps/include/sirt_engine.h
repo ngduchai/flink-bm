@@ -11,6 +11,16 @@
 #include "reduction_space_a.h"
 #include "sirt_recon_space.h"
 
+#include <boost/archive/binary_iarchive.hpp>
+#include <boost/archive/binary_oarchive.hpp>
+#include <boost/serialization/access.hpp>
+#include <boost/serialization/unique_ptr.hpp>    // serialize std::unique_ptr
+#include <boost/serialization/base_object.hpp>   // (used by DataRegionBareBase)
+#include <boost/serialization/vector.hpp>        // (used by DataRegionBareBase)
+
+// Forward declare your existing class template
+template <typename T> class DataRegionBareBase;
+
 struct ProcessResult {
     std::vector<float> data;  // output bytes
     std::unordered_map<std::string, std::string> meta; // output metadata
@@ -22,12 +32,12 @@ private:
     int task_id = -1;
     DataStream ds;
     trace_io::H5Metadata h5md;
-    int passes = 0;
     SIRTReconSpace* main_recon_space = nullptr;
-    DataRegion2DBareBase<float>* main_recon_replica = nullptr;
     DISPEngineBase<SIRTReconSpace, float> *engine = nullptr;
     DataRegionBareBase<float> *recon_image = nullptr;
+    DataRegion2DBareBase<float>* main_recon_replica = nullptr;
     int window_step = 1;
+    int passes = 0;
 
 public:
 
@@ -53,6 +63,49 @@ public:
 
     ~SirtEngine();
 
+};
+
+struct SirtCkpt {
+    int progress{0};
+    DataRegionBareBase<float> * recon_image; // owned & serialized
+
+    SirtCkpt() = default;
+
+    SirtCkpt(int progress_, DataRegionBareBase<float> * img)
+        : progress(progress_), recon_image(img) {}
+
+    // Construct from serialized bytes
+    explicit SirtCkpt(const std::vector<std::uint8_t>& snapshot) {
+        from_bytes_(snapshot);
+    }
+
+    // Serialize to bytes
+    std::vector<std::uint8_t> to_bytes() const {
+        std::ostringstream oss(std::ios::binary);
+        {
+            boost::archive::binary_oarchive oa(oss);
+            oa << *this;  // uses serialize() below
+        }
+        const std::string& s = oss.str();
+        return std::vector<std::uint8_t>(s.begin(), s.end());
+    }
+
+private:
+    friend class boost::serialization::access;
+
+    template <class Archive>
+    void serialize(Archive& ar, const unsigned /*version*/) {
+        ar & progress;
+        ar & *recon_image; // Boost will serialize the pointee via DataRegionBareBase<T>::serialize
+    }
+
+    void from_bytes_(const std::vector<std::uint8_t>& snapshot) {
+        std::istringstream iss(
+            std::string(reinterpret_cast<const char*>(snapshot.data()), snapshot.size()),
+            std::ios::binary);
+        boost::archive::binary_iarchive ia(iss);
+        ia >> *this;  // reconstructs progress and recon_image
+    }
 };
 
 #endif // SIRT_ENGINE_H

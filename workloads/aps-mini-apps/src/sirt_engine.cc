@@ -109,10 +109,16 @@ ProcessResult SirtEngine::process(
   //           << ", write_freq=" << write_freq 
   //           << ", data len=" << len
   //           << std::endl;
-  // if (data && len > 0) {
-  //   auto p = reinterpret_cast<const unsigned char*>(data);
-  //   std::cout << "First float value: " << data[0] << " First value: " << static_cast<unsigned>(p[0]) << std::endl;
-  // }
+  if (data && len > 0) {
+    auto p = reinterpret_cast<const unsigned char*>(data);
+    std::cout << "[Task-" << task_id << "] passes = " << passes << " -- Processing window with " 
+            << (curr_slices ? curr_slices->metadata().num_projs() : 0) 
+            << " projections, center=" << center 
+            << ", window_iter=" << window_iter 
+            << ", write_freq=" << write_freq 
+            << ", data len=" << len
+            << "First float value: " << data[0] << " First value: " << static_cast<unsigned>(p[0]) << std::endl;
+  }
 
 
   if(center !=0 && curr_slices!=nullptr)
@@ -127,6 +133,9 @@ ProcessResult SirtEngine::process(
     return result;
   }
   /// Iterate on window
+
+  // DataRegion2DBareBase<float> &recon_replica = main_recon_space->reduction_objects();
+
   for(int i=0; i<window_iter; ++i){
 
     std::cout << "[Task-" << task_id << "] passes = " << passes << " -- Iteration " << i+1 << "/" << window_iter << " on current window" << std::endl;
@@ -138,6 +147,7 @@ ProcessResult SirtEngine::process(
     // std::cout << "[Task-" << task_id << "] ---- Complete par in-place local synch ---- " << std::endl;
    
     main_recon_space->UpdateRecon(*recon_image, *main_recon_replica);
+    // main_recon_space->UpdateRecon(*recon_image, recon_replica);
     // std::cout << "[Task-" << task_id << "] ---- Complete updating reconstruction ---- " << std::endl;
     
     engine->ResetReductionSpaces(init_val);
@@ -209,13 +219,17 @@ ProcessResult SirtEngine::process(
 }
 
 std::vector<std::uint8_t> SirtEngine::snapshot() const {
-  std::vector<std::uint8_t> saved_ckpt;
+  SirtCkpt ckpt(passes, recon_image);
+  std::vector<std::uint8_t> saved_ckpt = ckpt.to_bytes();
   // TODO: replace these with actual boost serialization
   return saved_ckpt;
 }
 
 void SirtEngine::restore(const std::vector<std::uint8_t>& snapshot) {
   // TODO: replace these with actual boost deserialization
+  SirtCkpt ckpt(snapshot);
+  passes = ckpt.progress;
+  recon_image = ckpt.recon_image;
 }
 
 
@@ -233,4 +247,5 @@ SirtEngine::~SirtEngine() {
   //   delete recon_image;
   // }
 }
+
 
