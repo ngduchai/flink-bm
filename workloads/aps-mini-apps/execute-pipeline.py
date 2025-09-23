@@ -629,9 +629,9 @@ def main():
 
     env = StreamExecutionEnvironment.get_execution_environment(cfg)
     env.enable_checkpointing(10_000, CheckpointingMode.EXACTLY_ONCE)
-    env.get_checkpoint_config().enable_externalized_checkpoints(
-        'RETAIN_ON_CANCELLATION'
-    )
+    # env.get_checkpoint_config().enable_externalized_checkpoints(
+    #     'RETAIN_ON_CANCELLATION'
+    # )
 
     _ship_local_modules(env)
 
