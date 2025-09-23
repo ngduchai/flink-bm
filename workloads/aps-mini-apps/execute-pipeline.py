@@ -433,12 +433,26 @@ class SirtOperator(KeyedProcessFunction):
     def _do_snapshot(self):
         """Snapshot engine & persist to Flink state. Crash if it fails so Flink restores."""
         try:
-            # snap = bytes() # self.engine.snapshot()
+            
+            process = psutil.Process()
+            mem_before = process.memory_info().rss / 1024 / 1024  # MB
+            
+            t0 = time.time()
             snap = self.engine.snapshot()
+            snap_time = time.time() - t0
+            
             snap_bytes = snap if isinstance(snap, (bytes, bytearray)) else bytes(snap)
+            
+            t1 = time.time()
             self.snap_state.update(snap_bytes)
             self.count_state.update(self.processed_local)
-            print(f"[SirtOperator] snapshot at {self.processed_local} tuples ({len(snap_bytes)} bytes)")
+            persist_time = time.time() - t1
+            
+            mem_after = process.memory_info().rss / 1024 / 1024  # MB
+            
+            print(f"[SirtOperator] snapshot at {self.processed_local} tuples: {len(snap_bytes)} bytes, "
+                f"snap_time={snap_time:.2f}s, persist_time={persist_time:.2f}s, "
+                f"mem_before={mem_before:.1f}MB, mem_after={mem_after:.1f}MB")
         except Exception as e:
             print("[SirtOperator] engine.snapshot failed:", e, file=sys.stderr)
             traceback.print_exc()
@@ -624,8 +638,19 @@ def main():
     ckpt_dir = "file:///mnt/ckpts/"
     cfg.set_string("state.backend", "rocksdb")
     cfg.set_string("state.checkpoint-storage", "filesystem")
+    cfg.set_boolean("state.backend.rocksdb.predefined-options", "SPINNING_DISK_OPTIMIZED")
+    cfg.set_integer("state.backend.rocksdb.block.cache-size", 64 * 1024 * 1024)  # 64MB
+    cfg.set_integer("state.backend.rocksdb.write-buffer-size", 64 * 1024 * 1024)  # 64MB
+    cfg.set_integer("state.backend.rocksdb.max-write-buffer-number", 4)
     cfg.set_string("state.checkpoints.dir", ckpt_dir)
     cfg.set_string("state.savepoints.dir", ckpt_dir)
+
+    cfg.set_integer("execution.checkpointing.timeout", 600000)  # 10 minutes
+    cfg.set_integer("execution.checkpointing.min-pause", 5000)  # 5 seconds between checkpoints
+    cfg.set_integer("akka.ask.timeout", "60s")  # Increase actor timeout
+    checkpoint_config = env.get_checkpoint_config()
+    checkpoint_config.set_checkpoint_timeout(600000)  # 10 minutes
+    checkpoint_config.set_min_pause_between_checkpoints(5000)  # 5 seconds
 
     env = StreamExecutionEnvironment.get_execution_environment(cfg)
     env.enable_checkpointing(10_000, CheckpointingMode.EXACTLY_ONCE)
