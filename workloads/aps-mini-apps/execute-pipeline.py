@@ -622,14 +622,12 @@ def main():
     os.environ.setdefault("PYTHONUNBUFFERED", "1")
 
     ckpt_dir = "file:///mnt/ckpts/"
-    # cfg.set_string("state.backend", "rocksdb")
-    # cfg.set_string("state.checkpoint-storage", "filesystem")
-    # cfg.set_string("state.checkpoints.dir", ckpt_dir)
-    # cfg.set_string("state.savepoints.dir", ckpt_dir)
+    cfg.set_string("state.backend", "rocksdb")
+    cfg.set_string("state.checkpoint-storage", "filesystem")
+    cfg.set_string("state.checkpoints.dir", ckpt_dir)
+    cfg.set_string("state.savepoints.dir", ckpt_dir)
 
     env = StreamExecutionEnvironment.get_execution_environment(cfg)
-    env.set_state_backend(EmbeddedRocksDBStateBackend())
-    env.get_checkpoint_config().set_checkpoint_storage(checkpoint_dir)
     env.enable_checkpointing(10_000, CheckpointingMode.EXACTLY_ONCE)
     env.get_checkpoint_config().enable_externalized_checkpoints(
         'RETAIN_ON_CANCELLATION'
