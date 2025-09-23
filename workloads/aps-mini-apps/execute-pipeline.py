@@ -598,14 +598,6 @@ class PrintProbe(MapFunction):
               f"seq={meta.get('seq_n')} bytes={len(payload)}")
         return value
 
-class ShardTagger(RichMapFunction):
-    def open(self, ctx): self.shard = ctx.get_index_of_this_subtask()
-    def map(self, value):
-        meta, payload = value
-        m = dict(meta or {})
-        m['__shard'] = self.shard
-        return m, payload
-
 
 PY_EXEC = "/opt/micromamba/envs/aps/bin/python"
 
