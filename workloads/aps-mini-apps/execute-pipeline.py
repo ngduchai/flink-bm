@@ -433,7 +433,7 @@ class SirtOperator(KeyedProcessFunction):
     def _do_snapshot(self):
         """Snapshot engine & persist to Flink state. Crash if it fails so Flink restores."""
         try:
-            
+            import psutil
             process = psutil.Process()
             mem_before = process.memory_info().rss / 1024 / 1024  # MB
             
