@@ -414,7 +414,7 @@ class SirtOperator(KeyedProcessFunction):
             raw = self.snap_state.value()   # safe now (inside bundle)
             if raw:
                 raw_bytes = raw if isinstance(raw, (bytes, bytearray)) else bytes(raw)
-                # self.engine.restore(raw_bytes)
+                self.engine.restore(raw_bytes)
                 print(f"[SirtOperator] restored {len(raw_bytes)} bytes from state")
             cnt = self.count_state.value()
             self.processed_local = int(cnt) if cnt is not None else 0
