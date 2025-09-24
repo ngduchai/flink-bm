@@ -641,8 +641,8 @@ def main():
     checkpoint_config = env.get_checkpoint_config()
     # checkpoint_config.set_checkpoint_timeout(600000)  # 10 minutes
     # checkpoint_config.set_min_pause_between_checkpoints(5000)  # 5 seconds
-    checkpoint_config.set_checkpoint_storage(ckpt_dir)
-    checkpoint_config.set_savepoint_path(ckpt_dir)
+    # checkpoint_config.set_checkpoint_storage(ckpt_dir)
+    # checkpoint_config.set_savepoint_path(ckpt_dir)
 
     _ship_local_modules(env)
 
