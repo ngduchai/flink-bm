@@ -14,7 +14,7 @@ jobmanager:
   memory:
     process:
       size: 8192m
-restart-strategy: fixed-delay
+#restart-strategy: fixed-delay
 restart-strategy.fixed-delay.attempts: 1000
 restart-strategy.fixed-delay.delay: 100ms
 # python.executable: /usr/bin/python3
