@@ -54,6 +54,9 @@ if (( ${#INSTANCES[@]} > 0 )); then
   #idx=$(( RANDOM % ${#INSTANCES[@]} ))
   idx=0
   inst=${INSTANCES[$idx]}
+
+  echo "[$(date '+%F %T')] backing up: $ACTIVE_DIR/log/taskmanager-stdout.out"
+  cp $ACTIVE_DIR/log/taskmanager-stdout.out $ACTIVE_DIR/log/taskmanager-stdout.out.1
   
   echo "[$(date '+%F %T')] Stopping instance: $inst"
   apptainer instance stop "$inst"
