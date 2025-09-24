@@ -6,6 +6,7 @@ if [[ $# -lt 3 ]]; then
 fi
 mean_failure_interval=$1
 mean_recover_interval=$2
+log_dif=../../log
 shift 2
 flink_args=( $@ )
 # Node list from PBS or fallback
@@ -20,7 +21,7 @@ mapfile -t nodes <"$NODE_FILE"
 echo "Start inhjecting failures"
 hostindex=0
 active_dir=$PWD
-bash taskmanager-single-failure-inject-mpi.sh $mean_failure_interval $mean_recover_interval $active_dir $hostindex > log/failure-injector.out 2> log/failure-injector.err &
+bash taskmanager-single-failure-inject-mpi.sh $mean_failure_interval $mean_recover_interval $active_dir $hostindex > $log_dir/failure-injector.out 2> $log_dir/failure-injector.err &
 injector_pid=$!
 echo "Failure injector PID is $injector_pid"
 
