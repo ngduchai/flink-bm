@@ -637,7 +637,7 @@ def main():
     cfg.set_string("akka.ask.timeout", "60s")
 
     env = StreamExecutionEnvironment.get_execution_environment(cfg)
-    env.enable_checkpointing(10_000, CheckpointingMode.EXACTLY_ONCE)
+    env.enable_checkpointing(1000, CheckpointingMode.EXACTLY_ONCE)
     checkpoint_config = env.get_checkpoint_config()
     # checkpoint_config.set_checkpoint_timeout(600000)  # 10 minutes
     # checkpoint_config.set_min_pause_between_checkpoints(5000)  # 5 seconds
