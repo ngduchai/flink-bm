@@ -6,7 +6,7 @@ if [[ $# -lt 3 ]]; then
 fi
 mean_failure_interval=$1
 mean_recover_interval=$2
-log_dif=../../log
+log_dir=../../log
 shift 2
 flink_args=( $@ )
 # Node list from PBS or fallback
