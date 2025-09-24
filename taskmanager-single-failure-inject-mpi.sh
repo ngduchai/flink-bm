@@ -24,7 +24,7 @@ if (( HOST_INDEX < 0 || HOST_INDEX >= NUM_HOSTS )); then
 fi
 TARGET_HOST=$(sed -n "$((HOST_INDEX + 1))p" "$HOSTFILE")
 
-INJECTOR_SCRIPT="$(pwd)/taskmanager-single-failure-inject-local.sh"
+INJECTOR_SCRIPT="$ACTIVE_DIR/taskmanager-single-failure-inject-local.sh"
 
 echo "Launching failure injector on $TARGET_HOST in $INTERVAL seconds"
 
