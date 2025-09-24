@@ -20,8 +20,8 @@ mapfile -t nodes <"$NODE_FILE"
 # inject failure in background
 echo "Start inhjecting failures"
 hostindex=0
-active_dir=$PWD
-bash taskmanager-single-failure-inject-mpi.sh $mean_failure_interval $mean_recover_interval $active_dir $hostindex > $log_dir/failure-injector.out 2> $log_dir/failure-injector.err &
+active_dir=$PWD/../../
+bash $active_dir/taskmanager-single-failure-inject-mpi.sh $mean_failure_interval $mean_recover_interval $active_dir $hostindex > $log_dir/failure-injector.out 2> $log_dir/failure-injector.err &
 injector_pid=$!
 echo "Failure injector PID is $injector_pid"
 
