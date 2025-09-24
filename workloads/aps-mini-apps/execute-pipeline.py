@@ -413,12 +413,12 @@ class SirtOperator(KeyedProcessFunction):
             return
         try:
             raw = self.snap_state.value()   # keyed ValueState for the current key
+            self._restored = True
             if raw:
                 raw_bytes = raw if isinstance(raw, (bytes, bytearray)) else bytes(raw)
                 print(f"[SirtOperator]: found previous state: {len(raw_bytes)} bytes. Restoring")
                 self.engine.restore(raw_bytes)
                 print(f"[SirtOperator] restored {len(raw_bytes)} bytes from state")
-                self._restored = True
                 # also restore counter if present
                 cnt = self.count_state.value()
                 self.processed_local = int(cnt) if cnt is not None else self.processed_local
