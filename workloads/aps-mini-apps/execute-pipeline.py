@@ -624,16 +624,16 @@ def main():
 
     ckpt_dir = "file:///mnt/ckpts/"
     cfg.set_string("state.backend", "rocksdb")
-    cfg.set_string("state.checkpoint-storage", "filesystem")
+    cfg.set_string("execution.checkpointing.storage", "filesystem")
     cfg.set_boolean("state.backend.rocksdb.predefined-options", "SPINNING_DISK_OPTIMIZED")
     cfg.set_integer("state.backend.rocksdb.block.cache-size", 64 * 1024 * 1024)  # 64MB
     cfg.set_integer("state.backend.rocksdb.write-buffer-size", 64 * 1024 * 1024)  # 64MB
     cfg.set_integer("state.backend.rocksdb.max-write-buffer-number", 4)
     cfg.set_string("state.checkpoints.dir", ckpt_dir)
-    cfg.set_string("state.savepoints.dir", ckpt_dir)
+    cfg.set_string("execution.checkpointing.savepoint-dir", ckpt_dir)
 
-    cfg.set_integer("execution.checkpointing.timeout", 600000)  # 10 minutes
-    cfg.set_integer("execution.checkpointing.min-pause", 5000)  # 5 seconds between checkpoints
+    cfg.set_integer("execution.checkpointing.timeout", 1000)  # 10 minutes
+    cfg.set_integer("execution.checkpointing.min-pause", 1000)  # 5 seconds between checkpoints
     cfg.set_string("akka.ask.timeout", "60s")
 
     env = StreamExecutionEnvironment.get_execution_environment(cfg)
