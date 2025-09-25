@@ -647,8 +647,8 @@ def main():
     cfg.set_string("state.checkpoints.dir", ckpt_dir)
     cfg.set_string("execution.checkpointing.savepoint-dir", ckpt_dir)
 
-    cfg.set_integer("execution.checkpointing.timeout", 60000)  # 1 minutes
-    cfg.set_integer("execution.checkpointing.min-pause", 60000)  # 5 seconds between checkpoints
+    cfg.set_integer("execution.checkpointing.timeout", 100000)  # 1 minutes
+    cfg.set_integer("execution.checkpointing.min-pause", 100000)  # 5 seconds between checkpoints
     cfg.set_string("akka.ask.timeout", "60s")
 
     env = StreamExecutionEnvironment.get_execution_environment(cfg)
