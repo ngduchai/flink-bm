@@ -711,8 +711,6 @@ def main():
         .set_parallelism(max(1, args.ntask_sirt)) \
         .set_max_parallelism(max(1, args.ntask_sirt))
 
-    sirt.print().name("Denoiser Sink").set_parallelism(1)
-
     # den = sirt.flat_map(
     #     DenoiserOperator(args),
     #     output_type=Types.PICKLED_BYTE_ARRAY()
