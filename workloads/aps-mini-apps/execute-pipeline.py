@@ -649,9 +649,7 @@ def main():
     cfg.set_string("akka.ask.timeout", "60s")
 
     env = StreamExecutionEnvironment.get_execution_environment(cfg)
-
-    from pyflink.datastream import CheckpointingMode
-    from pyflink.datastream.checkpoint import ExternalizedCheckpointCleanup
+    
     env.enable_checkpointing(1000, CheckpointingMode.EXACTLY_ONCE)
     ck = env.get_checkpoint_config()
     ck.set_checkpoint_timeout(15 * 60 * 1000)          # 15 min timeout
@@ -659,9 +657,6 @@ def main():
     ck.set_min_pause_between_checkpoints(5 * 1000)     # 5s pause
     ck.enable_unaligned_checkpoints(True)              # helps under backpressure
     ck.set_aligned_checkpoint_timeout(3 * 1000)        # switch to unaligned if align >3s
-    ck.set_externalized_checkpoint_retention(
-        ExternalizedCheckpointCleanup.RETAIN_ON_CANCELLATION
-    )
 
     _ship_local_modules(env)
 
