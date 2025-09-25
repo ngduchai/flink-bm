@@ -644,7 +644,7 @@ def main():
     cfg.set_integer("state.backend.rocksdb.block.cache-size", 64 * 1024 * 1024)  # 64MB
     cfg.set_integer("state.backend.rocksdb.write-buffer-size", 64 * 1024 * 1024)  # 64MB
     cfg.set_integer("state.backend.rocksdb.max-write-buffer-number", 4)
-    cfg.set_string("state.checkpoints.dir", ckpt_dir)
+    cfg.set_string("execution.checkpointing.dir", ckpt_dir)
     cfg.set_string("execution.checkpointing.savepoint-dir", ckpt_dir)
 
     cfg.set_integer("execution.checkpointing.timeout", 1000000)  # 1 minutes
