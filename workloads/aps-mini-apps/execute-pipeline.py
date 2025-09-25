@@ -20,7 +20,7 @@ except ModuleNotFoundError:
     # when the file lives next to this script (dev/local runs)
     import TraceSerializer
 
-from pyflink.common import Types, Configuration
+from pyflink.common import Types, Configuration, Duration
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
 from pyflink.datastream.functions import FlatMapFunction, MapFunction, KeyedProcessFunction, RuntimeContext
 from pyflink.datastream.state import ValueStateDescriptor
@@ -644,19 +644,19 @@ def main():
     cfg.set_string("state.checkpoints.dir", ckpt_dir)
     cfg.set_string("execution.checkpointing.savepoint-dir", ckpt_dir)
 
-    cfg.set_integer("execution.checkpointing.timeout", 1000)  # 10 minutes
-    cfg.set_integer("execution.checkpointing.min-pause", 1000)  # 5 seconds between checkpoints
+    cfg.set_integer("execution.checkpointing.timeout", 20000)  # 1 minutes
+    cfg.set_integer("execution.checkpointing.min-pause", 20000)  # 5 seconds between checkpoints
     cfg.set_string("akka.ask.timeout", "60s")
 
     env = StreamExecutionEnvironment.get_execution_environment(cfg)
     
     env.enable_checkpointing(1000, CheckpointingMode.EXACTLY_ONCE)
     ck = env.get_checkpoint_config()
-    ck.set_checkpoint_timeout(15 * 60 * 1000)          # 15 min timeout
+    # ck.set_checkpoint_timeout(15 * 60 * 1000)          # 15 min timeout
     ck.set_max_concurrent_checkpoints(1)               # avoid overlaps
-    ck.set_min_pause_between_checkpoints(5 * 1000)     # 5s pause
+    # ck.set_min_pause_between_checkpoints(5 * 1000)     # 5s pause
     ck.enable_unaligned_checkpoints(True)              # helps under backpressure
-    ck.set_aligned_checkpoint_timeout(3 * 1000)        # switch to unaligned if align >3s
+    ck.set_aligned_checkpoint_timeout(Duration.of_seconds(3))        # switch to unaligned if align >3s
 
     _ship_local_modules(env)
 
