@@ -706,7 +706,7 @@ def main():
     sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
         .process(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
                     output_type=Types.PICKLED_BYTE_ARRAY()) \
-        .name("SIRT Operator") \
+        .name("Sirt Operator") \
         .uid("sirt-operator") \
         .set_parallelism(max(1, args.ntask_sirt)) \
         .set_max_parallelism(max(1, args.ntask_sirt))
