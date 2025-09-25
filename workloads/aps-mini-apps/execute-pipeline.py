@@ -171,12 +171,15 @@ class DaqEmitter(FlatMapFunction):
         t0 = time.time()
         indices = ordered_subset(serialized_data.shape[0], 16)
 
+        last_time = time.time()
         for it in range(self.d_iteration):
             print(f"Current iteration over dataset: {it + 1}/{self.d_iteration}")
             for index in indices:
                 time.sleep(self.proj_sleep)
                 md = {"index": int(index), "Type": "DATA", "seq_n": seq}
-                # print(f"DaqOperator: Sent: {md}, first data float: {serialized_data[index][0]}")
+                current_time = time.time()
+                print(f"DaqOperator: Sent: {md}, from last send: {current_time - last_time} first data float: {serialized_data[index][0]}")
+                last_time = time.time()
                 yield [md, serialized_data[index]]
                 tot_transfer_size += len(serialized_data[index])
                 seq += 1
