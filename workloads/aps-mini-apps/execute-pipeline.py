@@ -493,44 +493,56 @@ class DenoiserOperator(FlatMapFunction):
         self.serializer = TraceSerializer.ImageSerializer()
 
     def flat_map(self, value):
-        meta, data = value
-        # print(f"DenOperator: Received msg: {meta}, size {len(data)} bytes")
-        if len(data) == 0:
-            print("DenOperator: Receive empty message, skipping")
-            return
-        
-        # print(f"DenOperator: Received : {meta}, first data float: {data[0]}")
+        try:
+            meta, data = value
 
-        if meta.get("Type") == "FIN":
-            self.running = False
-            yield ("FIN", None)
-            return
-        if not self.running:
-            return
-        nproc_sirt = self.args.ntask_sirt
-        recon_path = self.args.logdir
-        rank_dims = (int(meta["rank_dims_0"]), int(meta["rank_dims_1"]), int(meta["rank_dims_2"]))
-        dd = np.frombuffer(data, dtype=np.float32).reshape(rank_dims)
-        iteration_stream = meta["iteration_stream"]
-        rank = meta["rank"]
+            # Handle FIN first (FIN arrives with empty payload)
+            if isinstance(meta, dict) and meta.get("Type") == "FIN":
+                self.running = False
+                yield ("FIN", None)
+                return
+            if not self.running:
+                return
 
-        if iteration_stream not in self.waiting_metadata:
-            self.waiting_metadata[iteration_stream] = {}
-            self.waiting_data[iteration_stream] = {}
-        self.waiting_metadata[iteration_stream][rank] = meta
-        self.waiting_data[iteration_stream][rank] = dd
+            if data is None or len(data) == 0:
+                print("DenoiserOperator: empty/non-data message, skipping:", meta)
+                return
 
-        # print(f"DenoiserOperator: Received msg: {meta}, size {len(data)} bytes; waiting for {len(self.waiting_metadata[iteration_stream])}/{nproc_sirt} ranks")
+            required = ("rank_dims_0","rank_dims_1","rank_dims_2","iteration_stream","rank")
+            for k in required:
+                if k not in meta:
+                    print(f"DenoiserOperator: missing meta key '{k}', got:", meta)
+                    return
 
-        if len(self.waiting_metadata[iteration_stream]) == nproc_sirt:
-            sorted_ranks = sorted(self.waiting_metadata[iteration_stream].keys())
-            sorted_data = [self.waiting_data[iteration_stream][r] for r in sorted_ranks]
-            os.makedirs(recon_path, exist_ok=True)
-            with h5py.File(os.path.join(recon_path, f"{iteration_stream}-denoised.h5"), 'w') as h5_output:
-                h5_output.create_dataset('/data', data=np.concatenate(sorted_data, axis=0))
-            del self.waiting_metadata[iteration_stream]
-            del self.waiting_data[iteration_stream]
-            yield ("DENOISED", str(iteration_stream))
+            nproc_sirt = int(self.args.ntask_sirt)
+            rank_dims = (int(meta["rank_dims_0"]), int(meta["rank_dims_1"]), int(meta["rank_dims_2"]))
+            dd = np.frombuffer(data, dtype=np.float32, count=rank_dims[0]*rank_dims[1]*rank_dims[2]).reshape(rank_dims)
+
+            iteration_stream = meta["iteration_stream"]
+            rank = int(meta["rank"])
+
+            if iteration_stream not in self.waiting_metadata:
+                self.waiting_metadata[iteration_stream] = {}
+                self.waiting_data[iteration_stream] = {}
+
+            self.waiting_metadata[iteration_stream][rank] = meta
+            self.waiting_data[iteration_stream][rank] = dd
+
+            if len(self.waiting_metadata[iteration_stream]) == nproc_sirt:
+                sorted_ranks = sorted(self.waiting_metadata[iteration_stream].keys())
+                sorted_data = [self.waiting_data[iteration_stream][r] for r in sorted_ranks]
+                os.makedirs(self.args.logdir, exist_ok=True)
+                out_path = os.path.join(self.args.logdir, f"{iteration_stream}-denoised.h5")
+                with h5py.File(out_path, 'w') as h5_output:
+                    h5_output.create_dataset('/data', data=np.concatenate(sorted_data, axis=0))
+                del self.waiting_metadata[iteration_stream]
+                del self.waiting_data[iteration_stream]
+                yield ("DENOISED", str(iteration_stream))
+        except Exception as e:
+            import sys, traceback
+            print("[DenoiserOperator] exception:", e, file=sys.stderr)
+            traceback.print_exc()
+            raise
 
 # -------------------------
 # Ship local modules, excluding vendored flatbuffers
@@ -637,12 +649,19 @@ def main():
     cfg.set_string("akka.ask.timeout", "60s")
 
     env = StreamExecutionEnvironment.get_execution_environment(cfg)
+
+    from pyflink.datastream import CheckpointingMode
+    from pyflink.datastream.checkpoint import ExternalizedCheckpointCleanup
     env.enable_checkpointing(1000, CheckpointingMode.EXACTLY_ONCE)
-    checkpoint_config = env.get_checkpoint_config()
-    # checkpoint_config.set_checkpoint_timeout(600000)  # 10 minutes
-    # checkpoint_config.set_min_pause_between_checkpoints(5000)  # 5 seconds
-    # checkpoint_config.set_checkpoint_storage(ckpt_dir)
-    # checkpoint_config.set_savepoint_path(ckpt_dir)
+    ck = env.get_checkpoint_config()
+    ck.set_checkpoint_timeout(15 * 60 * 1000)          # 15 min timeout
+    ck.set_max_concurrent_checkpoints(1)               # avoid overlaps
+    ck.set_min_pause_between_checkpoints(5 * 1000)     # 5s pause
+    ck.enable_unaligned_checkpoints(True)              # helps under backpressure
+    ck.set_aligned_checkpoint_timeout(3 * 1000)        # switch to unaligned if align >3s
+    ck.set_externalized_checkpoint_retention(
+        ExternalizedCheckpointCleanup.RETAIN_ON_CANCELLATION
+    )
 
     _ship_local_modules(env)
 
