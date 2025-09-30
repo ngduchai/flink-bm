@@ -653,6 +653,11 @@ def main():
     cfg.set_integer("execution.checkpointing.min-pause", 120000)  # 5 seconds between checkpoints
     cfg.set_string("akka.ask.timeout", "60s")
 
+    # How many records per Python bundle before sending to the JVM
+    cfg.set_integer("python.fn-execution.bundle.size", 1)   # ↑ for throughput, ↓ for latency
+    # Max time to accumulate a bundle (flush even if size not reached)
+    cfg.set_integer("python.fn-execution.bundle.time", 100)    # milliseconds
+
     env = StreamExecutionEnvironment.get_execution_environment(cfg)
     
     env.enable_checkpointing(20000, CheckpointingMode.EXACTLY_ONCE)
