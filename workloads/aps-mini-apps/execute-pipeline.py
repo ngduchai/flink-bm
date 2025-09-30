@@ -736,7 +736,7 @@ def main():
     ck.set_aligned_checkpoint_timeout(Duration.of_seconds(0))        # switch to unaligned if align >3s
 
     env.disable_operator_chaining()
-    env.set_buffer_timeout(Duration.of_millis(100))
+    env.set_buffer_timeout(Duration.of_seconds(0.1))
 
     _ship_local_modules(env)
 
