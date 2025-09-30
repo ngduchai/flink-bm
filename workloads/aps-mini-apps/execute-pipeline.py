@@ -209,9 +209,9 @@ class DaqEmitter(FlatMapFunction):
         if not self._running:
             return
 
-        # # 1) Emit a tiny warm-up record so downstream operators "open" immediately.
-        # warmup_md = {"Type": "WARMUP", "note": "pipeline warm-up", "ts": time.time()}
-        # yield [warmup_md, b"\x00"]  # 1 byte payload; downstream should ignore Type!=DATA
+        # 1) Emit a tiny warm-up record so downstream operators "open" immediately.
+        warmup_md = {"Type": "WARMUP", "note": "pipeline warm-up", "ts": time.time()}
+        yield [warmup_md, b"\x00"]  # 1 byte payload; downstream should ignore Type!=DATA
 
         if self.serialized_data is None or self.indices is None:
             print("[DaqEmitter] not initialized—no data to emit", file=sys.stderr)
@@ -325,6 +325,10 @@ class DistOperator(FlatMapFunction):
         metadata, data = value
 
          # Broadcast FIN to all SIRT ranks and include task_id so key_by works
+        if isinstance(metadata, dict) and metadata.get("Type") == "WARMUP":
+            for rank in range(int(self.args.ntask_sirt)):
+                yield [{"Type": "WARMUP", "task_id": str(rank)}, b""]
+            return
         if metadata.get("Type") == "FIN":
             for rank in range(int(self.args.ntask_sirt)):
                 yield [{"Type": "FIN", "task_id": str(rank)}, b""]
@@ -523,6 +527,10 @@ class SirtOperator(KeyedProcessFunction):
         print(f"SirtOperator: Received msg: {meta_in}, size {len(payload)} bytes")
 
         # FIN: persist one final snapshot then pass through
+        if meta_in.get("Type") == "WARMUP":
+            print(f"SirtOperator: Received warm-up msg: {meta_in}, size {len(payload)} bytes")
+            yield value
+            return
         if isinstance(meta_in, dict) and meta_in.get("Type") == "FIN":
             self._do_snapshot()
             yield value
@@ -567,6 +575,11 @@ class DenoiserOperator(FlatMapFunction):
     def flat_map(self, value):
         try:
             meta, data = value
+
+            if meta.get("Type") == "WARMUP":
+                print(f"DenoiserOperator: Received warm-up msg: {meta}, size {len(data)} bytes")
+                yield (meta, data)
+                return
 
             # Handle FIN first (FIN arrives with empty payload)
             if isinstance(meta, dict) and meta.get("Type") == "FIN":
