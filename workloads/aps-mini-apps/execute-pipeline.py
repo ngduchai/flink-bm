@@ -209,9 +209,9 @@ class DaqEmitter(FlatMapFunction):
         if not self._running:
             return
 
-        # 1) Emit a tiny warm-up record so downstream operators "open" immediately.
-        warmup_md = {"Type": "WARMUP", "note": "pipeline warm-up", "ts": time.time()}
-        yield [warmup_md, b"\x00"]  # 1 byte payload; downstream should ignore Type!=DATA
+        # # 1) Emit a tiny warm-up record so downstream operators "open" immediately.
+        # warmup_md = {"Type": "WARMUP", "note": "pipeline warm-up", "ts": time.time()}
+        # yield [warmup_md, b"\x00"]  # 1 byte payload; downstream should ignore Type!=DATA
 
         if self.serialized_data is None or self.indices is None:
             print("[DaqEmitter] not initialized—no data to emit", file=sys.stderr)
@@ -699,11 +699,7 @@ def main():
     cfg = Configuration()
     cfg.set_string("python.client.executable", PY_EXEC)
     cfg.set_string("python.executable", PY_EXEC)
-
-    cfg.set_integer("python.fn-execution.bundle.size", 1)     # flush every record
-    cfg.set_integer("python.fn-execution.bundle.time", 0)     # don't wait on time
-    cfg.set_integer("python.fn-execution.arrow.batch.size", 1)  # smallest Arrow batch
-
+    
     cfg.set_boolean("python.fn-execution.debug.logging", True)
     os.environ.setdefault("PYTHONUNBUFFERED", "1")
 
@@ -726,6 +722,8 @@ def main():
     cfg.set_integer("python.fn-execution.bundle.size", 1)   # ↑ for throughput, ↓ for latency
     # Max time to accumulate a bundle (flush even if size not reached)
     cfg.set_integer("python.fn-execution.bundle.time", 100)    # milliseconds
+    cfg.set_integer("python.fn-execution.arrow.batch.size", 1)  # smallest Arrow batch
+
 
     env = StreamExecutionEnvironment.get_execution_environment(cfg)
     
@@ -738,7 +736,7 @@ def main():
     ck.set_aligned_checkpoint_timeout(Duration.of_seconds(0))        # switch to unaligned if align >3s
 
     env.disable_operator_chaining()
-    env.set_buffer_timeout(100)  # lower latency between ops
+    env.set_buffer_timeout(Duration.of_milliseconds(100))
 
     _ship_local_modules(env)
 
