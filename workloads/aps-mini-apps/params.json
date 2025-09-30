@@ -3,7 +3,7 @@
 	"simulation_file" : "./data/tomo_00058_all_subsampled1p_s1079s1081.h5",
     "d_iteration" : 1,
     "iteration_sleep" : 1,
-    "proj_sleep" : 0.1,
+    "proj_sleep" : 1,
     "beg_sinogram" : 1000,
     "num_sinograms" : 2,
     "num_sinogram_columns" : 2560,
