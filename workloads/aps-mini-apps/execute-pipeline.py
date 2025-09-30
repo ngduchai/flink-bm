@@ -621,7 +621,8 @@ PY_EXEC = "/opt/micromamba/envs/aps/bin/python"
 
 def main():
     args = parse_arguments()
-    logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
+    # logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
+    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format="%(message)s")
 
     os.environ.setdefault("PYTHONFAULTHANDLER", "1")
     os.environ.setdefault("OMP_NUM_THREADS", "1")  # reduce native threading surprises
@@ -660,7 +661,7 @@ def main():
     ck.set_max_concurrent_checkpoints(1)               # avoid overlaps
     # ck.set_min_pause_between_checkpoints(5 * 1000)     # 5s pause
     ck.enable_unaligned_checkpoints(True)              # helps under backpressure
-    ck.set_aligned_checkpoint_timeout(Duration.of_seconds(3))        # switch to unaligned if align >3s
+    ck.set_aligned_checkpoint_timeout(Duration.of_seconds(0))        # switch to unaligned if align >3s
 
     _ship_local_modules(env)
 
