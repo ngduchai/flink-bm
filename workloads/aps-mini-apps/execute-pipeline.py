@@ -631,6 +631,7 @@ def main():
     cfg.set_integer("state.backend.rocksdb.max-write-buffer-number", 4)
     cfg.set_string("state.checkpoints.dir", ckpt_dir)
     cfg.set_string("state.savepoints.dir", ckpt_dir)
+    cfg.set_boolean("execution.checkpointing.unaligned", True)
 
     cfg.set_integer("execution.checkpointing.timeout", 600000)  # 10 minutes
     cfg.set_integer("execution.checkpointing.min-pause", 5000)  # 5 seconds between checkpoints
