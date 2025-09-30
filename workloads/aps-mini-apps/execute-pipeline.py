@@ -788,8 +788,8 @@ def main():
         .name("Sirt Operator") \
         .uid("sirt-operator") \
         .set_parallelism(max(1, args.ntask_sirt)) \
-        .set_max_parallelism(max(1, args.ntask_sirt))
-        .disable_chaining()
+        .set_max_parallelism(max(1, args.ntask_sirt)) \
+        .disable_chaining() \
         .start_new_chain()
 
 
