@@ -20,7 +20,7 @@ except ModuleNotFoundError:
     # when the file lives next to this script (dev/local runs)
     import TraceSerializer
 
-from pyflink.common import Types, Configuration
+from pyflink.common import Types, Configuration, Duration
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
 from pyflink.datastream.functions import FlatMapFunction, MapFunction, KeyedProcessFunction, RuntimeContext
 from pyflink.datastream.state import ValueStateDescriptor
@@ -171,12 +171,15 @@ class DaqEmitter(FlatMapFunction):
         t0 = time.time()
         indices = ordered_subset(serialized_data.shape[0], 16)
 
+        last_time = time.time()
         for it in range(self.d_iteration):
             print(f"Current iteration over dataset: {it + 1}/{self.d_iteration}")
             for index in indices:
                 time.sleep(self.proj_sleep)
                 md = {"index": int(index), "Type": "DATA", "seq_n": seq}
-                # print(f"DaqOperator: Sent: {md}, first data float: {serialized_data[index][0]}")
+                current_time = time.time()
+                print(f"DaqOperator: Sent: {md}, from last send: {current_time - last_time} first data float: {serialized_data[index][0]}")
+                last_time = time.time()
                 yield [md, serialized_data[index]]
                 tot_transfer_size += len(serialized_data[index])
                 seq += 1
@@ -413,12 +416,12 @@ class SirtOperator(KeyedProcessFunction):
             return
         try:
             raw = self.snap_state.value()   # keyed ValueState for the current key
+            self._restored = True
             if raw:
                 raw_bytes = raw if isinstance(raw, (bytes, bytearray)) else bytes(raw)
                 print(f"[SirtOperator]: found previous state: {len(raw_bytes)} bytes. Restoring")
                 self.engine.restore(raw_bytes)
                 print(f"[SirtOperator] restored {len(raw_bytes)} bytes from state")
-                self._restored = True
                 # also restore counter if present
                 cnt = self.count_state.value()
                 self.processed_local = int(cnt) if cnt is not None else self.processed_local
@@ -448,7 +451,7 @@ class SirtOperator(KeyedProcessFunction):
     def process_element(self, value, ctx):
         meta_in, payload = value
         self._maybe_restore()
-        # print(f"SirtOperator: Received msg: {meta_in}, size {len(payload)} bytes")
+        print(f"SirtOperator: Received msg: {meta_in}, size {len(payload)} bytes")
 
         # FIN: persist one final snapshot then pass through
         if isinstance(meta_in, dict) and meta_in.get("Type") == "FIN":
@@ -493,44 +496,56 @@ class DenoiserOperator(FlatMapFunction):
         self.serializer = TraceSerializer.ImageSerializer()
 
     def flat_map(self, value):
-        meta, data = value
-        # print(f"DenOperator: Received msg: {meta}, size {len(data)} bytes")
-        if len(data) == 0:
-            print("DenOperator: Receive empty message, skipping")
-            return
-        
-        # print(f"DenOperator: Received : {meta}, first data float: {data[0]}")
+        try:
+            meta, data = value
 
-        if meta.get("Type") == "FIN":
-            self.running = False
-            yield ("FIN", None)
-            return
-        if not self.running:
-            return
-        nproc_sirt = self.args.ntask_sirt
-        recon_path = self.args.logdir
-        rank_dims = (int(meta["rank_dims_0"]), int(meta["rank_dims_1"]), int(meta["rank_dims_2"]))
-        dd = np.frombuffer(data, dtype=np.float32).reshape(rank_dims)
-        iteration_stream = meta["iteration_stream"]
-        rank = meta["rank"]
+            # Handle FIN first (FIN arrives with empty payload)
+            if isinstance(meta, dict) and meta.get("Type") == "FIN":
+                self.running = False
+                yield ("FIN", None)
+                return
+            if not self.running:
+                return
 
-        if iteration_stream not in self.waiting_metadata:
-            self.waiting_metadata[iteration_stream] = {}
-            self.waiting_data[iteration_stream] = {}
-        self.waiting_metadata[iteration_stream][rank] = meta
-        self.waiting_data[iteration_stream][rank] = dd
+            if data is None or len(data) == 0:
+                print("DenoiserOperator: empty/non-data message, skipping:", meta)
+                return
 
-        # print(f"DenoiserOperator: Received msg: {meta}, size {len(data)} bytes; waiting for {len(self.waiting_metadata[iteration_stream])}/{nproc_sirt} ranks")
+            required = ("rank_dims_0","rank_dims_1","rank_dims_2","iteration_stream","rank")
+            for k in required:
+                if k not in meta:
+                    print(f"DenoiserOperator: missing meta key '{k}', got:", meta)
+                    return
 
-        if len(self.waiting_metadata[iteration_stream]) == nproc_sirt:
-            sorted_ranks = sorted(self.waiting_metadata[iteration_stream].keys())
-            sorted_data = [self.waiting_data[iteration_stream][r] for r in sorted_ranks]
-            os.makedirs(recon_path, exist_ok=True)
-            with h5py.File(os.path.join(recon_path, f"{iteration_stream}-denoised.h5"), 'w') as h5_output:
-                h5_output.create_dataset('/data', data=np.concatenate(sorted_data, axis=0))
-            del self.waiting_metadata[iteration_stream]
-            del self.waiting_data[iteration_stream]
-            yield ("DENOISED", str(iteration_stream))
+            nproc_sirt = int(self.args.ntask_sirt)
+            rank_dims = (int(meta["rank_dims_0"]), int(meta["rank_dims_1"]), int(meta["rank_dims_2"]))
+            dd = np.frombuffer(data, dtype=np.float32, count=rank_dims[0]*rank_dims[1]*rank_dims[2]).reshape(rank_dims)
+
+            iteration_stream = meta["iteration_stream"]
+            rank = int(meta["rank"])
+
+            if iteration_stream not in self.waiting_metadata:
+                self.waiting_metadata[iteration_stream] = {}
+                self.waiting_data[iteration_stream] = {}
+
+            self.waiting_metadata[iteration_stream][rank] = meta
+            self.waiting_data[iteration_stream][rank] = dd
+
+            if len(self.waiting_metadata[iteration_stream]) == nproc_sirt:
+                sorted_ranks = sorted(self.waiting_metadata[iteration_stream].keys())
+                sorted_data = [self.waiting_data[iteration_stream][r] for r in sorted_ranks]
+                os.makedirs(self.args.logdir, exist_ok=True)
+                out_path = os.path.join(self.args.logdir, f"{iteration_stream}-denoised.h5")
+                with h5py.File(out_path, 'w') as h5_output:
+                    h5_output.create_dataset('/data', data=np.concatenate(sorted_data, axis=0))
+                del self.waiting_metadata[iteration_stream]
+                del self.waiting_data[iteration_stream]
+                yield ("DENOISED", str(iteration_stream))
+        except Exception as e:
+            import sys, traceback
+            print("[DenoiserOperator] exception:", e, file=sys.stderr)
+            traceback.print_exc()
+            raise
 
 # -------------------------
 # Ship local modules, excluding vendored flatbuffers
@@ -623,8 +638,8 @@ def main():
     os.environ.setdefault("PYTHONUNBUFFERED", "1")
 
     ckpt_dir = "file:///mnt/ckpts/"
-    cfg.set_string("state.backend", "rocksdb")
-    cfg.set_string("state.checkpoint-storage", "filesystem")
+    cfg.set_string("state.backend.type", "rocksdb")
+    cfg.set_string("execution.checkpointing.storage", "filesystem")
     cfg.set_boolean("state.backend.rocksdb.predefined-options", "SPINNING_DISK_OPTIMIZED")
     cfg.set_integer("state.backend.rocksdb.block.cache-size", 64 * 1024 * 1024)  # 64MB
     cfg.set_integer("state.backend.rocksdb.write-buffer-size", 64 * 1024 * 1024)  # 64MB
@@ -633,15 +648,19 @@ def main():
     cfg.set_string("state.savepoints.dir", ckpt_dir)
     cfg.set_boolean("execution.checkpointing.unaligned", True)
 
-    cfg.set_integer("execution.checkpointing.timeout", 600000)  # 10 minutes
-    cfg.set_integer("execution.checkpointing.min-pause", 5000)  # 5 seconds between checkpoints
+    cfg.set_integer("execution.checkpointing.timeout", 60000)  # 1 minutes
+    cfg.set_integer("execution.checkpointing.min-pause", 120000)  # 5 seconds between checkpoints
     cfg.set_string("akka.ask.timeout", "60s")
 
     env = StreamExecutionEnvironment.get_execution_environment(cfg)
-    env.enable_checkpointing(10_000, CheckpointingMode.EXACTLY_ONCE)
-    checkpoint_config = env.get_checkpoint_config()
-    checkpoint_config.set_checkpoint_timeout(600000)  # 10 minutes
-    checkpoint_config.set_min_pause_between_checkpoints(5000)  # 5 seconds
+    
+    env.enable_checkpointing(20000, CheckpointingMode.EXACTLY_ONCE)
+    ck = env.get_checkpoint_config()
+    # ck.set_checkpoint_timeout(15 * 60 * 1000)          # 15 min timeout
+    ck.set_max_concurrent_checkpoints(1)               # avoid overlaps
+    # ck.set_min_pause_between_checkpoints(5 * 1000)     # 5s pause
+    ck.enable_unaligned_checkpoints(True)              # helps under backpressure
+    ck.set_aligned_checkpoint_timeout(Duration.of_seconds(3))        # switch to unaligned if align >3s
 
     _ship_local_modules(env)
 
@@ -688,17 +707,17 @@ def main():
     sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
         .process(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
                     output_type=Types.PICKLED_BYTE_ARRAY()) \
-        .name("SIRT Operator") \
+        .name("Sirt Operator") \
         .uid("sirt-operator") \
         .set_parallelism(max(1, args.ntask_sirt)) \
         .set_max_parallelism(max(1, args.ntask_sirt))
 
-    den = sirt.flat_map(
-        DenoiserOperator(args),
-        output_type=Types.PICKLED_BYTE_ARRAY()
-    ).name("Denoiser Operator").set_parallelism(1)
+    # den = sirt.flat_map(
+    #     DenoiserOperator(args),
+    #     output_type=Types.PICKLED_BYTE_ARRAY()
+    # ).name("Denoiser Operator").set_parallelism(1)
 
-    den.print().name("Denoiser Sink").set_parallelism(1)
+    # den.print().name("Denoiser Sink").set_parallelism(1)
 
     env.execute("APS Mini-Apps Pipeline")
 
