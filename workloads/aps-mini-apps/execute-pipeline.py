@@ -135,9 +135,13 @@ def ordered_subset(max_ind, nelem):
 # -------------------------
 # DAQ emitter (yield-style flatMap)
 # -------------------------
+# -------------------------
+# DAQ emitter (preload in open(), warm-up first)
+# -------------------------
 class DaqEmitter(FlatMapFunction):
     def __init__(self, *, input_f, beg_sinogram, num_sinograms, seq0,
-                 iteration_sleep, d_iteration, proj_sleep, logdir, save_after_serialize=False):
+                 iteration_sleep, d_iteration, proj_sleep, logdir,
+                 save_after_serialize=False):
         super().__init__()
         self.input_f = input_f
         self.beg_sinogram = int(beg_sinogram)
@@ -149,49 +153,114 @@ class DaqEmitter(FlatMapFunction):
         self.logdir = logdir
         self.save_after_serialize = bool(save_after_serialize)
 
+        # set in open()
+        self.serialized_data = None   # np.ndarray(dtype=object) of bytes
+        self.indices = None           # np.ndarray of ints (ordering across dataset)
+        self._running = True
+
+    def open(self, _ctx: RuntimeContext):
+        """Load & serialize once so the first record can flow immediately."""
+        try:
+            print(f"[DaqEmitter.open] preparing dataset from: {self.input_f}")
+            t0 = time.time()
+
+            if str(self.input_f).endswith('.npy'):
+                self.serialized_data = np.load(self.input_f, allow_pickle=True)
+                print(f"[DaqEmitter.open] loaded .npy pre-serialized data "
+                      f"({self.serialized_data.shape[0]} messages) in {time.time()-t0:.2f}s")
+            else:
+                idata, flat, dark, itheta = setup_simulation_data(
+                    self.input_f, self.beg_sinogram, self.num_sinograms
+                )
+                self.serialized_data = serialize_dataset(idata, flat, dark, itheta)
+                if self.save_after_serialize:
+                    np.save(f"{self.input_f}.npy", self.serialized_data)
+                # free large arrays ASAP
+                del idata, flat, dark
+
+                print(f"[DaqEmitter.open] serialized {self.serialized_data.shape[0]} messages "
+                      f"in {time.time()-t0:.2f}s")
+
+            # Precompute the access order once (keeps per-record overhead tiny)
+            self.indices = ordered_subset(self.serialized_data.shape[0], 16)
+            print(f"[DaqEmitter.open] precomputed index order of length {len(self.indices)}")
+
+            # Optional initial pacing before we emit the first real element
+            if self.iteration_sleep > 0:
+                print(f"[DaqEmitter.open] initial iteration_sleep={self.iteration_sleep}s")
+                time.sleep(self.iteration_sleep)
+
+        except Exception as e:
+            print("[DaqEmitter.open] failed to prepare dataset:", e, file=sys.stderr)
+            traceback.print_exc()
+            # Let the job fail early—downstream will restore on restart
+            raise
+
+    def close(self):
+        """Free references to help GC in long sessions."""
+        self.serialized_data = None
+        self.indices = None
+
+    # Cooperative cancellation support (Flink may call this on cancel)
+    def cancel(self):
+        self._running = False
+
     def flat_map(self, _ignored):
+        if not self._running:
+            return
+
+        # 1) Emit a tiny warm-up record so downstream operators "open" immediately.
+        warmup_md = {"Type": "WARMUP", "note": "pipeline warm-up", "ts": time.time()}
+        yield [warmup_md, b"\x00"]  # 1 byte payload; downstream should ignore Type!=DATA
+
+        if self.serialized_data is None or self.indices is None:
+            print("[DaqEmitter] not initialized—no data to emit", file=sys.stderr)
+            return
+
         seq = self.seq0
-
-        if self.iteration_sleep > 0:
-            time.sleep(self.iteration_sleep)
-
-        # Load/prepare data
-        if str(self.input_f).endswith('.npy'):
-            serialized_data = np.load(self.input_f, allow_pickle=True)
-        else:
-            idata, flat, dark, itheta = setup_simulation_data(
-                self.input_f, self.beg_sinogram, self.num_sinograms
-            )
-            serialized_data = serialize_dataset(idata, flat, dark, itheta)
-            if self.save_after_serialize:
-                np.save(f"{self.input_f}.npy", serialized_data)
-            del idata, flat, dark
-
         tot_transfer_size = 0
-        t0 = time.time()
-        indices = ordered_subset(serialized_data.shape[0], 16)
+        t_start = time.time()
+        last_send = t_start
 
-        last_time = time.time()
-        for it in range(self.d_iteration):
-            print(f"Current iteration over dataset: {it + 1}/{self.d_iteration}")
-            for index in indices:
-                time.sleep(self.proj_sleep)
-                md = {"index": int(index), "Type": "DATA", "seq_n": seq}
-                current_time = time.time()
-                print(f"DaqOperator: Sent: {md}, from last send: {current_time - last_time} first data float: {serialized_data[index][0]}")
-                last_time = time.time()
-                yield [md, serialized_data[index]]
-                tot_transfer_size += len(serialized_data[index])
-                seq += 1
+        # 2) Stream real data
+        try:
+            for it in range(self.d_iteration):
+                if not self._running:
+                    break
+                print(f"[DaqEmitter] iteration {it+1}/{self.d_iteration}")
 
-        # End-of-stream marker
-        yield [{"Type": "FIN"}, bytearray(1)]
+                for index in self.indices:
+                    if not self._running:
+                        break
 
-        elapsed = time.time() - t0
-        tot_MiBs = (tot_transfer_size * 1.0) / 2 ** 20
-        nproj = self.d_iteration * len(serialized_data)
-        print(f"Sent projections: {nproj}; Size (MiB): {tot_MiBs:.2f}; Elapsed (s): {elapsed:.2f}")
-        print(f"Rate (MiB/s): {tot_MiBs / elapsed:.2f}; (msg/s): {nproj / elapsed:.2f}")
+                    # pacing for your simulator
+                    if self.proj_sleep > 0:
+                        time.sleep(self.proj_sleep)
+
+                    md = {"index": int(index), "Type": "DATA", "seq_n": seq}
+                    payload = self.serialized_data[index]
+
+                    # minimal, useful log
+                    now = time.time()
+                    print(f"[DaqEmitter] send seq={seq} idx={index} dt={now-last_send:.3f}s "
+                          f"size={len(payload)}")
+                    last_send = now
+
+                    yield [md, payload]
+                    tot_transfer_size += len(payload)
+                    seq += 1
+
+        finally:
+            # 3) FIN marker so downstream can flush/close cleanly
+            yield [{"Type": "FIN"}, b""]
+
+            elapsed = max(1e-9, time.time() - t_start)
+            nproj = (self.d_iteration * len(self.indices)) if self._running else (seq - self.seq0)
+            tot_MiB = tot_transfer_size / (1024.0 ** 2)
+            print(f"[DaqEmitter] sent={nproj} msgs size={tot_MiB:.2f} MiB "
+                  f"elapsed={elapsed:.2f}s rate={tot_MiB/elapsed:.2f} MiB/s "
+                  f"msgs/s={nproj/elapsed:.2f}")
+
 
 # -------------------------
 # FlatMap distributor (yield-style)
@@ -668,6 +737,9 @@ def main():
     ck.enable_unaligned_checkpoints(True)              # helps under backpressure
     ck.set_aligned_checkpoint_timeout(Duration.of_seconds(0))        # switch to unaligned if align >3s
 
+    env.disable_operator_chaining()
+    env.set_buffer_timeout_millis(100)  # lower latency between ops
+
     _ship_local_modules(env)
 
     for whl in glob.glob("./dist/sirt_ops-0.2.0-*.whl"):
@@ -717,6 +789,9 @@ def main():
         .uid("sirt-operator") \
         .set_parallelism(max(1, args.ntask_sirt)) \
         .set_max_parallelism(max(1, args.ntask_sirt))
+        .disable_chaining()
+        .start_new_chain()
+
 
     den = sirt.flat_map(
         DenoiserOperator(args),
