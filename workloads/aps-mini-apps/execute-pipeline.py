@@ -757,14 +757,14 @@ def main():
             save_after_serialize=False
         ),
         output_type=Types.PICKLED_BYTE_ARRAY()
-    ).name("DAQ Emitter").set_parallelism(1)
+    ).name("DAQ Emitter").set_parallelism(1).disable_chaining().start_new_chain()
 
     # probe = daq.map(VersionProbe(), output_type=Types.PICKLED_BYTE_ARRAY()).name("Version Probe")
     # dist = probe.flat_map(
     dist = daq.flat_map(
         DistOperator(args),
         output_type=Types.PICKLED_BYTE_ARRAY()
-    ).name("Data Distributor").set_parallelism(1)
+    ).name("Data Distributor").set_parallelism(1).disable_chaining().start_new_chain()
 
     # probe = dist.key_by(
     #     task_key_selector,
@@ -794,7 +794,7 @@ def main():
     den = sirt.flat_map(
         DenoiserOperator(args),
         output_type=Types.PICKLED_BYTE_ARRAY()
-    ).name("Denoiser Operator").set_parallelism(1)
+    ).name("Denoiser Operator").set_parallelism(1).disable_chaining().start_new_chain()
 
     den.print().name("Denoiser Sink").set_parallelism(1)
 
