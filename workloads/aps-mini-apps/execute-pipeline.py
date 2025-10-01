@@ -25,6 +25,7 @@ from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
 from pyflink.datastream.functions import FlatMapFunction, MapFunction, KeyedProcessFunction, RuntimeContext
 from pyflink.datastream.state import ValueStateDescriptor
 from pyflink.datastream.state_backend import EmbeddedRocksDBStateBackend
+from pyflink.common import RuntimeExecutionMode
 
 
 # -------------------------
@@ -721,7 +722,7 @@ def main():
 
     # Make sure shuffles are pipelined in streaming
     # (AUTO is fine in streaming, but we lock it in)
-    cfg.set_string("execution.batch-shuffle-mode", "ALL_EXCHANGES_PIPELINED")
+    # cfg.set_string("execution.batch-shuffle-mode", "ALL_EXCHANGES_PIPELINED")
 
     ckpt_dir = "file:///mnt/ckpts/"
     cfg.set_string("state.backend.type", "rocksdb")
@@ -746,6 +747,8 @@ def main():
 
 
     env = StreamExecutionEnvironment.get_execution_environment(cfg)
+
+    env.set_runtime_mode(RuntimeExecutionMode.STREAMING)
     
     env.enable_checkpointing(20000, CheckpointingMode.EXACTLY_ONCE)
     ck = env.get_checkpoint_config()
