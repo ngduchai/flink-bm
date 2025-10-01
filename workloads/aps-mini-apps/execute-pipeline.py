@@ -794,17 +794,13 @@ def main():
 
     ddl = f"""
     CREATE TEMPORARY TABLE tick_src (
-    seq BIGINT,
-    ts TIMESTAMP_LTZ(3),
-    WATERMARK FOR ts AS ts
+    seq BIGINT
     ) WITH (
     'connector' = 'datagen',
     'rows-per-second' = '{rows_per_second}',
-    -- Drive a monotonically increasing counter:
     'fields.seq.kind' = 'sequence',
-    'fields.seq.start' = '0'
-    {"," if total_rows is not None else ""}
-    {f"'number-of-rows' = '{total_rows}'" if total_rows is not None else ""}
+    'fields.seq.start' = '0',
+    'fields.seq.end' = '{total_rows - 1}'
     )
     """
     t_env.execute_sql(ddl)
