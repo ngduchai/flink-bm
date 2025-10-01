@@ -779,7 +779,7 @@ def main():
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("DAQ Emitter").set_parallelism(1) \
         .disable_chaining().start_new_chain() \
-        .set_slot_sharing_group("daq")
+        .slot_sharing_group("daq")
 
     # probe = daq.map(VersionProbe(), output_type=Types.PICKLED_BYTE_ARRAY()).name("Version Probe")
     # dist = probe.flat_map(
@@ -788,7 +788,7 @@ def main():
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("Data Distributor").set_parallelism(1) \
         .disable_chaining().start_new_chain() \
-        .set_slot_sharing_group("dist")
+        .slot_sharing_group("dist")
 
     # probe = dist.key_by(
     #     task_key_selector,
@@ -813,7 +813,7 @@ def main():
         .set_max_parallelism(max(1, args.ntask_sirt)) \
         .disable_chaining() \
         .start_new_chain() \
-        .set_slot_sharing_group("sirt")
+        .slot_sharing_group("sirt")
 
 
     den = sirt.flat_map(
@@ -821,7 +821,7 @@ def main():
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("Denoiser Operator").set_parallelism(1) \
         .disable_chaining().start_new_chain() \
-        .set_slot_sharing_group("den")
+        .slot_sharing_group("den")
 
     den.print().name("Denoiser Sink").set_parallelism(1)
 
