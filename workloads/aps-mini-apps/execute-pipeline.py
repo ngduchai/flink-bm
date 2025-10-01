@@ -225,7 +225,8 @@ class DaqEmitter(FlatMapFunction):
         if self.warmup == False:
             # 1) Emit a tiny warm-up record so downstream operators "open" immediately.
             warmup_md = {"Type": "WARMUP", "note": "pipeline warm-up", "ts": time.time()}
-            return [warmup_md, b"\x00"]  # 1 byte payload; downstream should ignore Type!=DATA
+            yield [warmup_md, b"\x00"]  # 1 byte payload; downstream should ignore Type!=DATA
+            return
 
         if self.serialized_data is None or self.indices is None:
             print("[DaqEmitter] not initialized—no data to emit", file=sys.stderr)
@@ -267,7 +268,7 @@ class DaqEmitter(FlatMapFunction):
                 self.index = 0
                 self.it += 1
 
-            return [md, payload]
+            yield [md, payload]
 
 # -------------------------
 # FlatMap distributor (yield-style)
