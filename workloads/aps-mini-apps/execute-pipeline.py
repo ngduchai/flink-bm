@@ -258,9 +258,9 @@ class DaqEmitter(FlatMapFunction):
 
             # minimal, useful log
             now = time.time()
-            print(f"[DaqEmitter] send seq={self.seq} idx={self.index} dt={now-last_send:.3f}s "
+            print(f"[DaqEmitter] send seq={self.seq} idx={self.index} dt={now-self.last_send:.3f}s "
                     f"size={len(payload)}")
-            last_send = now
+            self.last_send = now
 
             self.tot_transfer_size += len(payload)
             self.seq += 1
