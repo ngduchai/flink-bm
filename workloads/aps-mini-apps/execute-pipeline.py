@@ -789,7 +789,7 @@ def main():
     # kick = env.from_collection(range(-2, args.d_iteration*args.num_sinogram_projections), type_info=Types.INT())
     kick = env.add_source(
         TickerSource(
-            period_ms=args.period_ms,
+            period_ms=args.proj_sleep,
             max_count=args.d_iteration*args.num_sinogram_projections
         ),
         type_info=Types.INT())
