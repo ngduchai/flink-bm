@@ -37,7 +37,7 @@ def parse_arguments():
     p.add_argument('--ntask_sirt', type=int, default=1)
     p.add_argument('--simulation_file')
     p.add_argument('--d_iteration', type=int, default=1)
-    p.add_argument('--num_projection', type=int, default=1)
+    p.add_argument('--num_projections', type=int, default=1)
     p.add_argument('--iteration_sleep', type=float, default=0.0)
     p.add_argument('--proj_sleep', type=float, default=0.6)
     p.add_argument('--beg_sinogram', type=int, default=0)
