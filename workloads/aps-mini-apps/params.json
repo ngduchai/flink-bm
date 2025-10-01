@@ -1,7 +1,7 @@
 {
     "ntask_sirt" : 1,
 	"simulation_file" : "./data/tomo_00058_all_subsampled1p_s1079s1081.h5",
-    "num_projections" : 1500,
+    "num_sinogram_projections" : 1500,
     "d_iteration" : 1,
     "iteration_sleep" : 1,
     "proj_sleep" : 1,
