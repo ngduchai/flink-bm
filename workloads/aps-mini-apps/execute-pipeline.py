@@ -789,6 +789,8 @@ def main():
 
     rows_per_second = max(1, int(round(1.0 / max(args.proj_sleep, 1e-9)))) 
     total_rows = args.d_iteration * args.num_sinogram_projections + 2 #  extra for warmup and FIN
+    t_env = StreamTableEnvironment.create(stream_execution_environment=env)
+
 
     ddl = f"""
     CREATE TEMPORARY TABLE tick_src (
@@ -805,9 +807,9 @@ def main():
     {f"'number-of-rows' = '{total_rows}'" if total_rows is not None else ""}
     )
     """
-    env.execute_sql(ddl)
+    t_env.execute_sql(ddl)
 
-    kick = env.to_data_stream(env.from_path("tick_src")) \
+    kick = t_env.to_data_stream(t_env.from_path("tick_src")) \
             .map(lambda row: int(row[0]), output_type=Types.LONG()) \
             .name("Ticker") \
             .set_parallelism(1) \
