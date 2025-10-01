@@ -159,6 +159,16 @@ class DaqEmitter(FlatMapFunction):
         self.indices = None           # np.ndarray of ints (ordering across dataset)
         self._running = True
 
+        self.warmup = False
+        self.current_index = 0
+
+        self.seq = self.seq0
+        self.tot_transfer_size = 0
+        self.t_start = time.time()
+        self.last_send = self.t_start
+        self.index = 0
+        self.it = 0
+
     def open(self, _ctx: RuntimeContext):
         """Load & serialize once so the first record can flow immediately."""
         try:
@@ -209,59 +219,53 @@ class DaqEmitter(FlatMapFunction):
     def flat_map(self, _ignored):
         if not self._running:
             return
-
-        # 1) Emit a tiny warm-up record so downstream operators "open" immediately.
-        warmup_md = {"Type": "WARMUP", "note": "pipeline warm-up", "ts": time.time()}
-        yield [warmup_md, b"\x00"]  # 1 byte payload; downstream should ignore Type!=DATA
+        
+        if self.warmup == False:
+            # 1) Emit a tiny warm-up record so downstream operators "open" immediately.
+            warmup_md = {"Type": "WARMUP", "note": "pipeline warm-up", "ts": time.time()}
+            return [warmup_md, b"\x00"]  # 1 byte payload; downstream should ignore Type!=DATA
 
         if self.serialized_data is None or self.indices is None:
             print("[DaqEmitter] not initialized—no data to emit", file=sys.stderr)
             return
 
-        seq = self.seq0
-        tot_transfer_size = 0
-        t_start = time.time()
-        last_send = t_start
-
         # 2) Stream real data
-        try:
-            for it in range(self.d_iteration):
-                if not self._running:
-                    break
-                print(f"[DaqEmitter] iteration {it+1}/{self.d_iteration}")
-
-                for index in self.indices:
-                    if not self._running:
-                        break
-
-                    # pacing for your simulator
-                    if self.proj_sleep > 0:
-                        time.sleep(self.proj_sleep)
-
-                    md = {"index": int(index), "Type": "DATA", "seq_n": seq}
-                    payload = self.serialized_data[index]
-
-                    # minimal, useful log
-                    now = time.time()
-                    print(f"[DaqEmitter] send seq={seq} idx={index} dt={now-last_send:.3f}s "
-                          f"size={len(payload)}")
-                    last_send = now
-
-                    yield [md, payload]
-                    tot_transfer_size += len(payload)
-                    seq += 1
-
-        finally:
+        if self.it == self.d_iteration:
+            self._running = True
             # 3) FIN marker so downstream can flush/close cleanly
             yield [{"Type": "FIN"}, b""]
 
-            elapsed = max(1e-9, time.time() - t_start)
-            nproj = (self.d_iteration * len(self.indices)) if self._running else (seq - self.seq0)
-            tot_MiB = tot_transfer_size / (1024.0 ** 2)
+            elapsed = max(1e-9, time.time() - self.t_start)
+            nproj = (self.d_iteration * len(self.indices)) if self._running else (self.seq - self.seq0)
+            tot_MiB = self.tot_transfer_size / (1024.0 ** 2)
             print(f"[DaqEmitter] sent={nproj} msgs size={tot_MiB:.2f} MiB "
                   f"elapsed={elapsed:.2f}s rate={tot_MiB/elapsed:.2f} MiB/s "
                   f"msgs/s={nproj/elapsed:.2f}")
 
+        else:
+            if self.index == 0:
+                print(f"[DaqEmitter] iteration {self.it+1}/{self.d_iteration}")
+
+            if self.proj_sleep > 0:
+                time.sleep(self.proj_sleep)
+
+            md = {"index": int(self.index), "Type": "DATA", "seq_n": self.seq}
+            payload = self.serialized_data[self.index]
+
+            # minimal, useful log
+            now = time.time()
+            print(f"[DaqEmitter] send seq={self.seq} idx={self.index} dt={now-last_send:.3f}s "
+                    f"size={len(payload)}")
+            last_send = now
+
+            self.tot_transfer_size += len(payload)
+            self.seq += 1
+            self.index += 1
+            if self.index == self.indices:
+                self.index = 0
+                self.it += 1
+
+            return [md, payload]
 
 # -------------------------
 # FlatMap distributor (yield-style)
@@ -766,7 +770,7 @@ def main():
     for whl in glob.glob("./dist/sirt_ops-0.2.0-*.whl"):
         env.add_python_file(whl)
 
-    kick = env.from_collection([0], type_info=Types.INT())
+    kick = env.from_collection(range(-2, args.d_iteration*args.num_projections), type_info=Types.INT())
     daq = kick.flat_map(
         DaqEmitter(
             input_f=args.simulation_file,
