@@ -716,6 +716,13 @@ def main():
     cfg.set_boolean("python.fn-execution.debug.logging", True)
     os.environ.setdefault("PYTHONUNBUFFERED", "1")
 
+    # Always stream (avoid batch blocking behavior)
+    cfg.set_string("execution.runtime-mode", "STREAMING")
+
+    # Make sure shuffles are pipelined in streaming
+    # (AUTO is fine in streaming, but we lock it in)
+    cfg.set_string("execution.batch-shuffle-mode", "ALL_EXCHANGES_PIPELINED")
+
     ckpt_dir = "file:///mnt/ckpts/"
     cfg.set_string("state.backend.type", "rocksdb")
     cfg.set_string("execution.checkpointing.storage", "filesystem")
@@ -770,14 +777,18 @@ def main():
             save_after_serialize=False
         ),
         output_type=Types.PICKLED_BYTE_ARRAY()
-    ).name("DAQ Emitter").set_parallelism(1).disable_chaining().start_new_chain()
+    ).name("DAQ Emitter").set_parallelism(1) \
+        .disable_chaining().start_new_chain() \
+        .set_slot_sharing_group("daq")
 
     # probe = daq.map(VersionProbe(), output_type=Types.PICKLED_BYTE_ARRAY()).name("Version Probe")
     # dist = probe.flat_map(
     dist = daq.flat_map(
         DistOperator(args),
         output_type=Types.PICKLED_BYTE_ARRAY()
-    ).name("Data Distributor").set_parallelism(1).disable_chaining().start_new_chain()
+    ).name("Data Distributor").set_parallelism(1) \
+        .disable_chaining().start_new_chain() \
+        .set_slot_sharing_group("dist")
 
     # probe = dist.key_by(
     #     task_key_selector,
@@ -801,13 +812,16 @@ def main():
         .set_parallelism(max(1, args.ntask_sirt)) \
         .set_max_parallelism(max(1, args.ntask_sirt)) \
         .disable_chaining() \
-        .start_new_chain()
+        .start_new_chain() \
+        .set_slot_sharing_group("sirt")
 
 
     den = sirt.flat_map(
         DenoiserOperator(args),
         output_type=Types.PICKLED_BYTE_ARRAY()
-    ).name("Denoiser Operator").set_parallelism(1).disable_chaining().start_new_chain()
+    ).name("Denoiser Operator").set_parallelism(1) \
+        .disable_chaining().start_new_chain() \
+        .set_slot_sharing_group("den")
 
     den.print().name("Denoiser Sink").set_parallelism(1)
 
