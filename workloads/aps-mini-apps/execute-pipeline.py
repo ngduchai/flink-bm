@@ -265,7 +265,7 @@ class DaqEmitter(FlatMapFunction):
             self.tot_transfer_size += len(payload)
             self.seq += 1
             self.index += 1
-            if self.index == self.indices:
+            if self.index == len(self.indices):
                 self.index = 0
                 self.it += 1
 
