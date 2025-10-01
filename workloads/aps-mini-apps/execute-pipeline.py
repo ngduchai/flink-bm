@@ -25,7 +25,7 @@ from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
 from pyflink.datastream.functions import FlatMapFunction, MapFunction, KeyedProcessFunction, RuntimeContext
 from pyflink.datastream.state import ValueStateDescriptor
 from pyflink.datastream.state_backend import EmbeddedRocksDBStateBackend
-from pyflink.common import RuntimeExecutionMode
+from pyflink.datastream.execution_mode import RuntimeExecutionMode
 
 
 # -------------------------
