@@ -27,6 +27,7 @@ from pyflink.datastream.state import ValueStateDescriptor
 from pyflink.datastream.state_backend import EmbeddedRocksDBStateBackend
 from pyflink.datastream.execution_mode import RuntimeExecutionMode
 from pyflink.datastream.functions import SourceFunction
+from pyflink.table import StreamTableEnvironment
 
 
 # -------------------------
@@ -786,13 +787,32 @@ def main():
     for whl in glob.glob("./dist/sirt_ops-0.2.0-*.whl"):
         env.add_python_file(whl)
 
-    # kick = env.from_collection(range(-2, args.d_iteration*args.num_sinogram_projections), type_info=Types.INT())
-    kick = env.add_source(
-        TickerSource(
-            period_ms=args.proj_sleep,
-            max_count=args.d_iteration*args.num_sinogram_projections
-        ),
-        type_info=Types.INT())
+    rows_per_second = max(1, int(round(1.0 / max(args.proj_sleep, 1e-9)))) 
+    total_rows = args.d_iteration * args.num_sinogram_projections + 2 #  extra for warmup and FIN
+
+    ddl = f"""
+    CREATE TEMPORARY TABLE tick_src (
+    seq BIGINT,
+    ts TIMESTAMP_LTZ(3),
+    WATERMARK FOR ts AS ts
+    ) WITH (
+    'connector' = 'datagen',
+    'rows-per-second' = '{rows_per_second}',
+    -- Drive a monotonically increasing counter:
+    'fields.seq.kind' = 'sequence',
+    'fields.seq.start' = '0'
+    {"," if total_rows is not None else ""}
+    {f"'number-of-rows' = '{total_rows}'" if total_rows is not None else ""}
+    )
+    """
+    env.execute_sql(ddl)
+
+    kick = env.to_data_stream(env.from_path("tick_src")) \
+            .map(lambda row: int(row[0]), output_type=Types.LONG()) \
+            .name("Ticker") \
+            .set_parallelism(1) \
+            .slot_sharing_group("ticker")
+    
     daq = kick.flat_map(
         DaqEmitter(
             input_f=args.simulation_file,
