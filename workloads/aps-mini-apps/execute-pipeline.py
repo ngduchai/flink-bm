@@ -26,6 +26,7 @@ from pyflink.datastream.functions import FlatMapFunction, MapFunction, KeyedProc
 from pyflink.datastream.state import ValueStateDescriptor
 from pyflink.datastream.state_backend import EmbeddedRocksDBStateBackend
 from pyflink.datastream.execution_mode import RuntimeExecutionMode
+from pyflink.datastream.functions import SourceFunction
 
 
 # -------------------------
@@ -37,7 +38,6 @@ def parse_arguments():
     p.add_argument('--ntask_sirt', type=int, default=1)
     p.add_argument('--simulation_file')
     p.add_argument('--d_iteration', type=int, default=1)
-    p.add_argument('--num_projections', type=int, default=1)
     p.add_argument('--iteration_sleep', type=float, default=0.0)
     p.add_argument('--proj_sleep', type=float, default=0.6)
     p.add_argument('--beg_sinogram', type=int, default=0)
@@ -247,8 +247,8 @@ class DaqEmitter(FlatMapFunction):
             if self.index == 0:
                 print(f"[DaqEmitter] iteration {self.it+1}/{self.d_iteration}")
 
-            if self.proj_sleep > 0:
-                time.sleep(self.proj_sleep)
+            # if self.proj_sleep > 0:
+            #     time.sleep(self.proj_sleep)
 
             md = {"index": int(self.index), "Type": "DATA", "seq_n": self.seq}
             payload = self.serialized_data[self.index]
@@ -705,6 +705,21 @@ class PrintProbe(MapFunction):
         return value
 
 
+class TickerSource(SourceFunction):
+    def __init__(self, period_ms: int, start: int = 0, max_count: int | None = None):
+        self.period = period_ms / 1000.0
+        self.start = start
+        self.max_count = max_count
+        self._running = True
+    def run(self, ctx):
+        i, sent = self.start, 0
+        while self._running and (self.max_count is None or sent < self.max_count):
+            ctx.collect(i)
+            i += 1; sent += 1
+            time.sleep(self.period)
+    def cancel(self):
+        self._running = False
+
 PY_EXEC = "/opt/micromamba/envs/aps/bin/python"
 
 def main():
@@ -771,7 +786,13 @@ def main():
     for whl in glob.glob("./dist/sirt_ops-0.2.0-*.whl"):
         env.add_python_file(whl)
 
-    kick = env.from_collection(range(-2, args.d_iteration*args.num_projections), type_info=Types.INT())
+    # kick = env.from_collection(range(-2, args.d_iteration*args.num_sinogram_projections), type_info=Types.INT())
+    kick = env.add_source(
+        TickerSource(
+            period_ms=args.period_ms,
+            max_count=args.d_iteration*args.num_sinogram_projections
+        ),
+        type_info=Types.INT())
     daq = kick.flat_map(
         DaqEmitter(
             input_f=args.simulation_file,
