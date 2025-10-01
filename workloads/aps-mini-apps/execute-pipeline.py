@@ -223,6 +223,7 @@ class DaqEmitter(FlatMapFunction):
             return
         
         if self.warmup == False:
+            self.warmup = True
             # 1) Emit a tiny warm-up record so downstream operators "open" immediately.
             warmup_md = {"Type": "WARMUP", "note": "pipeline warm-up", "ts": time.time()}
             yield [warmup_md, b"\x00"]  # 1 byte payload; downstream should ignore Type!=DATA
