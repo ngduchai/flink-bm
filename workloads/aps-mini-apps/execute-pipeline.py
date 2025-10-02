@@ -758,8 +758,7 @@ def main():
     cfg.set_string("execution.checkpointing.savepoint-dir", ckpt_dir)
     cfg.set_boolean("execution.checkpointing.unaligned.enabled", True)
 
-    cfg.set_integer("execution.checkpointing.timeout", 6000000)  # 1 minutes
-    cfg.set_integer("execution.checkpointing.min-pause", 120000)  # 5 seconds between checkpoints
+    cfg.set_integer("execution.checkpointing.timeout", 60000)  # 1 minutes
     cfg.set_string("akka.ask.timeout", "60s")
 
     # How many records per Python bundle before sending to the JVM
@@ -773,7 +772,7 @@ def main():
 
     env.set_runtime_mode(RuntimeExecutionMode.STREAMING)
     
-    env.enable_checkpointing(5000, CheckpointingMode.EXACTLY_ONCE)
+    env.enable_checkpointing(10_000, CheckpointingMode.EXACTLY_ONCE)
     ck = env.get_checkpoint_config()
     # ck.set_checkpoint_timeout(15 * 60 * 1000)          # 15 min timeout
     ck.set_max_concurrent_checkpoints(1)               # avoid overlaps
