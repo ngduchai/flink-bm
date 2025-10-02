@@ -589,9 +589,15 @@ class DenoiserOperator(FlatMapFunction):
         self.waiting_metadata = {}
         self.waiting_data = {}
         self.running = True
+        self.waitting_state = None
 
     def open(self, ctx: RuntimeContext):
         self.serializer = TraceSerializer.ImageSerializer()
+        self.waitting_state = ctx.get_state(
+            ValueStateDescriptor("denoiser_waiting_state_v1", Types.PICKLED_BYTE_ARRAY())
+        )
+        self.waiting_metadata = self.waitting_state.value()["metadata"] or {}
+        self.waiting_data = self.waitting_state.value()["data"] or {}
 
     def flat_map(self, value):
         try:
@@ -633,6 +639,8 @@ class DenoiserOperator(FlatMapFunction):
 
             self.waiting_metadata[iteration_stream][rank] = meta
             self.waiting_data[iteration_stream][rank] = dd
+
+            self.waitting_state.update({"metadata": self.waiting_metadata, "data": self.waiting_data})
 
             if len(self.waiting_metadata[iteration_stream]) == nproc_sirt:
                 sorted_ranks = sorted(self.waiting_metadata[iteration_stream].keys())
