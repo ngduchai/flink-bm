@@ -521,8 +521,8 @@ class SirtOperator(KeyedProcessFunction):
         try:
             snap = self.engine.snapshot()
             snap_bytes = snap if isinstance(snap, (bytes, bytearray)) else bytes(snap)
-            # self.snap_state.update(snap_bytes)
-            self.snap_state.update(bytes([1, 2, 3]))
+            self.snap_state.update(snap_bytes)
+            # self.snap_state.update(bytes([1, 2, 3]))
             self.count_state.update(self.processed_local)
             print(f"[SirtOperator] snapshot at {self.processed_local} tuples: {len(snap_bytes)} bytes, ")
         except Exception as e:
