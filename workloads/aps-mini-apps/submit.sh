@@ -36,6 +36,11 @@ if [[ ! -f "$CONFIG_JSON" ]]; then
   exit 1
 fi
 
+echo "Cleanning up old checkpoints (if any) ..."
+# Note: This is optional. If you want to resume from previous checkpoints, skip this step
+CKPT_DIR="/eagle/Diaspora/ndhai/flink/ckpts"
+rm -rf "$CKPT_DIR/*"
+
 # Build CLI args from JSON (keep underscores in keys)
 PYARGS=$(
   python3 - "$CONFIG_JSON" <<'PY'
