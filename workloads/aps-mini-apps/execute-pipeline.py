@@ -775,7 +775,7 @@ def main():
     env.enable_checkpointing(10_000, CheckpointingMode.EXACTLY_ONCE)
     ck = env.get_checkpoint_config()
     # ck.set_checkpoint_timeout(15 * 60 * 1000)          # 15 min timeout
-    ck.set_max_concurrent_checkpoints(1)               # avoid overlaps
+    # ck.set_max_concurrent_checkpoints(1)               # avoid overlaps
     # ck.set_min_pause_between_checkpoints(5 * 1000)     # 5s pause
     ck.enable_unaligned_checkpoints(True)              # helps under backpressure
     ck.set_aligned_checkpoint_timeout(Duration.of_seconds(0))        # switch to unaligned if align >3s
