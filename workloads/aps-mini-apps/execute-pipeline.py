@@ -162,7 +162,7 @@ class DaqEmitter(FlatMapFunction):
         self._running = True
 
         self.warmup = False
-        self.current_index = 0
+        self.index_state = None
 
         self.seq = self.seq0
         self.tot_transfer_size = 0
@@ -202,6 +202,11 @@ class DaqEmitter(FlatMapFunction):
             if self.iteration_sleep > 0:
                 print(f"[DaqEmitter.open] initial iteration_sleep={self.iteration_sleep}s")
                 time.sleep(self.iteration_sleep)
+
+            # Load index state
+            index_desc = ValueStateDescriptor("daq_emitter_index_v1", Types.INT())
+            self.index_state = _ctx.get_state(index_desc)
+            self.index = index_state.value() or 0
 
         except Exception as e:
             print("[DaqEmitter.open] failed to prepare dataset:", e, file=sys.stderr)
@@ -268,6 +273,9 @@ class DaqEmitter(FlatMapFunction):
             if self.index == len(self.indices):
                 self.index = 0
                 self.it += 1
+
+            # Save index state
+            self.index_state.update(self.index)
 
             yield [md, payload]
 
