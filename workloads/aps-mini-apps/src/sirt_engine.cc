@@ -204,9 +204,9 @@ ProcessResult SirtEngine::process(
     result.meta = md;
     // MPI_Barrier(MPI_COMM_WORLD);
     
-    std::string outputpath = iteration_stream.str() + "-recon.h5";
-    saveAsHDF5(outputpath.c_str(), 
-        &recon[recon_slice_data_index], app_dims);
+    // std::string outputpath = iteration_stream.str() + "-recon.h5";
+    // saveAsHDF5(outputpath.c_str(), 
+    //     &recon[recon_slice_data_index], app_dims);
   }
 
   passes++;
@@ -222,6 +222,16 @@ std::vector<std::uint8_t> SirtEngine::snapshot() const {
   SirtCkpt ckpt(passes, recon_image);
   std::vector<std::uint8_t> saved_ckpt = ckpt.to_bytes();
   // TODO: replace these with actual boost serialization
+
+  std::cout << "testing if the serialization works..." << std::endl;
+  SirtCkpt test_ckpt(saved_ckpt);
+  assert(test_ckpt.progress == passes);
+  assert(test_ckpt.recon_image->count() == recon_image->count());
+  for (size_t i = 0; i < recon_image->count(); ++i) {
+    assert((*test_ckpt.recon_image)[i] == (*recon_image)[i]);
+  }
+  std::cout << "serialization test passed!" << std::endl;
+
   return saved_ckpt;
 }
 
