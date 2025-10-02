@@ -22,7 +22,7 @@ except ModuleNotFoundError:
 
 from pyflink.common import Types, Configuration, Duration
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
-from pyflink.datastream.functions import FlatMapFunction, MapFunction, KeyedProcessFunction, RuntimeContext
+from pyflink.datastream.functions import FlatMapFunction, RichFlatMapFunction, MapFunction, KeyedProcessFunction, RuntimeContext
 from pyflink.datastream.state import ValueStateDescriptor
 from pyflink.datastream.state_backend import EmbeddedRocksDBStateBackend
 from pyflink.datastream.execution_mode import RuntimeExecutionMode
@@ -141,7 +141,7 @@ def ordered_subset(max_ind, nelem):
 # -------------------------
 # DAQ emitter (preload in open(), warm-up first)
 # -------------------------
-class DaqEmitter(FlatMapFunction):
+class DaqEmitter(RichFlatMapFunction):
     def __init__(self, *, input_f, beg_sinogram, num_sinograms, seq0,
                  iteration_sleep, d_iteration, proj_sleep, logdir,
                  save_after_serialize=False):
@@ -582,7 +582,7 @@ class SirtOperator(KeyedProcessFunction):
 # -------------------------
 # Sink: Denoiser (yield-style)
 # -------------------------
-class DenoiserOperator(FlatMapFunction):
+class DenoiserOperator(RichFlatMapFunction):
     def __init__(self, args):
         self.args = args
         self.serializer = None
