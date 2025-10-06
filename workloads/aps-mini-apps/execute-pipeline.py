@@ -206,7 +206,7 @@ class DaqEmitter(FlatMapFunction):
             # Load index state
             index_desc = ValueStateDescriptor("daq_emitter_index_v1", Types.INT())
             self.index_state = _ctx.get_state(index_desc)
-            self.index = index_state.value() or 0
+            self.index = self.index_state.value() or 0
 
         except Exception as e:
             print("[DaqEmitter.open] failed to prepare dataset:", e, file=sys.stderr)
@@ -832,7 +832,8 @@ def main():
             .set_parallelism(1) \
             .slot_sharing_group("ticker")
     
-    daq = kick.flat_map(
+    daq = kick.key_by(lambda _: 0, key_type=Types.INT()) \
+        .flat_map(
         DaqEmitter(
             input_f=args.simulation_file,
             beg_sinogram=args.beg_sinogram,
@@ -851,7 +852,8 @@ def main():
 
     # probe = daq.map(VersionProbe(), output_type=Types.PICKLED_BYTE_ARRAY()).name("Version Probe")
     # dist = probe.flat_map(
-    dist = daq.flat_map(
+    dist = daq.key_by(lambda _: 0, key_type=Types.INT())  \
+        .flat_map(
         DistOperator(args),
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("Data Distributor").set_parallelism(1) \
@@ -884,7 +886,8 @@ def main():
         .slot_sharing_group("sirt")
 
 
-    den = sirt.flat_map(
+    den = sirt.key_by(lambda _: 0, key_type=Types.INT())  \
+        .flat_map(
         DenoiserOperator(args),
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("Denoiser Operator").set_parallelism(1) \
