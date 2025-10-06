@@ -23,7 +23,8 @@ except ModuleNotFoundError:
 from pyflink.common import Types, Configuration, Duration
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
 from pyflink.datastream.functions import FlatMapFunction, MapFunction, KeyedProcessFunction, RuntimeContext
-from pyflink.datastream.state import ValueStateDescriptor
+# from pyflink.datastream.state import ValueStateDescriptor
+from pyflink.common.state import ValueStateDescriptor
 from pyflink.datastream.state_backend import EmbeddedRocksDBStateBackend
 from pyflink.datastream.execution_mode import RuntimeExecutionMode
 from pyflink.datastream.functions import SourceFunction
@@ -170,6 +171,7 @@ class DaqEmitter(FlatMapFunction):
         self.last_send = self.t_start
         self.index = 0
         self.it = 0
+        self._index_loaded = False
 
     def open(self, _ctx: RuntimeContext):
         """Load & serialize once so the first record can flow immediately."""
@@ -206,7 +208,6 @@ class DaqEmitter(FlatMapFunction):
             # Load index state
             index_desc = ValueStateDescriptor("daq_emitter_index_v1", Types.INT())
             self.index_state = _ctx.get_state(index_desc)
-            self.index = self.index_state.value() or 0
 
         except Exception as e:
             print("[DaqEmitter.open] failed to prepare dataset:", e, file=sys.stderr)
@@ -226,6 +227,11 @@ class DaqEmitter(FlatMapFunction):
     def flat_map(self, _ignored):
         if not self._running:
             return
+        
+        if not self._index_loaded:
+            v = self.index_state.value()
+            self.index = int(v) if v is not None else 0
+            self._index_loaded = True
         
         if self.warmup == False:
             self.warmup = True
@@ -590,16 +596,31 @@ class DenoiserOperator(FlatMapFunction):
         self.waiting_data = {}
         self.running = True
         self.waitting_state = None
+        self._restored = False
 
     def open(self, ctx: RuntimeContext):
         self.serializer = TraceSerializer.ImageSerializer()
         self.waitting_state = ctx.get_state(
             ValueStateDescriptor("denoiser_waiting_state_v1", Types.PICKLED_BYTE_ARRAY())
         )
-        self.waiting_metadata = self.waitting_state.value()["metadata"] or {}
-        self.waiting_data = self.waitting_state.value()["data"] or {}
+
+    def _maybe_restore(self):
+        if self._restored:
+            return
+        snap = self.waitting_state.value()
+        if snap:
+            # snap is whatever you stored (dict via PICKLED), handle both dict/bytes if needed
+            try:
+                state_obj = snap  # already de-pickled by PICKLED_BYTE_ARRAY
+                self.waiting_metadata = state_obj.get("metadata", {}) or {}
+                self.waiting_data = state_obj.get("data", {}) or {}
+            except Exception:
+                # if you had stored raw bytes earlier, optionally pickle.loads(snap)
+                self.waiting_metadata, self.waiting_data = {}, {}
+        self._restored = True
 
     def flat_map(self, value):
+        self._maybe_restore()
         try:
             meta, data = value
 
