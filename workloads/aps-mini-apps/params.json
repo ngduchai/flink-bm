@@ -4,7 +4,7 @@
     "num_sinogram_projections" : 1500,
     "d_iteration" : 1,
     "iteration_sleep" : 1,
-    "proj_sleep" : 1,
+    "proj_sleep" : 0.1,
     "beg_sinogram" : 1000,
     "num_sinograms" : 2,
     "num_sinogram_columns" : 2560,

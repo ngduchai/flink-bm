@@ -260,8 +260,8 @@ class DaqEmitter(FlatMapFunction):
             if self.index == 0:
                 print(f"[DaqEmitter] iteration {self.it+1}/{self.d_iteration}")
 
-            # if self.proj_sleep > 0:
-            #     time.sleep(self.proj_sleep)
+            if self.proj_sleep > 0:
+                time.sleep(self.proj_sleep)
 
             md = {"index": int(self.index), "Type": "DATA", "seq_n": self.seq}
             payload = self.serialized_data[self.index]
