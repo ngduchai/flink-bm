@@ -820,8 +820,8 @@ def main():
     ck.enable_unaligned_checkpoints(True)              # helps under backpressure
     ck.set_aligned_checkpoint_timeout(Duration.of_seconds(0))        # switch to unaligned if align >3s
 
-    env.disable_operator_chaining()
-    env.set_buffer_timeout(100)
+    # env.disable_operator_chaining()
+    # env.set_buffer_timeout(100)
 
     _ship_local_modules(env)
 
