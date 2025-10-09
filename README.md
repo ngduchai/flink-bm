@@ -17,7 +17,7 @@ TL;DR: go to `workloads/aps-mini-apps`, try
 cd ../..; bash stop-all.sh; bash start-all.sh 6; cd workloads/aps-mini-apps; bash polaris-install.sh; bash test-single-failure.sh 10000 1 execute-pipeline.py params.json &
 ```
 
-Start Flink cluster
+Step-by-step instructions: Start Flink cluster
 
 ```
 bash start-all.sh <number of task slots per task manager>
