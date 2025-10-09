@@ -834,6 +834,7 @@ def main():
     total_rows = args.d_iteration * args.num_sinogram_projections + 2 #  extra for warmup and FIN
     t_env = StreamTableEnvironment.create(stream_execution_environment=env)
 
+    print(f"row_per_second: {rows_per_second}")
 
     ddl = f"""
     CREATE TEMPORARY TABLE tick_src (
