@@ -850,7 +850,7 @@ def main():
             .map(lambda row: int(row[0]), output_type=Types.LONG()) \
             .name("Ticker") \
             .set_parallelism(1) \
-            .slot_sharing_group("ticker")
+            # .slot_sharing_group("ticker")
     
     daq = kick.key_by(lambda _: 0, key_type=Types.INT()) \
         .flat_map(
@@ -867,8 +867,8 @@ def main():
         ),
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("DAQ Emitter").set_parallelism(1) \
-        .disable_chaining().start_new_chain() \
-        .slot_sharing_group("daq")
+        # .disable_chaining().start_new_chain() \
+        # .slot_sharing_group("daq")
 
     # probe = daq.map(VersionProbe(), output_type=Types.PICKLED_BYTE_ARRAY()).name("Version Probe")
     # dist = probe.flat_map(
@@ -877,8 +877,8 @@ def main():
         DistOperator(args),
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("Data Distributor").set_parallelism(1) \
-        .disable_chaining().start_new_chain() \
-        .slot_sharing_group("dist")
+        # .disable_chaining().start_new_chain() \
+        # .slot_sharing_group("dist")
 
     # probe = dist.key_by(
     #     task_key_selector,
@@ -900,10 +900,9 @@ def main():
         .name("Sirt Operator") \
         .uid("sirt-operator") \
         .set_parallelism(max(1, args.ntask_sirt)) \
-        .set_max_parallelism(max(1, args.ntask_sirt)) \
-        .disable_chaining() \
-        .start_new_chain() \
-        .slot_sharing_group("sirt")
+        # .set_max_parallelism(max(1, args.ntask_sirt)) \
+        # .disable_chaining().start_new_chain() \
+        # .slot_sharing_group("sirt")
 
 
     den = sirt.key_by(lambda _: 0, key_type=Types.INT())  \
@@ -911,8 +910,8 @@ def main():
         DenoiserOperator(args),
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("Denoiser Operator").set_parallelism(1) \
-        .disable_chaining().start_new_chain() \
-        .slot_sharing_group("den")
+        # .disable_chaining().start_new_chain() \
+        # .slot_sharing_group("den")
 
     den.print().name("Denoiser Sink").set_parallelism(1)
 
