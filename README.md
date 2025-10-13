@@ -14,7 +14,7 @@ apptainer build --fakeroot flink_img flink-sb.def
 
 TL;DR: go to `workloads/aps-mini-apps`, try
 ```
-cd ../..; bash stop-all.sh; bash start-all.sh 1; cd workloads/aps-mini-apps; bash polaris-install.sh; bash test-single-failure.sh 10000 1 execute-pipeline.py params.json &
+cd ../..; bash stop-all.sh; bash start-all.sh 1; cd workloads/aps-mini-apps; bash polaris-install.sh;  bash test-failure.sh taskmanager-periodic-failure-inject-local.sh 10000 1 execute-pipeline.py params.json &
 ```
 
 Step-by-step instructions: Start Flink cluster
