@@ -15,7 +15,7 @@ MEAN_INTERVAL=$1
 RECOVER_INTERVAL=$2
 ACTIVE_DIR=$3
 
-echo "[$(hostname)] Flink local failure injector: killing a random TaskManager with mean interval ${MEAN_INTERVAL}s following exponential distribution"
+echo "[$(hostname)] Flink local failure injector: killing a random TaskManager once for every ${MEAN_INTERVAL}s"
 
 restart_task() {
   
@@ -34,10 +34,9 @@ restart_task() {
 
 while true; do
   # sample an exponential delay:  delay = -mean * ln(U), U~Uniform(0,1)
-  seed=$(date +%s%N)   # seconds+nanoseconds since epoch
-  EXP_DELAY=$(awk -v m="$MEAN_INTERVAL" -v s="$seed" 'BEGIN{srand(s); u=rand(); if(u<1e-9) u=1e-9; print -m * log(u)}')
+  DELAY=$MEAN_INTERVAL
   # round to 3 decimal places
-  INTERVAL=$(printf "%.3f" "$EXP_DELAY")
+  INTERVAL=$(printf "%.3f" "$DELAY")
   echo "Kill the next TaskManager in ${INTERVAL}s"
   sleep "$INTERVAL"
 
