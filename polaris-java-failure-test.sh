@@ -15,9 +15,10 @@ DIR=$HOME/diaspora/src/flink
 echo $DIR
 
 taskmanager_per_node=1
-workload=workloads/shuffle/FlinkStreamingShuffle.jar
+# workload=workloads/shuffle/FlinkStreamingShuffle.jar
 #workload=workloads/join/FlinkStreamingAggregation.jar
 #workload=workloads/broadcast/FlinkStreamingBroadcast.jar
+workload=workloads/aps-mini-apps
 ratePerSecond=100
 sourceParallelism=1
 sinkParallelism=1
