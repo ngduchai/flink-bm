@@ -56,8 +56,8 @@ if [[ -f "$HOSTFILE" ]]; then
 fi
 
 recover_interval=1
-num_sirts=(1 2 4 8 16)
-failure_periods=(160 80 40 20 10)
+num_sirts=(2 4 8 16)
+failure_periods=(160 80 40 20)
 
 TOP="$(cat "$DIR/recent-run")"
 
