@@ -1,0 +1,128 @@
+#!/bin/bash
+#PBS -l select=2:system=polaris
+#PBS -l walltime=01:00:00
+#PBS -N Flink
+#PBS -q debug-scaling
+
+#file systems used by the job
+#PBS -l filesystems=home:eagle
+
+#Project name
+#PBS -A diaspora
+
+set -euo pipefail
+
+# --- generic: set JSON value at a (possibly dotted) path using jq ---
+# Usage: json_set <file> <path> <value>
+json_set() {
+  local file="$1" path="$2" val="$3"
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "ERROR: 'jq' is required." >&2; exit 1
+  fi
+  [[ -f "$file" ]] || { echo "ERROR: JSON '$file' not found." >&2; exit 1; }
+
+  # Build jq path array; convert numeric segments to numbers for array indices
+  local pjson
+  pjson="$(jq -cn --arg p "$path" '$p|split(".")|map( (tonumber? // .) )')"
+
+  # temp file in SAME DIR as target to avoid cross-device mv issues
+  local tmp
+  tmp="$(mktemp "${file}.XXXX")"
+
+  if [[ "$val" == @* && -f "${val#@}" ]]; then
+    # Load raw JSON from file
+    local raw
+    raw="$(<"${val#@}")"
+    jq --argjson p "$pjson" --argjson v "$raw" 'setpath($p; $v)' "$file" > "$tmp"
+  else
+    # Auto-type scalars (int/float incl. scientific), booleans, null; otherwise treat as string
+    if [[ "$val" =~ ^-?[0-9]+([.][0-9]+)?([eE][-+]?[0-9]+)?$ || "$val" =~ ^(true|false|null)$ ]]; then
+      jq --argjson p "$pjson" --argjson v "$val" 'setpath($p; $v)' "$file" > "$tmp"
+    else
+      jq --argjson p "$pjson" --arg v "$val" 'setpath($p; $v)' "$file" > "$tmp"
+    fi
+  fi
+  mv -f "$tmp" "$file"
+}
+
+DIR="$HOME/diaspora/src/flink"
+echo "DIR: $DIR"
+workload="workloads/aps-mini-apps"
+
+HOSTFILE="${PBS_NODEFILE:-/dev/null}"
+NUM_HOSTS=1
+if [[ -f "$HOSTFILE" ]]; then
+  NUM_HOSTS="$(wc -l < "$HOSTFILE" | tr -d ' ')"
+fi
+
+recover_interval=1
+num_sirts=(1 2 4 8 16)
+failure_periods=(160 80 40 20 10)
+
+TOP="$(cat "$DIR/recent-run")"
+
+cleanup_cluster() {
+  if [[ -n "${WORKSPACE:-}" ]]; then
+    if [[ -x "${WORKSPACE}/stop-all.sh" ]]; then
+      (cd "$WORKSPACE" && bash stop-all.sh) || true
+    elif [[ -x "${WORKSPACE}/${workload}/stop-all.sh" ]]; then
+      (cd "${WORKSPACE}/${workload}" && bash stop-all.sh) || true
+    fi
+  fi
+}
+trap cleanup_cluster EXIT
+
+count=0
+for num_sirt in "${num_sirts[@]}"; do
+  for failure_period in "${failure_periods[@]}"; do
+    # ceil(num_sirt / NUM_HOSTS), minimum 1
+    taskmanager_per_node=$(( (num_sirt + NUM_HOSTS - 1) / NUM_HOSTS ))
+    if (( taskmanager_per_node < 1 )); then taskmanager_per_node=1; fi
+
+    WORKSPACE="$TOP/num_sirt-$num_sirt-failure_period-$failure_period"
+    mkdir -p "$WORKSPACE"
+    cd "$WORKSPACE"
+
+    echo "num_sirt: $num_sirt  failure_period: $failure_period"
+    echo "hosts: $NUM_HOSTS  taskmanagers per node: $taskmanager_per_node"
+    echo "Copy execution scripts from $DIR to workspace $WORKSPACE"
+    rsync -av --filter='- /flink*' --filter='- /flink*/**' "$DIR/" "$WORKSPACE/" > /dev/null
+
+    echo "Start Flink cluster"
+    bash start-all.sh "$taskmanager_per_node"
+
+    cd "$workload"
+    echo "Install workload"
+    bash polaris-install.sh
+
+    # --- Update parameters before the run ---
+    PARAMS_FILE="params.json"
+    echo "Update params in $PARAMS_FILE"
+    num_task="$num_sirt"
+    num_sinogram=$(( num_task * 2 ))
+    json_set "$PARAMS_FILE" "ntask_sirt" "$num_task"
+    json_set "$PARAMS_FILE" "num_sinograms" "$num_sinogram"
+    # Examples:
+    # json_set "$PARAMS_FILE" "proj_sleep" "0.1"
+    # json_set "$PARAMS_FILE" "cast_to_float32" "true"
+    # json_set "$PARAMS_FILE" "simulation_file" "./data/foo.h5"
+
+    echo "Run the test"
+    bash test-failure.sh \
+      taskmanager-periodic-failure-inject-local.sh \
+      "$failure_period" \
+      "$recover_interval" \
+      execute-pipeline.py \
+      "$PARAMS_FILE" \
+      > ../test-log.out 2> ../test-log.err
+
+    echo "Stop Flink cluster"
+    cd "$WORKSPACE"
+    bash stop-all.sh
+    sleep 1
+
+    count=$((count + 1))
+  done
+done
+
+trap - EXIT
