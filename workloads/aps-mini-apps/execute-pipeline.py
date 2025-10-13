@@ -852,7 +852,7 @@ def main():
     kick = t_env.to_data_stream(t_env.from_path("tick_src")) \
             .map(lambda row: int(row[0]), output_type=Types.LONG()) \
             .name("Ticker") \
-            .set_parallelism(2) \
+            .set_parallelism(1) \
             # .slot_sharing_group("ticker")
     
     daq = kick.key_by(lambda _: 0, key_type=Types.INT()) \
