@@ -7,7 +7,7 @@ fi
 failure_script=$1
 mean_failure_interval=$2
 mean_recover_interval=$3
-shift 2
+shift 3
 flink_args=( $@ )
 # Node list from PBS or fallback
 NODE_FILE=${PBS_NODEFILE:-nodes.txt}
