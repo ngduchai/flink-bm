@@ -125,7 +125,7 @@ for num_sirt in "${num_sirts[@]}"; do
       "$recover_interval" \
       execute-pipeline.py \
       "$PARAMS_FILE" \
-      > ../test-log.out 2> ../test-log.err
+      > $WORKSPACE/test-log.out 2> $WORKSPACE/test-log.err
 
     echo "Stop Flink cluster"
     cd "$WORKSPACE"
