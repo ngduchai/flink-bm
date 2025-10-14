@@ -8,6 +8,8 @@ if [[ $# -lt 3 ]]; then
   exit 1
 fi
 
+source $HOME/load-apptainer.sh
+
 # counter for how many times we've killed a TM
 FAIL_COUNT=0
 

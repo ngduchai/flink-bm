@@ -8,6 +8,8 @@ if [[ $# -lt 3 ]]; then
   exit 1
 fi
 
+source $HOME/load-apptainer.sh
+
 MEAN_INTERVAL=$1
 RECOVER_INTERVAL=$2
 ACTIVE_DIR=$3
