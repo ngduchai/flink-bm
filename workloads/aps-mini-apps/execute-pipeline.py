@@ -664,6 +664,8 @@ class DenoiserOperator(FlatMapFunction):
 
             self.waitting_state.update({"metadata": self.waiting_metadata, "data": self.waiting_data})
 
+            print(f"DenoiserOperator: receive data stream={iteration_stream}, count: {len(self.waiting_metadata[iteration_stream])}, need: {nproc_sirt}")
+
             if len(self.waiting_metadata[iteration_stream]) == nproc_sirt:
                 sorted_ranks = sorted(self.waiting_metadata[iteration_stream].keys())
                 sorted_data = [self.waiting_data[iteration_stream][r] for r in sorted_ranks]
