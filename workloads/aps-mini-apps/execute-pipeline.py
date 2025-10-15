@@ -585,7 +585,8 @@ class SirtOperator(KeyedProcessFunction):
         if len(out_bytes):
             # print(f"SirtOperator: Emitting msg: {meta_in}, size {len(out_bytes)} bytes")
             # print(f"SirtOperator: Sent: {meta_in}, first data float: {out_bytes[0]}")
-            print(f"SirtOperator [Task-{self.task_id}]: Sent: stream={out_meta["iteration_stream"]}")
+            iteration_stream = out_meta["iteration_stream"]
+            print(f"SirtOperator [Task-{self.task_id}]: Sent: stream={iteration_stream}")
             yield [dict(out_meta), bytes(out_bytes)]
 
 # -------------------------
