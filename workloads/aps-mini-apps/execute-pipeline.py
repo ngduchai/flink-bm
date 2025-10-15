@@ -738,7 +738,7 @@ class TaskIdPartitioner(Partitioner):
             t = 0
         if t >= num_partitions:
             t = num_partitions - 1
-        print(f"SirtPatition: key = {key} --> patition = {t} (num_partitions = {num_partitions})")
+        print(f"SirtPartition: key = {key} --> patition = {t} (num_partitions = {num_partitions})")
         return t
 
 class VersionProbe(MapFunction):
@@ -920,8 +920,7 @@ def main():
     # route by task_id so record goes to subtask = task_id
     routed = dist.partition_custom(TaskIdPartitioner(), task_key_selector) \
             .name("route_by_task_id") \
-            .set_parallelism(1)
-            # .set_parallelism(max(1, args.ntask_sirt))
+            .set_parallelism(max(1, args.ntask_sirt))
 
 
     sirt = routed.key_by(lambda _: 0, key_type=Types.INT()) \
