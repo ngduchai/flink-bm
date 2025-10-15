@@ -19,6 +19,8 @@ jobmanager:
 #restart-strategy: fixed-delay
 restart-strategy.fixed-delay.attempts: 1000
 restart-strategy.fixed-delay.delay: 100ms
+heartbeat.interval: 10000ms
+heartbeat.timeout: 15000ms
 # python.executable: /usr/bin/python3
 # python.client.executable: /usr/bin/python3
 python.executable: /opt/micromamba/envs/aps/bin/python
