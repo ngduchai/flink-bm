@@ -12,12 +12,13 @@
 
 set -euo pipefail
 
+source $HOME/load-apptainer.sh
 
 # Key Exp parameters, change these parameters to generate data
 # Time to relaunch a new task manager after terminating one
 recover_interval=1
 # Number of reconstruction processes (consumer/main computation tasks)
-num_sirts=(2 4 8 16)
+num_sirts=(1 2 4 8 16)
 # Mean time between failures
 failure_periods=(160 80 40 20)
 # Failure modes:
@@ -84,6 +85,7 @@ cleanup_cluster() {
 trap cleanup_cluster EXIT
 
 count=0
+
 for num_sirt in "${num_sirts[@]}"; do
   for failure_period in "${failure_periods[@]}"; do
     # ceil(num_sirt / NUM_HOSTS), minimum 1
@@ -100,6 +102,7 @@ for num_sirt in "${num_sirts[@]}"; do
     rsync -av --filter='- /flink*' --filter='- /flink*/**' "$DIR/" "$WORKSPACE/" > /dev/null
 
     echo "Start Flink cluster"
+    bash stop-all.sh
     bash start-all.sh "$taskmanager_per_node"
 
     cd "$workload"
