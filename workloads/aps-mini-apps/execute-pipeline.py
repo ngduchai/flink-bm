@@ -28,6 +28,7 @@ from pyflink.datastream.state_backend import EmbeddedRocksDBStateBackend
 from pyflink.datastream.execution_mode import RuntimeExecutionMode
 from pyflink.datastream.functions import SourceFunction
 from pyflink.table import StreamTableEnvironment
+from pyflink.datastream.functions import Partitioner
 
 
 # -------------------------
@@ -729,6 +730,16 @@ def task_key_selector(value):
     print(f"Key selector received meta: {md} --> key = {tid}")
     return int(tid)
 
+class TaskIdPartitioner(Partitioner):
+    def partition(self, key, num_partitions: int):
+        # route directly to the target subtask = key
+        t = int(key)
+        if t < 0:
+            t = 0
+        if t >= num_partitions:
+            t = num_partitions - 1
+        return t
+
 class VersionProbe(MapFunction):
     def map(self, x):
         try:
@@ -903,7 +914,14 @@ def main():
     #     output_type=Types.PICKLED_BYTE_ARRAY()
     # ).name("SIRT Operator").set_parallelism(max(1, args.ntask_sirt)).disable_chaining()
 
-    sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
+    # route by task_id so record goes to subtask = task_id
+    routed = dist.partition_custom(TaskIdPartitioner(), task_key_selector) \
+            .name("route_by_task_id") \
+            .set_parallelism(1)
+            # .set_parallelism(max(1, args.ntask_sirt))
+
+
+    sirt = routed.key_by(lambda _: 0, key_type=Types.INT()) \
         .process(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
                     output_type=Types.PICKLED_BYTE_ARRAY()) \
         .name("Sirt Operator") \
