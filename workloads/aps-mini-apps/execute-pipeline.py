@@ -431,8 +431,8 @@ class DistOperator(FlatMapFunction):
 # -------------------------
 # Map: SIRT
 # -------------------------
-# class SirtOperator(KeyedProcessFunction):
-class SirtOperator(ProcessFunction):
+class SirtOperator(KeyedProcessFunction):
+# class SirtOperator(ProcessFunction):
     def __init__(self, cfg, every_n: int = 1000):
         super().__init__()
         self.cfg = {
