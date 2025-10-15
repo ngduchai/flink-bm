@@ -927,7 +927,7 @@ def main():
     # sirt = routed.key_by(lambda _: 0, key_type=Types.INT()) \
     #     .process(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
     #                 output_type=Types.PICKLED_BYTE_ARRAY()) \
-    sirt = routed.map(
+    sirt = routed.process(
             SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
             output_type=Types.PICKLED_BYTE_ARRAY()) \
         .name("Sirt Operator") \
