@@ -725,8 +725,8 @@ def _ship_local_modules(env):
 def task_key_selector(value):
     # md = value[0] if isinstance(value, (list, tuple)) and value else {}
     [md, _] = value
-    tid = md.get("task_id", 0)  # default 0 for FIN or unexpected msgs
-    print(f"Key selector received meta: {md}")
+    tid = int(md.get("task_id", 0))  # default 0 for FIN or unexpected msgs
+    print(f"Key selector received meta: {md} --> key = {tid}")
     return int(tid)
 
 class VersionProbe(MapFunction):
