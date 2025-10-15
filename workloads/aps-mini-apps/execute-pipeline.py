@@ -450,6 +450,7 @@ class SirtOperator(KeyedProcessFunction):
         self.count_state = None
         self.processed_local = 0
         self._restored = False
+        self.task_id = -1
 
     def open(self, ctx: RuntimeContext):
         print("SirtOperator initializing (keyed)...")
@@ -464,16 +465,16 @@ class SirtOperator(KeyedProcessFunction):
 
         # --- partitioning / setup ---
         try:
-            task_id = ctx.get_index_of_this_subtask()
+            self.task_id = ctx.get_index_of_this_subtask()
             num_tasks = ctx.get_number_of_parallel_subtasks()
             total_sinograms = int(self.cfg["num_sinograms"])
             nsino = total_sinograms // num_tasks
             rem = total_sinograms % num_tasks
-            n_sinograms = nsino + (1 if task_id < rem else 0)
-            beg_sinogram = task_id * nsino + min(task_id, rem)
+            n_sinograms = nsino + (1 if self.task_id < rem else 0)
+            beg_sinogram = self.task_id * nsino + min(self.task_id, rem)
 
             tmetadata = {
-                "task_id": task_id,
+                "task_id": self.task_id,
                 "n_sinograms": n_sinograms,
                 "n_rays_per_proj_row": int(self.cfg["num_sinogram_columns"]),
                 "beg_sinogram": beg_sinogram,
@@ -584,6 +585,7 @@ class SirtOperator(KeyedProcessFunction):
         if len(out_bytes):
             # print(f"SirtOperator: Emitting msg: {meta_in}, size {len(out_bytes)} bytes")
             # print(f"SirtOperator: Sent: {meta_in}, first data float: {out_bytes[0]}")
+            print(f"SirtOperator [Task-{self.task_id}]: Sent: stream={out_meta["iteration_stream"]}")
             yield [dict(out_meta), bytes(out_bytes)]
 
 # -------------------------
