@@ -22,7 +22,7 @@ except ModuleNotFoundError:
 
 from pyflink.common import Types, Configuration, Duration
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
-from pyflink.datastream.functions import FlatMapFunction, MapFunction, KeyedProcessFunction, RuntimeContext
+from pyflink.datastream.functions import FlatMapFunction, MapFunction, KeyedProcessFunction, RuntimeContext, ProcessFunction
 from pyflink.datastream.state import ValueStateDescriptor
 from pyflink.datastream.state_backend import EmbeddedRocksDBStateBackend
 from pyflink.datastream.execution_mode import RuntimeExecutionMode
@@ -431,7 +431,8 @@ class DistOperator(FlatMapFunction):
 # -------------------------
 # Map: SIRT
 # -------------------------
-class SirtOperator(KeyedProcessFunction):
+# class SirtOperator(KeyedProcessFunction):
+class SirtOperator(ProcessFunction):
     def __init__(self, cfg, every_n: int = 1000):
         super().__init__()
         self.cfg = {
@@ -923,9 +924,12 @@ def main():
             .set_parallelism(max(1, args.ntask_sirt))
 
 
-    sirt = routed.key_by(lambda _: 0, key_type=Types.INT()) \
-        .process(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
-                    output_type=Types.PICKLED_BYTE_ARRAY()) \
+    # sirt = routed.key_by(lambda _: 0, key_type=Types.INT()) \
+    #     .process(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
+    #                 output_type=Types.PICKLED_BYTE_ARRAY()) \
+    sirt = routed.map(
+            SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
+            output_type=Types.PICKLED_BYTE_ARRAY()) \
         .name("Sirt Operator") \
         .uid("sirt-operator") \
         .set_parallelism(max(1, args.ntask_sirt)) \
