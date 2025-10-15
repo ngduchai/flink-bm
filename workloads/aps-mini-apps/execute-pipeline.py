@@ -738,6 +738,7 @@ class TaskIdPartitioner(Partitioner):
             t = 0
         if t >= num_partitions:
             t = num_partitions - 1
+        print(f"SirtPatition: key = {key} --> patition = {t}")
         return t
 
 class VersionProbe(MapFunction):
