@@ -52,9 +52,9 @@ void SirtEngine::setup(const std::unordered_map<std::string, int64_t>& tmetadata
   sirt_metadata.window_len         = require_int(tmetadata, "window_length");
 }
 
-void SirtProcessor::setup(int row_id, SirtMetadata& tmetadata) {
+void SirtProcessor::setup(int row_id, const SirtMetadata& tmetadata) {
 
-  row_id                = row_id;
+  this->row_id          = row_id;
   task_id               = tmetadata.task_id;
   window_step           = tmetadata.window_step;
   int thread_count      = tmetadata.thread_count;
@@ -104,10 +104,14 @@ ProcessResult SirtEngine::process(
   std::size_t len
 ) {
   int row_id = std::stoi(require_str(metadata, "row_id"));
-  if (sirt_processors.find(row_id) == sirt_processors.end()) {
-    sirt_processors.insert({row_id, SirtProcessor(row_id, this->sirt_metadata)});
+
+  auto it = sirt_processors.find(row_id);
+  if (it == sirt_processors.end()) {
+    auto [ins_it, _] = sirt_processors.emplace(row_id, SirtProcessor{});
+    it = ins_it;
+    it->second.setup(row_id, this->sirt_metadata);
   }
-  return sirt_processors[row_id].process(config, metadata, data, len);
+  return it->second.process(config, metadata, data, len);
 }
 
 ProcessResult SirtProcessor::process(
@@ -275,6 +279,7 @@ void SirtEngine::restore(const std::vector<std::uint8_t>& snapshot) {
     auto it = sirt_processors.find(row_id); 
     if (it == sirt_processors.end()) {
       SirtProcessor processor(row_id, this->sirt_metadata);
+      processor.setup(row_id, this->sirt_metadata);
       processor.passes = passes;
       processor.recon_image = recon_image;
       sirt_processors.insert({row_id, processor});
@@ -301,5 +306,7 @@ SirtEngine::~SirtEngine() {
   //   delete recon_image;
   // }
 }
+
+SirtProcessor::~SirtProcessor() {}
 
 

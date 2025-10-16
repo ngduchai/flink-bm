@@ -52,7 +52,7 @@ public:
     int row_id = -1;
     int task_id = -1;
 
-    void setup(int row_id, SirtMetadata& tmetadata);
+    void setup(int row_id, const SirtMetadata& tmetadata);
 
     SirtProcessor()
         : ds(0, 0, 0), main_recon_space(nullptr), engine(nullptr),
@@ -71,6 +71,8 @@ public:
         const float* data,
         std::size_t len
     );
+
+    ~SirtProcessor();
 
 };
 
