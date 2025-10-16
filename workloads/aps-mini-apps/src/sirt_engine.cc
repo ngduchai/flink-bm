@@ -64,7 +64,7 @@ void SirtProcessor::setup(int row_id, const SirtMetadata& tmetadata) {
   ds.tn_sinograms       = tmetadata.tn_sinograms;
   ds.window_len         = tmetadata.window_len;
 
-  const int64_t n_blocks = ds.n_sinograms;
+  const int64_t n_blocks = 1; // only one sinogram per process
   const int64_t num_cols = ds.n_rays_per_proj_row;
 
   h5md.ndims=3;
