@@ -413,7 +413,7 @@ class DistOperator(FlatMapFunction):
             center = (dims[1] / 2.0) if center == 0.0 else center
 
             msgs = self.generate_worker_msgs(data_flat, dims, projection_id, theta,
-                                             self.args.n, center, sequence_id)
+                                             self.args.num_sinograms, center, sequence_id)
             for i in range(len(msgs)):
                 md = msgs[i][0]
                 # print(f"Task {i}: seq_id {md['seq_n']} proj_id {md['projection_id']}, theta: {md['theta']} center: {md['center']}")
