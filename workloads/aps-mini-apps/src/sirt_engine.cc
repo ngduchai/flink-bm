@@ -42,15 +42,27 @@ int saveAsHDF5(const char* fname, float* recon, hsize_t* output_dims) {
 }
 
 void SirtEngine::setup(const std::unordered_map<std::string, int64_t>& tmetadata) {
+  sirt_metadata.task_id            = require_int(tmetadata, "task_id");
+  sirt_metadata.window_step        = require_int(tmetadata, "window_step");
+  sirt_metadata.thread_count       = require_int(tmetadata, "thread_count");
+  sirt_metadata.n_sinograms        = require_int(tmetadata, "n_sinograms");
+  sirt_metadata.n_rays_per_proj_row= require_int(tmetadata, "n_rays_per_proj_row");
+  sirt_metadata.beg_sinograms      = require_int(tmetadata, "beg_sinogram");
+  sirt_metadata.tn_sinograms       = require_int(tmetadata, "tn_sinograms");
+  sirt_metadata.window_len         = require_int(tmetadata, "window_length");
+}
 
-  task_id               = require_int(tmetadata, "task_id");
-  window_step           = require_int(tmetadata, "window_step");
-  int thread_count      = require_int(tmetadata, "thread_count");
-  ds.n_sinograms        = require_int(tmetadata, "n_sinograms");
-  ds.n_rays_per_proj_row= require_int(tmetadata, "n_rays_per_proj_row");
-  ds.beg_sinograms      = require_int(tmetadata, "beg_sinogram");
-  ds.tn_sinograms       = require_int(tmetadata, "tn_sinograms");
-  ds.window_len         = require_int(tmetadata, "window_length");
+void SirtProcessor::setup(int row_id, SirtMetadata& tmetadata) {
+
+  row_id                = row_id;
+  task_id               = tmetadata.task_id;
+  window_step           = tmetadata.window_step;
+  int thread_count      = tmetadata.thread_count;
+  ds.n_sinograms        = tmetadata.n_sinograms;
+  ds.n_rays_per_proj_row= tmetadata.n_rays_per_proj_row;
+  ds.beg_sinograms      = tmetadata.beg_sinograms;
+  ds.tn_sinograms       = tmetadata.tn_sinograms;
+  ds.window_len         = tmetadata.window_len;
 
   const int64_t n_blocks = ds.n_sinograms;
   const int64_t num_cols = ds.n_rays_per_proj_row;
@@ -86,6 +98,19 @@ void SirtEngine::setup(const std::unordered_map<std::string, int64_t>& tmetadata
 }
 
 ProcessResult SirtEngine::process(
+  const std::unordered_map<std::string, int64_t>& config,
+  const std::unordered_map<std::string, std::string>& metadata,
+  const float* data,
+  std::size_t len
+) {
+  int row_id = std::stoi(require_str(metadata, "row_id"));
+  if (sirt_processors.find(row_id) == sirt_processors.end()) {
+    sirt_processors.insert({row_id, SirtProcessor(row_id, this->sirt_metadata)});
+  }
+  return sirt_processors[row_id].process(config, metadata, data, len);
+}
+
+ProcessResult SirtProcessor::process(
   const std::unordered_map<std::string, int64_t>& config,
   const std::unordered_map<std::string, std::string>& metadata,
   const float* data,
@@ -219,7 +244,11 @@ ProcessResult SirtEngine::process(
 }
 
 std::vector<std::uint8_t> SirtEngine::snapshot() const {
-  SirtCkpt ckpt(passes, recon_image);
+  SirtCkpt ckpt;
+  for (const auto& processor : this->sirt_processors) {
+    ckpt.add_processor(processor.first, processor.second.passes, processor.second.recon_image);
+  }
+
   std::vector<std::uint8_t> saved_ckpt = ckpt.to_bytes();
   // TODO: replace these with actual boost serialization
 
@@ -238,8 +267,23 @@ std::vector<std::uint8_t> SirtEngine::snapshot() const {
 void SirtEngine::restore(const std::vector<std::uint8_t>& snapshot) {
   // TODO: replace these with actual boost deserialization
   SirtCkpt ckpt(snapshot);
-  passes = ckpt.progress;
-  recon_image = ckpt.recon_image;
+  for (int i = 0; i < ckpt.progresses.size(); ++i) {
+    int row_id = ckpt.row_ids[i];
+    int passes = ckpt.progresses[i];
+    DataRegionBareBase<float>* recon_image = ckpt.recon_images[i];
+
+    auto it = sirt_processors.find(row_id); 
+    if (it == sirt_processors.end()) {
+      SirtProcessor processor(row_id, this->sirt_metadata);
+      processor.passes = passes;
+      processor.recon_image = recon_image;
+      sirt_processors.insert({row_id, processor});
+    }else{
+      it->second.passes = passes;
+      it->second.recon_image = recon_image;
+    }
+
+  }
 }
 
 

@@ -317,11 +317,11 @@ class DistOperator(FlatMapFunction):
     def _msg(meta, data_bytes):
         return [meta, data_bytes]
 
-    def prepare_data_rep_msg(self, task_id: int, seq: int, projection_id: int, theta: float,
+    def prepare_data_rep_msg(self, row_id: int, seq: int, projection_id: int, theta: float,
                              center: float, data: np.ndarray) -> list:
         meta = {
             "Type": "MSG_DATA_REP",
-            "task_id": str(task_id),
+            "row_id": str(row_id),
             "seq_n": str(seq),
             "projection_id": str(projection_id),
             "theta": str(float(theta)),
@@ -336,27 +336,30 @@ class DistOperator(FlatMapFunction):
         row, col = int(dims[0]), int(dims[1])
         assert data.size == row * col, f"Flattened data size mismatch with dims: {data.size} != {row}*{col}"
         msgs = []
-        nsin, rem = row // n_ranks, row % n_ranks
-        offset_rows = 0
-        for rank in range(n_ranks):
-            rows_here = nsin + (1 if rank < rem else 0)
-            elems = rows_here * col
-            chunk = data[offset_rows * col:(offset_rows * col) + elems]
-            msgs.append(self.prepare_data_rep_msg(rank, seq, projection_id, theta, center, chunk))
-            offset_rows += rows_here
+        # nsin, rem = row // n_ranks, row % n_ranks
+        # offset_rows = 0
+        # for rank in range(n_ranks):
+        #     rows_here = nsin + (1 if rank < rem else 0)
+        #     elems = rows_here * col
+        #     chunk = data[offset_rows * col:(offset_rows * col) + elems]
+        #     msgs.append(self.prepare_data_rep_msg(rank, seq, projection_id, theta, center, chunk))
+        #     offset_rows += rows_here
+        for offset_row in range(row):
+            chunk = data[offset_row*col : offset_row*(col+1)]
+            msgs.append(self.prepare_data_rep_msg(offset_row, seq, projection_id, theta, center, chunk))
         return msgs
 
     def flat_map(self, value):
         metadata, data = value
 
-         # Broadcast FIN to all SIRT ranks and include task_id so key_by works
+         # Broadcast FIN to all SIRT ranks and include row_id so key_by works
         if isinstance(metadata, dict) and metadata.get("Type") == "WARMUP":
             for rank in range(int(self.args.ntask_sirt)):
-                yield [{"Type": "WARMUP", "task_id": str(rank)}, b""]
+                yield [{"Type": "WARMUP", "row_id": str(rank)}, b""]
             return
         if metadata.get("Type") == "FIN":
             for rank in range(int(self.args.ntask_sirt)):
-                yield [{"Type": "FIN", "task_id": str(rank)}, b""]
+                yield [{"Type": "FIN", "row_id": str(rank)}, b""]
             self.running = False
             return
         if not self.running:
@@ -588,9 +591,10 @@ class SirtOperator(KeyedProcessFunction):
             # print(f"SirtOperator: Emitting msg: {meta_in}, size {len(out_bytes)} bytes")
             # print(f"SirtOperator: Sent: {meta_in}, first data float: {out_bytes[0]}")
             iteration_stream = out_meta["iteration_stream"]
+            row_id = out_meta["row_id"]
             import time
             now = time.time()
-            print(f"[{now}] SirtOperator -- Task-{self.task_id}: Sent: stream={iteration_stream}")
+            print(f"[{now}] SirtOperator -- Task-{self.task_id}: Sent: row_id={row_id} stream={iteration_stream}")
             yield [dict(out_meta), bytes(out_bytes)]
 
 # -------------------------
@@ -731,18 +735,14 @@ def _ship_local_modules(env):
 def task_key_selector(value):
     # md = value[0] if isinstance(value, (list, tuple)) and value else {}
     [md, _] = value
-    tid = int(md.get("task_id", 0))  # default 0 for FIN or unexpected msgs
+    tid = int(md.get("row_id", 0))  # default 0 for FIN or unexpected msgs
     print(f"Key selector received meta: {md} --> key = {tid}")
     return int(tid)
 
 class TaskIdPartitioner(Partitioner):
     def partition(self, key, num_partitions: int):
         # route directly to the target subtask = key
-        t = int(key)
-        if t < 0:
-            t = 0
-        if t >= num_partitions:
-            t = num_partitions - 1
+        t = int(key) % num_partitions
         print(f"SirtPartition: key = {key} --> patition = {t} (num_partitions = {num_partitions})")
         return t
 

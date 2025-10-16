@@ -3,7 +3,7 @@
 
 #include <cstdint>
 #include <string>
-#include <unordered_map>
+#include <map>
 #include <vector>
 #include <sstream>
 
@@ -28,9 +28,19 @@ struct ProcessResult {
     std::unordered_map<std::string, std::string> meta;
 };
 
-class SirtEngine {
-private:
-    int task_id = -1;
+struct SirtMetadata {
+    int task_id;
+    int window_step;
+    int thread_count;
+    int n_sinograms;
+    int n_rays_per_proj_row;
+    int beg_sinograms;
+    int tn_sinograms;
+    int window_len;
+};
+
+class SirtProcessor {
+public:
     DataStream ds;
     trace_io::H5Metadata h5md;
     SIRTReconSpace* main_recon_space = nullptr;
@@ -39,14 +49,37 @@ private:
     DataRegion2DBareBase<float>* main_recon_replica = nullptr;
     int window_step = 1;
     int passes = 0;
+    int row_id = -1;
+    int task_id = -1;
 
-public:
-    SirtEngine()
+    void setup(int row_id, SirtMetadata& tmetadata);
+
+    SirtProcessor()
         : ds(0, 0, 0), main_recon_space(nullptr), engine(nullptr),
           recon_image(nullptr), main_recon_replica(nullptr), window_step(0), passes(0) {
         h5md.ndims = 0;
         h5md.dims  = nullptr;
     }
+
+    SirtProcessor(int row_id, SirtMetadata& tmetadata) : SirtProcessor() {
+        this->setup(row_id, tmetadata);
+    }
+
+    ProcessResult process(
+        const std::unordered_map<std::string, int64_t>& config,
+        const std::unordered_map<std::string, std::string>& metadata,
+        const float* data,
+        std::size_t len
+    );
+
+};
+
+class SirtEngine {
+private:
+    SirtMetadata sirt_metadata;
+    std::map<int, SirtProcessor> sirt_processors;
+
+public:
 
     ProcessResult process(
         const std::unordered_map<std::string, int64_t>& config,
@@ -64,12 +97,16 @@ public:
 };
 
 struct SirtCkpt {
-    int progress{0};
-    DataRegionBareBase<float>* recon_image{nullptr};  // << init to nullptr
+    std::vector<int> row_ids;
+    std::vector<int> progresses;
+    std::vector<DataRegionBareBase<float>*> recon_images;  // << init to nullptr
 
     SirtCkpt() = default;
-    SirtCkpt(int progress_, DataRegionBareBase<float>* img)
-        : progress(progress_), recon_image(img) {}
+    void add_processor(int row_id, int progress, DataRegionBareBase<float>* recon_image) {
+        row_ids.push_back(row_id);
+        progresses.push_back(progress);
+        recon_images.push_back(recon_image);
+    }
 
     explicit SirtCkpt(const std::vector<std::uint8_t>& snapshot) {
         from_bytes_(snapshot);
@@ -90,14 +127,15 @@ private:
 
     template <class Archive>
     void save(Archive& ar, const unsigned) const {
-        ar & progress;
-        ar & recon_image;   // pointer (polymorphic)
+        ar & row_ids;
+        ar & progresses;
+        ar & recon_images;   // pointer (polymorphic)
     }
     template <class Archive>
     void load(Archive& ar, const unsigned) {
-        ar & progress;
-        recon_image = nullptr;
-        ar & recon_image;   // Boost allocates correct derived (needs EXPORT)
+        ar & row_ids;
+        ar & progresses;
+        ar & recon_images;   // Boost allocates correct derived (needs EXPORT)
     }
     BOOST_SERIALIZATION_SPLIT_MEMBER();
 
