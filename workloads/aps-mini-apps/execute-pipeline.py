@@ -344,9 +344,9 @@ class DistOperator(FlatMapFunction):
         #     chunk = data[offset_rows * col:(offset_rows * col) + elems]
         #     msgs.append(self.prepare_data_rep_msg(rank, seq, projection_id, theta, center, chunk))
         #     offset_rows += rows_here
-        for offset_row in range(row):
-            chunk = data[offset_row*col : offset_row*(col+1)]
-            msgs.append(self.prepare_data_rep_msg(offset_row, seq, projection_id, theta, center, chunk))
+        for offset_sinogram in range(self.args.num_sinograms):
+            chunk = data[offset_sinogram*row*col : (offset_sinogram+1)*row*col]
+            msgs.append(self.prepare_data_rep_msg(offset_sinogram, seq, projection_id, theta, center, chunk))
         return msgs
 
     def flat_map(self, value):
@@ -413,8 +413,8 @@ class DistOperator(FlatMapFunction):
             center = (dims[1] / 2.0) if center == 0.0 else center
 
             msgs = self.generate_worker_msgs(data_flat, dims, projection_id, theta,
-                                             self.args.ntask_sirt, center, sequence_id)
-            for i in range(self.args.ntask_sirt):
+                                             self.args.n, center, sequence_id)
+            for i in range(len(msgs)):
                 md = msgs[i][0]
                 # print(f"Task {i}: seq_id {md['seq_n']} proj_id {md['projection_id']}, theta: {md['theta']} center: {md['center']}")
                 # print(f"DistOperator: Sent: {md}, first data float: {msgs[i][1][0]}")
