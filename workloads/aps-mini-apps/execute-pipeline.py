@@ -656,6 +656,7 @@ class DenoiserOperator(FlatMapFunction):
                     return
 
             nproc_sirt = int(self.args.ntask_sirt)
+            num_sinograms = int(self.args.num_sinograms)
             rank_dims = (int(meta["rank_dims_0"]), int(meta["rank_dims_1"]), int(meta["rank_dims_2"]))
             dd = np.frombuffer(data, dtype=np.float32, count=rank_dims[0]*rank_dims[1]*rank_dims[2]).reshape(rank_dims)
 
@@ -673,7 +674,8 @@ class DenoiserOperator(FlatMapFunction):
 
             print(f"DenoiserOperator: receive data stream={iteration_stream}, count: {len(self.waiting_metadata[iteration_stream])}, need: {nproc_sirt}")
 
-            if len(self.waiting_metadata[iteration_stream]) == nproc_sirt:
+            # if len(self.waiting_metadata[iteration_stream]) == nproc_sirt:
+            if len(self.waiting_metadata[iteration_stream]) == num_sinograms:
                 sorted_ranks = sorted(self.waiting_metadata[iteration_stream].keys())
                 sorted_data = [self.waiting_data[iteration_stream][r] for r in sorted_ranks]
                 os.makedirs(self.args.logdir, exist_ok=True)
@@ -920,17 +922,20 @@ def main():
     #     output_type=Types.PICKLED_BYTE_ARRAY()
     # ).name("SIRT Operator").set_parallelism(max(1, args.ntask_sirt)).disable_chaining()
 
-    # route by task_id so record goes to subtask = task_id
-    routed = dist.partition_custom(TaskIdPartitioner(), task_key_selector) \
-            .name("route_by_task_id") \
-            .set_parallelism(max(1, args.ntask_sirt))
+    # # route by task_id so record goes to subtask = task_id
+    # routed = dist.partition_custom(TaskIdPartitioner(), task_key_selector) \
+    #         .name("route_by_task_id") \
+    #         .set_parallelism(max(1, args.ntask_sirt))
 
 
-    # sirt = routed.key_by(lambda _: 0, key_type=Types.INT()) \
-    #     .process(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
-    #                 output_type=Types.PICKLED_BYTE_ARRAY()) \
-    sirt = routed.process(
-            SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
+    # # sirt = routed.key_by(lambda _: 0, key_type=Types.INT()) \
+    # #     .process(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
+    # #                 output_type=Types.PICKLED_BYTE_ARRAY()) \
+    # sirt = routed.process(
+    #         SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
+    #         output_type=Types.PICKLED_BYTE_ARRAY()) \
+    sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
+        .process(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
             output_type=Types.PICKLED_BYTE_ARRAY()) \
         .name("Sirt Operator") \
         .uid("sirt-operator") \
