@@ -214,6 +214,7 @@ ProcessResult SirtProcessor::process(
     std::unordered_map<std::string, std::string> md = {
       {"Type", "DATA"},
       {"rank", std::to_string(task_id)},
+      {"row_id", std::to_string(row_id)},
       {"iteration_stream", iteration_stream.str()},
       {"rank_dims_0", std::to_string(rank_dims[0])},
       {"rank_dims_1", std::to_string(rank_dims[1])},
