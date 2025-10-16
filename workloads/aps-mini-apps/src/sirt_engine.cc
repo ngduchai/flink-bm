@@ -69,7 +69,8 @@ void SirtProcessor::setup(int row_id, const SirtMetadata& tmetadata) {
 
   h5md.ndims=3;
   h5md.dims= new hsize_t[3];
-  h5md.dims[1] = ds.tn_sinograms;
+  // h5md.dims[1] = ds.tn_sinograms;
+  h5md.dims[1] = 1;
   h5md.dims[0] = 0;   /// Number of projections is unknown
   h5md.dims[2] = ds.n_rays_per_proj_row;
   
