@@ -416,9 +416,9 @@ class DistOperator(FlatMapFunction):
                                              self.args.num_sinograms, center, sequence_id)
             for i in range(len(msgs)):
                 md = msgs[i][0]
-                len = len(msgs[i][1])
+                datalen = len(msgs[i][1])
                 # print(f"Task {i}: seq_id {md['seq_n']} proj_id {md['projection_id']}, theta: {md['theta']} center: {md['center']}")
-                print(f"DistOperator: Sent: {md}, data size: {len}")
+                print(f"DistOperator: Sent: {md}, data size: {datalen}")
                 yield msgs[i]
 
         if read_image.Itype() is self.serializer.ITypes.White:
