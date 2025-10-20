@@ -64,7 +64,7 @@ void SirtProcessor::setup(int row_id, const SirtMetadata& tmetadata) {
   ds.tn_sinograms       = tmetadata.tn_sinograms;
   ds.window_len         = tmetadata.window_len;
 
-  const int64_t n_blocks = 1; // only one sinogram per process
+  const int64_t n_blocks = ds.n_sinograms;
   const int64_t num_cols = ds.n_rays_per_proj_row;
 
   h5md.ndims=3;
@@ -236,9 +236,9 @@ ProcessResult SirtProcessor::process(
     result.meta = md;
     // MPI_Barrier(MPI_COMM_WORLD);
     
-    // std::string outputpath = iteration_stream.str() + "-recon.h5";
-    // saveAsHDF5(outputpath.c_str(), 
-    //     &recon[recon_slice_data_index], app_dims);
+    std::string outputpath = iteration_stream.str() + "-recon.h5";
+    saveAsHDF5(outputpath.c_str(), 
+        &recon[recon_slice_data_index], app_dims);
   }
 
   passes++;
