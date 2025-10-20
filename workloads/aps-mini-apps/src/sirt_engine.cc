@@ -172,20 +172,20 @@ ProcessResult SirtProcessor::process(
     std::cout << "[Task-" << task_id << "] passes = " << passes << " -- Iteration " << i+1 << "/" << window_iter << " on current window" << std::endl;
 
     engine->RunParallelReduction(*curr_slices, req_number);  /// Reconstruction
-    std::cout << "[Task-" << task_id << "] ---- Complete parallel reduction ---- " << std::endl;
+    // std::cout << "[Task-" << task_id << "] ---- Complete parallel reduction ---- " << std::endl;
     
     engine->ParInPlaceLocalSynchWrapper();              /// Local combination
-    std::cout << "[Task-" << task_id << "] ---- Complete par in-place local synch ---- " << std::endl;
+    // std::cout << "[Task-" << task_id << "] ---- Complete par in-place local synch ---- " << std::endl;
    
     main_recon_space->UpdateRecon(*recon_image, *main_recon_replica);
     // main_recon_space->UpdateRecon(*recon_image, recon_replica);
-    std::cout << "[Task-" << task_id << "] ---- Complete updating reconstruction ---- " << std::endl;
+    // std::cout << "[Task-" << task_id << "] ---- Complete updating reconstruction ---- " << std::endl;
     
     engine->ResetReductionSpaces(init_val);
-    std::cout << "[Task-" << task_id << "] ---- Complete resetting reduction spaces ---- " << std::endl;
+    // std::cout << "[Task-" << task_id << "] ---- Complete resetting reduction spaces ---- " << std::endl;
 
     curr_slices->ResetMirroredRegionIter();
-    std::cout << "[Task-" << task_id << "] ---- Complete resetting mirrored region iter ---- " << std::endl;
+    // std::cout << "[Task-" << task_id << "] ---- Complete resetting mirrored region iter ---- " << std::endl;
   }
   /* Emit reconstructed data */
   if(!(passes%write_freq)){

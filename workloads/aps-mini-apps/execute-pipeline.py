@@ -669,17 +669,18 @@ class DenoiserOperator(FlatMapFunction):
 
             iteration_stream = meta["iteration_stream"]
             rank = int(meta["rank"])
+            row_id = int(meta["row_id"])
 
             if iteration_stream not in self.waiting_metadata:
                 self.waiting_metadata[iteration_stream] = {}
                 self.waiting_data[iteration_stream] = {}
 
-            self.waiting_metadata[iteration_stream][rank] = meta
-            self.waiting_data[iteration_stream][rank] = dd
+            self.waiting_metadata[iteration_stream][row_id] = meta
+            self.waiting_data[iteration_stream][row_id] = dd
 
             self.waitting_state.update({"metadata": self.waiting_metadata, "data": self.waiting_data})
 
-            print(f"DenoiserOperator: receive data stream={iteration_stream}, count: {len(self.waiting_metadata[iteration_stream])}, need: {nproc_sirt}")
+            print(f"DenoiserOperator: receive data stream={iteration_stream}, count: {len(self.waiting_metadata[iteration_stream])}, need: {num_sinograms}")
 
             # if len(self.waiting_metadata[iteration_stream]) == nproc_sirt:
             if len(self.waiting_metadata[iteration_stream]) == num_sinograms:
