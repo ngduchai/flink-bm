@@ -474,10 +474,12 @@ class SirtOperator(KeyedProcessFunction):
             self.task_id = ctx.get_index_of_this_subtask()
             num_tasks = ctx.get_number_of_parallel_subtasks()
             total_sinograms = int(self.cfg["num_sinograms"])
-            nsino = total_sinograms // num_tasks
-            rem = total_sinograms % num_tasks
-            n_sinograms = nsino + (1 if self.task_id < rem else 0)
-            beg_sinogram = self.task_id * nsino + min(self.task_id, rem)
+            n_sinograms = 1
+            beg_sinogram = 0
+            # nsino = total_sinograms // num_tasks
+            # rem = total_sinograms % num_tasks
+            # n_sinograms = nsino + (1 if self.task_id < rem else 0)
+            # beg_sinogram = self.task_id * nsino + min(self.task_id, rem)
 
             tmetadata = {
                 "task_id": self.task_id,
