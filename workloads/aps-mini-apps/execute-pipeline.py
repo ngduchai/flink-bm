@@ -841,7 +841,7 @@ def main():
 
     env.set_runtime_mode(RuntimeExecutionMode.STREAMING)
     
-    env.enable_checkpointing(100000000, CheckpointingMode.EXACTLY_ONCE)
+    env.enable_checkpointing(10000, CheckpointingMode.EXACTLY_ONCE)
     ck = env.get_checkpoint_config()
     # ck.set_checkpoint_timeout(15 * 60 * 1000)          # 15 min timeout
     # ck.set_max_concurrent_checkpoints(1)               # avoid overlaps
