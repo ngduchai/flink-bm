@@ -257,16 +257,18 @@ std::vector<std::uint8_t> SirtEngine::snapshot() const {
   }
 
   std::vector<std::uint8_t> saved_ckpt = ckpt.to_bytes();
-  // TODO: replace these with actual boost serialization
 
-  // std::cout << "testing if the serialization works..." << std::endl;
-  // SirtCkpt test_ckpt(saved_ckpt);
-  // assert(test_ckpt.progress == passes);
-  // assert(test_ckpt.recon_image->count() == recon_image->count());
-  // for (size_t i = 0; i < recon_image->count(); ++i) {
-  //   assert((*test_ckpt.recon_image)[i] == (*recon_image)[i]);
-  // }
-  // std::cout << "serialization test passed!" << std::endl;
+  std::cout << "testing if the serialization works..." << std::endl;
+  SirtCkpt test_ckpt(saved_ckpt);
+  for (size_t i = 0; i < ckpt.row_ids.size(); ++i) {
+    assert(test_ckpt.row_ids[i] == ckpt.row_ids[i]);
+    assert(test_ckpt.progresses[i] == ckpt.progresses[i]);
+    assert(test_ckpt.recon_images[i]->count() == ckpt.recon_images[i]->count());
+    for (size_t j = 0; j < ckpt.recon_images[i]->count(); ++j) {
+      assert((*test_ckpt.recon_images[i])[j] == (*ckpt.recon_images[i])[j]);
+    }
+  }
+  std::cout << "serialization test passed!" << std::endl;
 
   return saved_ckpt;
 }
