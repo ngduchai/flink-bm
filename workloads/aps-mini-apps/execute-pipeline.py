@@ -164,6 +164,7 @@ class DaqEmitter(FlatMapFunction):
 
         self.warmup = False
         self.index_state = None
+        self.seq_state = None
 
         self.seq = self.seq0
         self.tot_transfer_size = 0
@@ -207,7 +208,9 @@ class DaqEmitter(FlatMapFunction):
 
             # Load index state
             index_desc = ValueStateDescriptor("daq_emitter_index_v1", Types.INT())
+            seq_desc = ValueStateDescriptor("daq_emitter_seq_v1", Types.LONG())
             self.index_state = _ctx.get_state(index_desc)
+            self.seq_state = _ctx.get_state(seq_desc)
 
         except Exception as e:
             print("[DaqEmitter.open] failed to prepare dataset:", e, file=sys.stderr)
@@ -230,7 +233,10 @@ class DaqEmitter(FlatMapFunction):
         
         if not self._index_loaded:
             v = self.index_state.value()
+            s = self.seq_state.value()
             self.index = int(v) if v is not None else 0
+            self.seq = int(s) if s is not None else self.seq0
+            print(f"[DaqEmitter] start with index state: {self.index}, seq state: {self.seq}")
             self._index_loaded = True
         
         if self.warmup == False:
@@ -282,8 +288,9 @@ class DaqEmitter(FlatMapFunction):
                 self.index = 0
                 self.it += 1
 
-            # Save index state
+            # Save index and sequence state
             self.index_state.update(self.index)
+            self.seq_state.update(self.seq)
 
             yield [md, payload]
 
