@@ -827,7 +827,7 @@ def main():
     cfg.set_string("execution.checkpointing.savepoint-dir", ckpt_dir)
     # cfg.set_boolean("execution.checkpointing.unaligned.enabled", True)
 
-    cfg.set_integer("execution.checkpointing.timeout", 60000000)  # 1 minutes
+    cfg.set_integer("execution.checkpointing.timeout", 60000)  # 1 minutes
     cfg.set_string("akka.ask.timeout", "60s")
 
     # How many records per Python bundle before sending to the JVM
