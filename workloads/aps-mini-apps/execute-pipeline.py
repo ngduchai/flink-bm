@@ -833,7 +833,7 @@ def main():
     cfg.set_integer("state.backend.rocksdb.max-write-buffer-number", 4)
     cfg.set_string("execution.checkpointing.dir", ckpt_dir)
     cfg.set_string("execution.checkpointing.savepoint-dir", ckpt_dir)
-    # cfg.set_boolean("execution.checkpointing.unaligned.enabled", True)
+    cfg.set_boolean("execution.checkpointing.unaligned.enabled", True)
 
     cfg.set_integer("execution.checkpointing.timeout", 60000)  # 1 minutes
     cfg.set_string("akka.ask.timeout", "60s")
@@ -856,8 +856,8 @@ def main():
     # ck.set_min_pause_between_checkpoints(5 * 1000)     # 5s pause
 
     # Comment out because we use custom partitioning
-    # ck.enable_unaligned_checkpoints(True)              # helps under backpressure
-    # ck.set_aligned_checkpoint_timeout(Duration.of_seconds(0))        # switch to unaligned if align >3s
+    ck.enable_unaligned_checkpoints(True)              # helps under backpressure
+    ck.set_aligned_checkpoint_timeout(Duration.of_seconds(0))        # switch to unaligned if align >3s
 
     # env.disable_operator_chaining()
     # env.set_buffer_timeout(100)
