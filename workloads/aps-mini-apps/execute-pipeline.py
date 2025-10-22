@@ -528,6 +528,7 @@ class SirtOperator(KeyedProcessFunction):
         if self._restored:
             return
         try:
+            print(f"[SirtOperator]: restoring from checkpoint...")
             raw = self.snap_state.value()   # keyed ValueState for the current key
             self._restored = True
             if raw:
