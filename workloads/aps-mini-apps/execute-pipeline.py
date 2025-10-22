@@ -529,6 +529,8 @@ class SirtOperator(KeyedProcessFunction):
             return
         try:
             raw = self.snap_state.value()   # keyed ValueState for the current key
+            cnt_state = self.count_state.value()
+            print(f"[SirtOperator]: restoring from checkpoint: self = {len(raw)}, count = {cnt_state}")
             self._restored = True
             if raw:
                 raw_bytes = raw if isinstance(raw, (bytes, bytearray)) else bytes(raw)
@@ -559,7 +561,9 @@ class SirtOperator(KeyedProcessFunction):
             self.snap_state.update(snap_bytes)
             # self.snap_state.update(bytes([1, 2, 3]))
             self.count_state.update(self.processed_local)
-            print(f"[SirtOperator] snapshot at {self.processed_local} tuples: {len(snap_bytes)} bytes, ")
+            raw = self.snap_state.value()
+            cnt = self.count_state.value()
+            print(f"[SirtOperator] snapshot at {self.processed_local} tuples: {len(snap_bytes)} bytes: self = {len(raw)}, count = {cnt}")
         except Exception as e:
             print("[SirtOperator] engine.snapshot failed:", e, file=sys.stderr)
             traceback.print_exc()
@@ -827,12 +831,12 @@ def main():
     cfg.set_string("state.backend.type", "rocksdb")
     cfg.set_string("execution.checkpointing.storage", "filesystem")
     cfg.set_boolean("state.backend.rocksdb.predefined-options", "SPINNING_DISK_OPTIMIZED")
-    cfg.set_integer("state.backend.rocksdb.block.cache-size", 64 * 1024 * 1024)  # 64MB
-    cfg.set_integer("state.backend.rocksdb.write-buffer-size", 64 * 1024 * 1024)  # 64MB
+    cfg.set_integer("state.backend.rocksdb.block.cache-size", 128 * 1024 * 1024)  # 128MB
+    cfg.set_integer("state.backend.rocksdb.write-buffer-size", 128 * 1024 * 1024)  # 128MB
     cfg.set_integer("state.backend.rocksdb.max-write-buffer-number", 4)
     cfg.set_string("execution.checkpointing.dir", ckpt_dir)
     cfg.set_string("execution.checkpointing.savepoint-dir", ckpt_dir)
-    # cfg.set_boolean("execution.checkpointing.unaligned.enabled", True)
+    cfg.set_boolean("execution.checkpointing.unaligned.enabled", True)
 
     cfg.set_integer("execution.checkpointing.timeout", 60000)  # 1 minutes
     cfg.set_string("akka.ask.timeout", "60s")
@@ -855,8 +859,8 @@ def main():
     # ck.set_min_pause_between_checkpoints(5 * 1000)     # 5s pause
 
     # Comment out because we use custom partitioning
-    # ck.enable_unaligned_checkpoints(True)              # helps under backpressure
-    # ck.set_aligned_checkpoint_timeout(Duration.of_seconds(0))        # switch to unaligned if align >3s
+    ck.enable_unaligned_checkpoints(True)              # helps under backpressure
+    ck.set_aligned_checkpoint_timeout(Duration.of_seconds(0))        # switch to unaligned if align >3s
 
     # env.disable_operator_chaining()
     # env.set_buffer_timeout(100)
