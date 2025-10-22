@@ -292,7 +292,7 @@ void SirtEngine::restore(const std::vector<std::uint8_t>& snapshot) {
       it->second.passes = passes;
       it->second.recon_image = recon_image;
     }
-
+    std::cout << "Restored SirtProcessor for row_id " << row_id << " with passes " << passes << std::endl;
   }
 }
 
