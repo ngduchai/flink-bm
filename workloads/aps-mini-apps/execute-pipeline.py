@@ -528,8 +528,9 @@ class SirtOperator(KeyedProcessFunction):
         if self._restored:
             return
         try:
-            print(f"[SirtOperator]: restoring from checkpoint...")
             raw = self.snap_state.value()   # keyed ValueState for the current key
+            cnt_state = self.count_state.value()
+            print(f"[SirtOperator]: restoring from checkpoint: self = {len(raw)}, count = {cnt_state}")
             self._restored = True
             if raw:
                 raw_bytes = raw if isinstance(raw, (bytes, bytearray)) else bytes(raw)
@@ -560,7 +561,9 @@ class SirtOperator(KeyedProcessFunction):
             self.snap_state.update(snap_bytes)
             # self.snap_state.update(bytes([1, 2, 3]))
             self.count_state.update(self.processed_local)
-            print(f"[SirtOperator] snapshot at {self.processed_local} tuples: {len(snap_bytes)} bytes, ")
+            raw = self.snap_state.value()
+            cnt = self.count_state.value()
+            print(f"[SirtOperator] snapshot at {self.processed_local} tuples: {len(snap_bytes)} bytes: self = {len(raw)}, count = {cnt}")
         except Exception as e:
             print("[SirtOperator] engine.snapshot failed:", e, file=sys.stderr)
             traceback.print_exc()
