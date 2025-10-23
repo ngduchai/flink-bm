@@ -530,7 +530,8 @@ class SirtOperator(KeyedProcessFunction):
         try:
             raw = self.snap_state.value()   # keyed ValueState for the current key
             cnt_state = self.count_state.value()
-            print(f"[SirtOperator]: restoring from checkpoint: self = {len(raw)}, count = {cnt_state}")
+            print(f"[SirtOperator]: restoring from checkpoint: count = {cnt_state}")
+            print(f"[SirtOperator]: restoring from checkpoint: self = {len(raw)}")
             self._restored = True
             if raw:
                 raw_bytes = raw if isinstance(raw, (bytes, bytearray)) else bytes(raw)
