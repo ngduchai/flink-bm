@@ -452,7 +452,7 @@ class DistOperator(FlatMapFunction):
 
         self.seq += 1
         self.seq_state.update(self.seq)
-        print(f"[DistOperator] start with seq state: {self.seq_state.value()}")
+        print(f"[DistOperator] checkpointed with seq state: {self.seq_state.value()}")
 
 # -------------------------
 # Map: SIRT
