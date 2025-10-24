@@ -291,6 +291,7 @@ class DaqEmitter(FlatMapFunction):
             # Save index and sequence state
             self.index_state.update(self.index)
             self.seq_state.update(self.seq)
+            print(f"[DaqEmitter] start with index state: {self.index_state.value()}, seq state: {self.seq_state.value()}")
 
             yield [md, payload]
 
@@ -309,6 +310,8 @@ class DistOperator(FlatMapFunction):
         self.tot_white_imgs = 0
         self.tot_dark_imgs = 0
         self.seq = 0
+        self.seq_state = None
+        self.seq_loaded = False
 
     def open(self, ctx: RuntimeContext):
         self.serializer = TraceSerializer.ImageSerializer()
@@ -319,6 +322,10 @@ class DistOperator(FlatMapFunction):
                   "ForceDefaults?", has_force)
         except Exception as e:
             print("[DistOperator] flatbuffers probe failed:", e)
+
+        seq_desc = ValueStateDescriptor("dist_seq_v1", Types.LONG()) 
+        self.seq_state = ctx.get_state(seq_desc)
+        self.seq_loaded = False
 
     @staticmethod
     def _msg(meta, data_bytes):
@@ -358,6 +365,12 @@ class DistOperator(FlatMapFunction):
 
     def flat_map(self, value):
         metadata, data = value
+
+        if not self.seq_loaded:
+            s = self.seq_state.value()
+            self.seq = int(s) if s is not None else 0
+            print(f"[DistOperator] start with seq state: {self.seq}")
+            self.seq_loaded = True
 
          # Broadcast FIN to all SIRT ranks and include row_id so key_by works
         if isinstance(metadata, dict) and metadata.get("Type") == "WARMUP":
@@ -438,6 +451,8 @@ class DistOperator(FlatMapFunction):
             self.dark_imgs = []; self.dark_imgs.extend(sub); self.tot_dark_imgs += 1
 
         self.seq += 1
+        self.seq_state.update(self.seq)
+        print(f"[DistOperator] start with seq state: {self.seq_state.value()}")
 
 # -------------------------
 # Map: SIRT
