@@ -641,6 +641,7 @@ class DenoiserOperator(FlatMapFunction):
                 state_obj = snap  # already de-pickled by PICKLED_BYTE_ARRAY
                 self.waiting_metadata = state_obj.get("metadata", {}) or {}
                 self.waiting_data = state_obj.get("data", {}) or {}
+                print(f"[DenoiserOperator]: Recover from checkpoint: metadata = {self.waiting_metadata}")
             except Exception:
                 # if you had stored raw bytes earlier, optionally pickle.loads(snap)
                 self.waiting_metadata, self.waiting_data = {}, {}
@@ -691,6 +692,7 @@ class DenoiserOperator(FlatMapFunction):
             self.waiting_data[iteration_stream][row_id] = dd
 
             self.waitting_state.update({"metadata": self.waiting_metadata, "data": self.waiting_data})
+            print(f"[DenoiserOperator]: Saved state: {self.waiting_metadata}")
 
             print(f"DenoiserOperator: receive data stream={iteration_stream}, count: {len(self.waiting_metadata[iteration_stream])}, need: {num_sinograms}")
 
