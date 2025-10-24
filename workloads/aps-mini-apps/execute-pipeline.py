@@ -291,7 +291,7 @@ class DaqEmitter(FlatMapFunction):
             # Save index and sequence state
             self.index_state.update(self.index)
             self.seq_state.update(self.seq)
-            print(f"[DaqEmitter] start with index state: {self.index_state.value()}, seq state: {self.seq_state.value()}")
+            print(f"[DaqEmitter] checkpointed index state: {self.index_state.value()}, seq state: {self.seq_state.value()}")
 
             yield [md, payload]
 
