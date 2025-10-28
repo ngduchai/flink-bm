@@ -58,6 +58,13 @@ DataRegionBase<float, TraceMetadata>* DataStream::setupTraceDataRegion(
     // int center = std::stoi(require_str(vmeta.back(), "center"));
     int center = vcenters.back();
 
+    std::string info = "[Row-" + std::to_string(getRow()) + "/" + std::to_string(getRank()) + "]: Preparing with " + std::to_string(vtheta.size()) + " projections, center=" + std::to_string(center);
+    info += ", theta=" + std::to_string(vtheta.front());
+    for (size_t i = 1; i < vtheta.size(); ++i) {
+      info += "," + std::to_string(vtheta[i]);
+    }
+    std::cout << info << std::endl;
+
     TraceMetadata *mdata = new TraceMetadata(
       vtheta.data(),
       0,                                // metadata().proj_id(),
