@@ -962,7 +962,7 @@ def main():
     #         .name("route_by_task_id") \
     #         .set_parallelism(max(1, args.ntask_sirt))
     # route by task_id so record goes to subtask = task_id
-    routed = dist.partition_custom(TaskIdPartitioner(), task_key_selector) \
+    sirt = dist.partition_custom(TaskIdPartitioner(), task_key_selector) \
             .name("route_by_task_id") \
             .set_parallelism(max(1, args.ntask_sirt)) \
             .process( \
