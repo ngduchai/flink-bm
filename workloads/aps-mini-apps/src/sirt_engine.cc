@@ -236,9 +236,9 @@ ProcessResult SirtProcessor::process(
     result.meta = md;
     // MPI_Barrier(MPI_COMM_WORLD);
     
-    // std::string outputpath = iteration_stream.str() + "-" + std::to_string(row_id) + "-recon.h5";
-    // saveAsHDF5(outputpath.c_str(), 
-    //     &recon[recon_slice_data_index], app_dims);
+    std::string outputpath = iteration_stream.str() + "-" + std::to_string(row_id) + "-recon.h5";
+    saveAsHDF5(outputpath.c_str(), 
+        &recon[recon_slice_data_index], app_dims);
   }
 
   passes++;
