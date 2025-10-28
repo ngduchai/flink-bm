@@ -38,6 +38,7 @@ class DataStreamEvent {
           // std::cout << " first float data: " << dat[0]
           //   << " First value: " << static_cast<unsigned>(p[0])
           //   << " Size: " << size << std::endl;
+          data.clear();
           data.insert(data.end(), dat, dat + size);
         }
       }
