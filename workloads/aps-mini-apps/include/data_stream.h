@@ -34,10 +34,10 @@ class DataStreamEvent {
       theta(th), center(cen) {
 
         if (size > 0 && dat != nullptr) {
-          auto p = reinterpret_cast<const unsigned char*>(dat);
-          std::cout << " first float data: " << dat[0]
-            << " First value: " << static_cast<unsigned>(p[0])
-            << " Size: " << size << std::endl;
+          // auto p = reinterpret_cast<const unsigned char*>(dat);
+          // std::cout << " first float data: " << dat[0]
+          //   << " First value: " << static_cast<unsigned>(p[0])
+          //   << " Size: " << size << std::endl;
           data.insert(data.end(), dat, dat + size);
         }
       }
