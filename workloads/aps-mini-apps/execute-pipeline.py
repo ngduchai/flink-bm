@@ -964,9 +964,9 @@ def main():
     # route by task_id so record goes to subtask = task_id
     routed = dist.partition_custom(TaskIdPartitioner(), task_key_selector) \
             .name("route_by_task_id") \
-            .set_parallelism(max(1, args.ntask_sirt))
-            .process(
-                SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
+            .set_parallelism(max(1, args.ntask_sirt)) \
+            .process( \
+                SirtOperator(cfg=args, every_n=int(args.ckpt_freq)), \
                 output_type=Types.PICKLED_BYTE_ARRAY()) \
             .name("Sirt Operator") \
             .uid("sirt-operator") \
