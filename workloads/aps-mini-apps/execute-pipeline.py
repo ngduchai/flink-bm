@@ -961,23 +961,33 @@ def main():
     # routed = dist.partition_custom(TaskIdPartitioner(), task_key_selector) \
     #         .name("route_by_task_id") \
     #         .set_parallelism(max(1, args.ntask_sirt))
+    # route by task_id so record goes to subtask = task_id
+    routed = dist.partition_custom(TaskIdPartitioner(), task_key_selector) \
+            .name("route_by_task_id") \
+            .set_parallelism(max(1, args.ntask_sirt))
+            .process(
+                SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
+                output_type=Types.PICKLED_BYTE_ARRAY()) \
+            .name("Sirt Operator") \
+            .uid("sirt-operator") \
+            .set_parallelism(max(1, args.ntask_sirt))
 
 
-    # # sirt = routed.key_by(lambda _: 0, key_type=Types.INT()) \
-    # #     .process(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
-    # #                 output_type=Types.PICKLED_BYTE_ARRAY()) \
-    # sirt = routed.process(
-    #         SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
+    # # # sirt = routed.key_by(lambda _: 0, key_type=Types.INT()) \
+    # # #     .process(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
+    # # #                 output_type=Types.PICKLED_BYTE_ARRAY()) \
+    # # sirt = routed.process(
+    # #         SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
+    # #         output_type=Types.PICKLED_BYTE_ARRAY()) \
+    # sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
+    #     .process(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
     #         output_type=Types.PICKLED_BYTE_ARRAY()) \
-    sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
-        .process(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
-            output_type=Types.PICKLED_BYTE_ARRAY()) \
-        .name("Sirt Operator") \
-        .uid("sirt-operator") \
-        .set_parallelism(max(1, args.ntask_sirt)) \
-        # .set_max_parallelism(max(1, args.ntask_sirt)) \
-        # .disable_chaining().start_new_chain() \
-        # .slot_sharing_group("sirt")
+    #     .name("Sirt Operator") \
+    #     .uid("sirt-operator") \
+    #     .set_parallelism(max(1, args.ntask_sirt)) \
+    #     # .set_max_parallelism(max(1, args.ntask_sirt)) \
+    #     # .disable_chaining().start_new_chain() \
+    #     # .slot_sharing_group("sirt")
 
 
     den = sirt.key_by(lambda _: 0, key_type=Types.INT())  \
