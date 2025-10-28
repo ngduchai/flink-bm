@@ -92,6 +92,7 @@ class DataStream
     int64_t beg_sinograms = 0;
     int64_t tn_sinograms = 0;
     uint32_t window_len = 0;
+    int row_id = -1;
 
     DataStream(uint32_t window_len, int rank, int progress=0);
 
@@ -110,6 +111,8 @@ class DataStream
       const float *data, std::size_t data_size);
 
     int getRank();
+
+    int getRow() { return row_id; }
 
     int getBufferSize();
 

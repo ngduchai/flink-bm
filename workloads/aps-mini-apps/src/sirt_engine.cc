@@ -55,6 +55,7 @@ void SirtEngine::setup(const std::unordered_map<std::string, int64_t>& tmetadata
 void SirtProcessor::setup(int row_id, const SirtMetadata& tmetadata) {
 
   this->row_id          = row_id;
+  ds.row_id             = row_id;
   task_id               = tmetadata.task_id;
   window_step           = tmetadata.window_step;
   int thread_count      = tmetadata.thread_count;
@@ -142,7 +143,7 @@ ProcessResult SirtProcessor::process(
   //           << std::endl;
   if (data && len > 0) {
     auto p = reinterpret_cast<const unsigned char*>(data);
-    std::cout << "[Task-" << task_id << "] passes = " << passes << " -- Processing window with " 
+    std::cout << "[Row-" << row_id << "/" << task_id << "] passes = " << passes << " -- Processing window with " 
             << (curr_slices ? curr_slices->metadata().num_projs() : 0) 
             << " projections, center=" << center 
             << ", window_iter=" << window_iter 
@@ -156,11 +157,11 @@ ProcessResult SirtProcessor::process(
     curr_slices->metadata().center(center);
   
   if (ds.isEndOfStream()) {
-    std::cout << "[Task-" << task_id << "] End of stream. Exiting..." << std::endl;
+    std::cout << "[Row-" << row_id << "/" << task_id << "] End of stream. Exiting..." << std::endl;
     return result;
   }
   if(curr_slices == nullptr) {
-    std::cout << "[Task-" << task_id << "] passes = " << passes << " -- No new data in the sliding window. Skip processing" << std::endl;
+    std::cout << "[Row-" << row_id << "/" << task_id << "] passes = " << passes << " -- No new data in the sliding window. Skip processing" << std::endl;
     return result;
   }
   /// Iterate on window
@@ -169,28 +170,28 @@ ProcessResult SirtProcessor::process(
 
   for(int i=0; i<window_iter; ++i){
 
-    std::cout << "[Task-" << task_id << "] passes = " << passes << " -- Iteration " << i+1 << "/" << window_iter << " on current window" << std::endl;
+    std::cout << "[Row-" << row_id << "/" << task_id << "] passes = " << passes << " -- Iteration " << i+1 << "/" << window_iter << " on current window" << std::endl;
 
     engine->RunParallelReduction(*curr_slices, req_number);  /// Reconstruction
-    // std::cout << "[Task-" << task_id << "] ---- Complete parallel reduction ---- " << std::endl;
+    // std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete parallel reduction ---- " << std::endl;
     
     engine->ParInPlaceLocalSynchWrapper();              /// Local combination
-    // std::cout << "[Task-" << task_id << "] ---- Complete par in-place local synch ---- " << std::endl;
+    // std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete par in-place local synch ---- " << std::endl;
    
     main_recon_space->UpdateRecon(*recon_image, *main_recon_replica);
     // main_recon_space->UpdateRecon(*recon_image, recon_replica);
-    // std::cout << "[Task-" << task_id << "] ---- Complete updating reconstruction ---- " << std::endl;
+    // std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete updating reconstruction ---- " << std::endl;
     
     engine->ResetReductionSpaces(init_val);
-    // std::cout << "[Task-" << task_id << "] ---- Complete resetting reduction spaces ---- " << std::endl;
+    // std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete resetting reduction spaces ---- " << std::endl;
 
     curr_slices->ResetMirroredRegionIter();
-    // std::cout << "[Task-" << task_id << "] ---- Complete resetting mirrored region iter ---- " << std::endl;
+    // std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete resetting mirrored region iter ---- " << std::endl;
   }
   /* Emit reconstructed data */
   if(!(passes%write_freq)){
 
-    std::cout << "[Task-" << task_id << "] passes = " << passes << " -- Emitting reconstructed image" << std::endl;
+    std::cout << "[Row-" << row_id << "/" << task_id << "] passes = " << passes << " -- Emitting reconstructed image" << std::endl;
 
     std::stringstream iteration_stream;
     iteration_stream << std::setfill('0') << std::setw(6) << passes;

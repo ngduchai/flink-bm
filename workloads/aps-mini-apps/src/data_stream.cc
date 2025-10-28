@@ -36,7 +36,7 @@ void DataStream::addTomoMsg(DataStreamEvent& event){
 */
 void DataStream::eraseBegTraceMsg(){
   progress++; // Update progress = # processed messages
-  std::cout << "[Task-" << getRank() << "]: Advancing sliding window: Progress: " << progress << std::endl;
+  std::cout << "[Row-" << getRank() << "/" << getRow() << "]: Advancing sliding window: Progress: " << progress << std::endl;
   vtheta.erase(vtheta.begin());
   size_t n_rays_per_proj = n_sinograms * n_rays_per_proj_row;
   vproj.erase(vproj.begin(),vproj.begin()+n_rays_per_proj);
@@ -53,7 +53,7 @@ void DataStream::eraseBegTraceMsg(){
 DataRegionBase<float, TraceMetadata>* DataStream::setupTraceDataRegion(
   DataRegionBareBase<float> &recon_image){
 
-    // std::cout << "[Task-" << getRank() << "]: Setting up data region from sliding window with " << vtheta.size() << " projections" << std::endl;
+    // std::cout << "[Row-" << getRank() << "/" << getRow() << "]: Setting up data region from sliding window with " << vtheta.size() << " projections" << std::endl;
     
     // int center = std::stoi(require_str(vmeta.back(), "center"));
     int center = vcenters.back();
@@ -116,7 +116,7 @@ DataRegionBase<float, TraceMetadata>* DataStream::readSlidingWindow(
   std::string type = require_str(metadata, "Type"); 
   if (type == "FIN") {
     setEndOfStream(true);
-    std::cout << "[Task-" << getRank() << "]: End of stream detected" << std::endl;
+    std::cout << "[Row-" << getRank() << "/" << getRow() << "]: End of stream detected" << std::endl;
     return nullptr;
   }
   
@@ -124,10 +124,10 @@ DataRegionBase<float, TraceMetadata>* DataStream::readSlidingWindow(
   int proj_id = std::stoi(require_str(metadata, "projection_id"));
   double theta = std::stod(require_str(metadata, "theta"));
   double center = std::stod(require_str(metadata, "center"));
-  std::cout << "[Task-" << getRank() << "]: seq_id: " << sequence_id << " projection_id: " << proj_id << " theta: " << theta << " center: " << center << ", progress = " << progress << std::endl;
+  std::cout << "[Row-" << getRank() << "/" << getRow() << "]: seq_id: " << sequence_id << " projection_id: " << proj_id << " theta: " << theta << " center: " << center << ", progress = " << progress << std::endl;
   pending_events.push_back(DataStreamEvent(metadata, sequence_id, proj_id, theta, center, data, data_size));
 
-  // std::cout << "[Task-" << getRank() << "]: Queue len: pending_events: " << pending_events.size() << " vtheta: " << vtheta.size() << std::endl;
+  // std::cout << "[Row-" << getRank() << "/" << getRow() << << "]: Queue len: pending_events: " << pending_events.size() << " vtheta: " << vtheta.size() << std::endl;
 
   if (pending_events.size() < (size_t)step) {
     return nullptr; // Not collecting enough messages to process
