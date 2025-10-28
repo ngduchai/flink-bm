@@ -557,6 +557,7 @@ class SirtOperator(KeyedProcessFunction):
                 print(f"[SirtOperator] restored {len(raw_bytes)} bytes from state")
                 # also restore counter if present
                 cnt = self.count_state.value()
+                cnt = cnt_state
                 self.processed_local = int(cnt) if cnt is not None else self.processed_local
             else:
                 # No bytes yet for this key; don't flip the flag so we can retry
