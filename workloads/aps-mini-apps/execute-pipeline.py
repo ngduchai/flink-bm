@@ -374,7 +374,7 @@ class DistOperator(FlatMapFunction):
 
          # Broadcast FIN to all SIRT ranks and include row_id so key_by works
         if isinstance(metadata, dict) and metadata.get("Type") == "WARMUP":
-            for rank in range(int(self.args.ntask_sirt)):
+            for rank in range(int(self.args.num_sinograms)):
                 yield [{"Type": "WARMUP", "row_id": str(rank)}, b""]
             return
         if metadata.get("Type") == "FIN":
@@ -547,7 +547,6 @@ class SirtOperator(KeyedProcessFunction):
             cnt_state = self.count_state.value()
             # print(f"[SirtOperator]: restoring from checkpoint: count = {cnt_state}")
             # print(f"[SirtOperator]: restoring from checkpoint: self = {len(raw)}")
-            self._restored = True
             if raw:
                 raw_bytes = raw if isinstance(raw, (bytes, bytearray)) else bytes(raw)
                 print(f"[SirtOperator]: found previous state: {len(raw_bytes)} bytes. Restoring")
@@ -567,6 +566,8 @@ class SirtOperator(KeyedProcessFunction):
             print("[SirtOperator] restore step failed:", e, file=sys.stderr)
             traceback.print_exc()
             # keep _restored = False to retry on the next element
+        self._restored = True
+
 
     def _do_snapshot(self):
         """Snapshot engine & persist to Flink state. Crash if it fails so Flink restores."""

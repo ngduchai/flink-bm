@@ -111,6 +111,7 @@ class DataStream
       const float *data, std::size_t data_size);
 
     int getRank();
+    void setRank(int rank);
 
     int getRow() { return row_id; }
 

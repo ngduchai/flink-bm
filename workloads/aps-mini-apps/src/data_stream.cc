@@ -180,6 +180,7 @@ DataRegionBase<float, TraceMetadata>* DataStream::readSlidingWindow(
 }
 
 int DataStream::getRank() {return comm_rank;}
+void DataStream::setRank(int rank) { this->comm_rank = rank; }
 
 uint32_t DataStream::getCounter(){ return counter;}
 
