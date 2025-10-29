@@ -68,6 +68,9 @@ class DataStreamEvent {
           // 4) re-check after copy using the vector overload
           const uint32_t checksum_data = fnv1a32(data);
           assert(checksum_data == checksum && "Checksum mismatch after copy");
+
+          auto row_id = require_str(metadata, "row_id");
+          std::cout << "[Row-" << row_id << "]: seq_id: " << sequence_id << " projection_id: " << proj_id << " theta: " << theta << " checksum: " << checksum_data <<  " center: " << center << std::endl;
       }
     }
 
