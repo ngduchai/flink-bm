@@ -47,7 +47,7 @@ def parse_arguments():
     p.add_argument('--num_sinogram_columns', type=int)
     p.add_argument('--num_sinogram_projections', type=int, default=1440)
     p.add_argument('--logdir', type=str, default='.')
-    p.add_argument("--checksum", action='store_false', default=False)
+    p.add_argument("--checksum", action='store_true', default=False)
 
     # preprocessing
     p.add_argument('--degree_to_radian', action='store_true', default=False)
@@ -638,6 +638,7 @@ class SirtOperator(KeyedProcessFunction):
                 checksum = fnv1a32(payload)
                 if checksum != meta_in["checksum"]:
                     print(f"SirtOperator: WARNING -- checksum does not match: checksum = {checksum} --> {meta_in}, ")
+                meta_in["checksum"] = str(checksum)
             import sirt_ops
             with sirt_ops.ostream_redirect():  # RAII context from pybind11
                 out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
