@@ -108,14 +108,24 @@ ProcessResult SirtEngine::process(
   std::size_t len
 ) {
   int row_id = std::stoi(require_str(metadata, "row_id"));
-
-  auto it = sirt_processors.find(row_id);
-  if (it == sirt_processors.end()) {
+  auto type = require_str(metadata, "Type");
+  if (type == "WARMUP") {
     auto [ins_it, _] = sirt_processors.emplace(row_id, SirtProcessor{});
-    it = ins_it;
+    auto it = ins_it;
     it->second.setup(row_id, this->sirt_metadata);
+    ProcessResult result;
+    return result;
+  }else{
+    return sirt_processors[row_id].process(config, metadata, data, len);
   }
-  return it->second.process(config, metadata, data, len);
+
+  // auto it = sirt_processors.find(row_id);
+  // if (it == sirt_processors.end()) {
+  //   auto [ins_it, _] = sirt_processors.emplace(row_id, SirtProcessor{});
+  //   it = ins_it;
+  //   it->second.setup(row_id, this->sirt_metadata);
+  // }
+  // return it->second.process(config, metadata, data, len);
 }
 
 ProcessResult SirtProcessor::process(

@@ -625,6 +625,9 @@ class SirtOperator(KeyedProcessFunction):
         # FIN: persist one final snapshot then pass through
         if meta_in.get("Type") == "WARMUP":
             # print(f"SirtOperator: Received warm-up msg: {meta_in}, size {len(payload)} bytes")
+            import sirt_ops
+            with sirt_ops.ostream_redirect():  # RAII context from pybind11
+                out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
             yield value
             return
         if isinstance(meta_in, dict) and meta_in.get("Type") == "FIN":
