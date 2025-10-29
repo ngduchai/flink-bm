@@ -132,7 +132,8 @@ DataRegionBase<float, TraceMetadata>* DataStream::readSlidingWindow(
   int proj_id = std::stoi(require_str(metadata, "projection_id"));
   double theta = std::stod(require_str(metadata, "theta"));
   double center = std::stod(require_str(metadata, "center"));
-  std::cout << "[Row-" << getRow() << "/" << getRank() << "]: seq_id: " << sequence_id << " projection_id: " << proj_id << " theta: " << theta << " center: " << center << ", progress = " << progress << std::endl;
+  int checksum = std::stoi(require_str(metadata, "checksum"));
+  std::cout << "[Row-" << getRow() << "/" << getRank() << "]: seq_id: " << sequence_id << " projection_id: " << proj_id << " theta: " << theta << " checksum: " << checksum <<  " center: " << center << ", progress = " << progress << std::endl;
   pending_events.push_back(DataStreamEvent(metadata, sequence_id, proj_id, theta, center, data, data_size));
 
   // std::cout << "[Row-" << getRow() << "/" << getRank() << "]: Queue len: pending_events: " << pending_events.size() << " vtheta: " << vtheta.size() << std::endl;
