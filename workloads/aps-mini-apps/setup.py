@@ -5,10 +5,10 @@ import sys, pybind11, os
 # TODO: Adjust these paths as necessary
 # here = "/home/ndhai/diaspora/flink-bm/workloads/aps-mini-apps/"
 # localview = "/home/ndhai/diaspora/spack-aps/var/spack/environments/APS/.spack-env/view/"
-here = "/home/ndhai/src/flink-bm/workloads/aps-mini-apps"
-localview = "/home/ndhai/src/spack-aps/var/spack/environments/APS/.spack-env/view/"
-# here = "/opt/workloads/aps-mini-apps"
+# here = "/home/ndhai/src/flink-bm/workloads/aps-mini-apps"
 # localview = "/home/ndhai/src/spack-aps/var/spack/environments/APS/.spack-env/view/"
+here = "/opt/workloads/aps-mini-apps"
+localview = "/home/ndhai/src/spack-aps/var/spack/environments/APS/.spack-env/view/"
 locallib = localview + "lib"
 localinclude = localview + "include"
 
