@@ -641,7 +641,7 @@ class SirtOperator(KeyedProcessFunction):
             if self.args.checksum:
                 checksum = fnv1a32(payload)
                 if checksum != meta_in["checksum"]:
-                    print(f"SirtOperator: WARNING -- checksum does not match: checksum = {checksum} --> {meta_in}, ")
+                    print(f"SirtOperator: CORRUPTION -- checksum does not match: checksum = {checksum} --> {meta_in}, ")
                 meta_in["checksum"] = str(checksum)
             import sirt_ops
             with sirt_ops.ostream_redirect():  # RAII context from pybind11
