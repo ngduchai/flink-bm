@@ -13,6 +13,7 @@
 #include <csignal>
 #include <functional>
 #include <algorithm>
+#include <sirt_common.h>
 
 class DataStreamEvent {
   public:
@@ -24,6 +25,8 @@ class DataStreamEvent {
     // const float* data; // Pointer to the data segment
     std::vector<float> data; // Pointer to the data segment
 
+
+
     // DataStreamEvent(std::unordered_map<std::string, std::string> metadata,
     //   int seq_id, int proj_id, double th, double cen, const float* dat, std::size_t size)
     //   : metadata(metadata), sequence_id(seq_id), projection_id(proj_id),
@@ -33,15 +36,40 @@ class DataStreamEvent {
       : metadata(metadata), sequence_id(seq_id), projection_id(proj_id),
       theta(th), center(cen) {
 
-        if (size > 0 && dat != nullptr) {
-          // auto p = reinterpret_cast<const unsigned char*>(dat);
-          // std::cout << " first float data: " << dat[0]
-          //   << " First value: " << static_cast<unsigned>(p[0])
-          //   << " Size: " << size << std::endl;
+        if (dat != nullptr && size > 0) {
+          // 1) compute checksum from the raw pointer + count
+          const uint32_t checksum = fnv1a32(dat, size);
+  
+          // 2) if metadata carries an expected checksum, compare after parsing
+          if (auto it = this->metadata.find("checksum"); it != this->metadata.end()) {
+              // accept hex (0x...) or decimal
+              const std::string& s = it->second;
+              uint32_t expected = 0;
+              try {
+                  size_t pos = 0;
+                  int base = 10;
+                  if (s.rfind("0x", 0) == 0 || s.rfind("0X", 0) == 0) base = 16;
+                  expected = static_cast<uint32_t>(std::stoul(s, &pos, base));
+                  // optional: ensure whole string parsed
+                  // if (pos != s.size()) { /* handle trailing chars */ }
+              } catch (const std::exception&) {
+                  // If parse fails, you can log or assert; here we assert
+                  assert(false && "metadata['checksum'] is not a valid integer");
+              }
+              if (expected != 0) {
+                assert(expected == checksum && "Checksum mismatch for DataStreamEvent");
+              }
+          }
+  
+          // 3) copy payload into the vector
           data.clear();
           data.insert(data.end(), dat, dat + size);
-        }
+  
+          // 4) re-check after copy using the vector overload
+          const uint32_t checksum_data = fnv1a32(data);
+          assert(checksum_data == checksum && "Checksum mismatch after copy");
       }
+    }
 
     // ~DataStreamEvent() {
     //   if (data != nullptr) {

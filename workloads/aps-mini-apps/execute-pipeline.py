@@ -47,6 +47,7 @@ def parse_arguments():
     p.add_argument('--num_sinogram_columns', type=int)
     p.add_argument('--num_sinogram_projections', type=int, default=1440)
     p.add_argument('--logdir', type=str, default='.')
+    p.add_argument("--checksum", action='store_false', default=False)
 
     # preprocessing
     p.add_argument('--degree_to_radian', action='store_true', default=False)
@@ -67,6 +68,26 @@ def parse_arguments():
     p.add_argument('--thread_count', type=int, default=1)
     p.add_argument('--center', type=float, default=0.0)
     return p.parse_args()
+
+# Checksum
+def fnv1a32(data) -> int:
+    """Compute 32-bit FNV-1a checksum for str, bytes, or numpy.ndarray."""
+    # Convert input to bytes
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    elif isinstance(data, np.ndarray):
+        if not data.flags['C_CONTIGUOUS']:
+            data = np.ascontiguousarray(data)
+        data = data.tobytes()
+    elif not isinstance(data, (bytes, bytearray)):
+        raise TypeError(f"Unsupported type: {type(data)}")
+
+    # FNV-1a 32-bit
+    h = 0x811C9DC5
+    for b in data:
+        h ^= b
+        h = (h * 0x01000193) & 0xFFFFFFFF
+    return h
 
 # -------------------------
 # IO helpers
@@ -342,6 +363,13 @@ class DistOperator(FlatMapFunction):
             "center": str(float(center)),
             "dtype": str(data.dtype),
         }
+
+        if self.args.checksum:
+            checksum = fnv1a32(data)
+            meta["checksum"] = checksum
+        else:
+            meta["checksum"] = 0
+
         data_bytes = data.astype(np.float32, copy=False).tobytes()
         return self._msg(meta, data_bytes)
 
@@ -594,7 +622,7 @@ class SirtOperator(KeyedProcessFunction):
 
         # FIN: persist one final snapshot then pass through
         if meta_in.get("Type") == "WARMUP":
-            print(f"SirtOperator: Received warm-up msg: {meta_in}, size {len(payload)} bytes")
+            # print(f"SirtOperator: Received warm-up msg: {meta_in}, size {len(payload)} bytes")
             yield value
             return
         if isinstance(meta_in, dict) and meta_in.get("Type") == "FIN":
@@ -605,6 +633,10 @@ class SirtOperator(KeyedProcessFunction):
         # main processing
         try:
             # print(f"SirtOperator: Process: {meta_in}, first data float: {payload[0]}")
+            if self.args.checksum:
+                checksum = fnv1a32(payload)
+                if checksum != meta_in["checksum"]:
+                    print(f"SirtOperator: WARNING -- checksum does not match: checksum = {checksum} --> {meta_in}, ")
             import sirt_ops
             with sirt_ops.ostream_redirect():  # RAII context from pybind11
                 out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
@@ -962,15 +994,15 @@ def main():
     #         .name("route_by_task_id") \
     #         .set_parallelism(max(1, args.ntask_sirt))
     # route by task_id so record goes to subtask = task_id
-    sirt = dist.partition_custom(TaskIdPartitioner(), task_key_selector) \
-            .name("route_by_task_id") \
-            .set_parallelism(max(1, args.ntask_sirt)) \
-            .process( \
-                SirtOperator(cfg=args, every_n=int(args.ckpt_freq)), \
-                output_type=Types.PICKLED_BYTE_ARRAY()) \
-            .name("Sirt Operator") \
-            .uid("sirt-operator") \
-            .set_parallelism(max(1, args.ntask_sirt))
+    # sirt = dist.partition_custom(TaskIdPartitioner(), task_key_selector) \
+    #         .name("route_by_task_id") \
+    #         .set_parallelism(max(1, args.ntask_sirt)) \
+    #         .process( \
+    #             SirtOperator(cfg=args, every_n=int(args.ckpt_freq)), \
+    #             output_type=Types.PICKLED_BYTE_ARRAY()) \
+    #         .name("Sirt Operator") \
+    #         .uid("sirt-operator") \
+    #         .set_parallelism(max(1, args.ntask_sirt))
 
 
     # # # sirt = routed.key_by(lambda _: 0, key_type=Types.INT()) \
@@ -979,15 +1011,15 @@ def main():
     # # sirt = routed.process(
     # #         SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
     # #         output_type=Types.PICKLED_BYTE_ARRAY()) \
-    # sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
-    #     .process(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
-    #         output_type=Types.PICKLED_BYTE_ARRAY()) \
-    #     .name("Sirt Operator") \
-    #     .uid("sirt-operator") \
-    #     .set_parallelism(max(1, args.ntask_sirt)) \
-    #     # .set_max_parallelism(max(1, args.ntask_sirt)) \
-    #     # .disable_chaining().start_new_chain() \
-    #     # .slot_sharing_group("sirt")
+    sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
+        .process(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
+            output_type=Types.PICKLED_BYTE_ARRAY()) \
+        .name("Sirt Operator") \
+        .uid("sirt-operator") \
+        .set_parallelism(max(1, args.ntask_sirt)) \
+        # .set_max_parallelism(max(1, args.ntask_sirt)) \
+        # .disable_chaining().start_new_chain() \
+        # .slot_sharing_group("sirt")
 
 
     den = sirt.key_by(lambda _: 0, key_type=Types.INT())  \

@@ -1,10 +1,10 @@
 {
     "ntask_sirt" : 1,
-	"simulation_file" : "./data/tomo_00058_all_subsampled1p_s1079s1081.h5",
+    "simulation_file" : "./data/tomo_00058_all_subsampled1p_s1079s1081.h5",
     "num_sinogram_projections" : 1500,
     "d_iteration" : 1,
     "iteration_sleep" : 1,
-    "proj_sleep" : 0.1,
+    "proj_sleep" : 0.4,
     "beg_sinogram" : 1000,
     "num_sinograms" : 2,
     "num_sinogram_columns" : 2560,
@@ -15,5 +15,6 @@
     "window_iter" : 1,
     "thread_count" : 4,
     "center" : 1427,
-    "cast_to_float32" : true
+    "cast_to_float32" : true,
+    "checksum" : true
 }
