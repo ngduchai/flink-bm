@@ -77,7 +77,7 @@ PYBIND11_MODULE(sirt_ops, m) {
                 try {
                     // Normalize input to an aligned, owned vector
                     auto data = to_float_vector(payload);
-                    if (data.empty()) throw std::runtime_error("process(): empty payload");
+                    // if (data.empty()) throw std::runtime_error("process(): empty payload");
 
                     // Shape sanity-check (catches most “misinterpretation” issues)
                     if (const auto expect = expect_len_from_meta(meta_in); expect && expect != data.size()) {
