@@ -524,7 +524,8 @@ class SirtOperator(KeyedProcessFunction):
         try:
             self.task_id = ctx.get_index_of_this_subtask()
             num_tasks = ctx.get_number_of_parallel_subtasks()
-            total_sinograms = int(self.cfg["num_sinograms"])
+            # total_sinograms = int(self.cfg["num_sinograms"])
+            total_sinograms = 1
             n_sinograms = 1
             beg_sinogram = 0
             # nsino = total_sinograms // num_tasks
