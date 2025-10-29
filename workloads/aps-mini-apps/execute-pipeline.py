@@ -100,11 +100,22 @@ def setup_simulation_data(input_f, beg_sinogram=0, num_sinograms=0):
 
     if num_sinograms > 0 and idata.shape[1] < num_sinograms:
         print(f"num_sinograms = {num_sinograms} < loaded sinograms = {idata.shape[1]}. Duplicating.")
-        n_copies = math.ceil(num_sinograms / idata.shape[1])
-        duplicated = np.tile(idata, (1, n_copies, 1))
-        if duplicated.shape[1] > num_sinograms:
-            duplicated = duplicated[:, :num_sinograms, :]
-        idata = duplicated
+        # n_copies = math.ceil(num_sinograms / idata.shape[1])
+        # duplicated = np.tile(idata, (1, n_copies, 1))
+        # if duplicated.shape[1] > num_sinograms:
+        #     duplicated = duplicated[:, :num_sinograms, :]
+        # idata = duplicated
+        
+        loaded = idata.shape[1]
+        print(f"loaded sinograms = {loaded} < requested = {num_sinograms}. Duplicating.")
+
+        # Indices that wrap around the existing columns to reach the target count
+        idx = np.arange(num_sinograms) % loaded
+        # Build a slicer that selects along the given axis
+        slc = [slice(None)] * idata.ndim
+        slc[1] = idx
+        # np.take handles arbitrary axis; advanced indexing returns a view/copy as needed
+        idata = idata[tuple(slc)]
 
     flat = None if flat is None else np.array(flat, dtype=np.float32)
     dark = None if dark is None else np.array(dark, dtype=np.float32)
@@ -378,17 +389,25 @@ class DistOperator(FlatMapFunction):
         row, col = int(dims[0]), int(dims[1])
         assert data.size == row * col, f"Flattened data size mismatch with dims: {data.size} != {row}*{col}"
         msgs = []
-        # nsin, rem = row // n_ranks, row % n_ranks
-        # offset_rows = 0
-        # for rank in range(n_ranks):
-        #     rows_here = nsin + (1 if rank < rem else 0)
-        #     elems = rows_here * col
-        #     chunk = data[offset_rows * col:(offset_rows * col) + elems]
-        #     msgs.append(self.prepare_data_rep_msg(rank, seq, projection_id, theta, center, chunk))
-        #     offset_rows += rows_here
-        for offset_sinogram in range(self.args.num_sinograms):
-            chunk = data[offset_sinogram*col : (offset_sinogram+1)*col]
-            msgs.append(self.prepare_data_rep_msg(offset_sinogram, seq, projection_id, theta, center, chunk))
+        # # nsin, rem = row // n_ranks, row % n_ranks
+        # # offset_rows = 0
+        # # for rank in range(n_ranks):
+        # #     rows_here = nsin + (1 if rank < rem else 0)
+        # #     elems = rows_here * col
+        # #     chunk = data[offset_rows * col:(offset_rows * col) + elems]
+        # #     msgs.append(self.prepare_data_rep_msg(rank, seq, projection_id, theta, center, chunk))
+        # #     offset_rows += rows_here
+        # for offset_sinogram in range(self.args.num_sinograms):
+        #     chunk = data[offset_sinogram*col : (offset_sinogram+1)*col]
+        #     msgs.append(self.prepare_data_rep_msg(offset_sinogram, seq, projection_id, theta, center, chunk))
+        nsin, rem = row // self.args.num_sinograms, row % self.args.num_sinograms
+        offset_rows = 0
+        for rank in range(self.args.num_sinograms):
+            rows_here = nsin + (1 if rank < rem else 0)
+            elems = rows_here * col
+            chunk = data[offset_rows * col:(offset_rows * col) + elems]
+            msgs.append(self.prepare_data_rep_msg(rank, seq, projection_id, theta, center, chunk))
+            offset_rows += rows_here
         return msgs
 
     def flat_map(self, value):
