@@ -500,6 +500,7 @@ class SirtOperator(KeyedProcessFunction):
             "num_sinogram_columns": int(cfg.num_sinogram_columns),
             "num_sinograms": int(cfg.num_sinograms),
         }
+        self.args = cfg
         self.every_n = int(every_n)
         self.engine = None
         self.snap_state = None
