@@ -98,6 +98,15 @@ void SirtProcessor::setup(int row_id, const SirtMetadata& tmetadata) {
   
   /* Prepare processing engine and main reduction space for other threads */
   engine = new DISPEngineReductionSIRT(main_recon_space, thread_count);
+
+  main_recon_space = new SIRTReconSpace(
+    n_blocks, 2*num_cols*num_cols);
+  main_recon_space->Initialize(num_cols*num_cols);
+
+  main_recon_replica = &main_recon_space->reduction_objects();
+
+  /* Prepare processing engine and main reduction space for other threads */
+  engine = new DISPEngineReductionSIRT(main_recon_space, thread_count);
   
 }
 
