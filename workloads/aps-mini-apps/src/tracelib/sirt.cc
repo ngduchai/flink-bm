@@ -109,7 +109,7 @@ void SIRTReconSpace::Initialize(int n_grids){
   indi = new int[2*num_grids];
 
   for (int i = 0; i < num_grids+1; ++i) {
-    coordx[i] = coordy[i] = ax[i] = ay[i] = bx[i] = by[i] = 0
+    coordx[i] = coordy[i] = ax[i] = ay[i] = bx[i] = by[i] = 0;
   }
   for (int i = 0; i < 2*num_grids; ++i) {
     coorx[i] = coory[i] = leng[i] = leng2[i] - indi[i] = 0;
