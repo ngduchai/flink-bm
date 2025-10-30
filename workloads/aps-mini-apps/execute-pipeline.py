@@ -245,15 +245,15 @@ class DaqEmitter(FlatMapFunction):
                 print(f"[DaqEmitter.open] initial iteration_sleep={self.iteration_sleep}s")
                 time.sleep(self.iteration_sleep)
 
-            # Duplicate data if needed to fit the reconstruction output
-            print(f"Serialized data shape: {self.serialized_data.shape}")
-            if self.num_sinograms > 0 and self.serialized_data.shape[1] < self.num_sinograms:
-                print(f"num_sinograms = {self.num_sinograms} < loaded sinograms = {self.serialized_data.shape[1]}. Duplicating.")
-                n_copies = math.ceil(self.num_sinograms / self.serialized_data.shape[1])
-                duplicated = np.tile(self.serialized_data, (1, n_copies, 1))
-                if duplicated.shape[1] > self.num_sinograms:
-                    duplicated = duplicated[:, :self.num_sinograms, :]
-                self.serialized_data = duplicated
+            # # Duplicate data if needed to fit the reconstruction output
+            # print(f"Serialized data shape: {self.serialized_data.shape}")
+            # if self.num_sinograms > 0 and self.serialized_data.shape[1] < self.num_sinograms:
+            #     print(f"num_sinograms = {self.num_sinograms} < loaded sinograms = {self.serialized_data.shape[1]}. Duplicating.")
+            #     n_copies = math.ceil(self.num_sinograms / self.serialized_data.shape[1])
+            #     duplicated = np.tile(self.serialized_data, (1, n_copies, 1))
+            #     if duplicated.shape[1] > self.num_sinograms:
+            #         duplicated = duplicated[:, :self.num_sinograms, :]
+            #     self.serialized_data = duplicated
 
             # Load index state
             index_desc = ValueStateDescriptor("daq_emitter_index_v1", Types.INT())
@@ -414,17 +414,18 @@ class DistOperator(FlatMapFunction):
         # #     chunk = data[offset_rows * col:(offset_rows * col) + elems]
         # #     msgs.append(self.prepare_data_rep_msg(rank, seq, projection_id, theta, center, chunk))
         # #     offset_rows += rows_here
-        # for offset_sinogram in range(self.args.num_sinograms):
-        #     chunk = data[offset_sinogram*col : (offset_sinogram+1)*col]
-        #     msgs.append(self.prepare_data_rep_msg(offset_sinogram, seq, projection_id, theta, center, chunk))
-        nsin, rem = row // self.args.num_sinograms, row % self.args.num_sinograms
-        offset_rows = 0
-        for rank in range(self.args.num_sinograms):
-            rows_here = nsin + (1 if rank < rem else 0)
-            elems = rows_here * col
-            chunk = data[offset_rows * col:(offset_rows * col) + elems]
-            msgs.append(self.prepare_data_rep_msg(rank, seq, projection_id, theta, center, chunk))
-            offset_rows += rows_here
+        for offset_sinogram in range(self.args.num_sinograms):
+            location = offset_sinogram % row
+            chunk = data[location*col : (location+1)*col]
+            msgs.append(self.prepare_data_rep_msg(offset_sinogram, seq, projection_id, theta, center, chunk))
+        # nsin, rem = row // self.args.num_sinograms, row % self.args.num_sinograms
+        # offset_rows = 0
+        # for rank in range(self.args.num_sinograms):
+        #     rows_here = nsin + (1 if rank < rem else 0)
+        #     elems = rows_here * col
+        #     chunk = data[offset_rows * col:(offset_rows * col) + elems]
+        #     msgs.append(self.prepare_data_rep_msg(rank, seq, projection_id, theta, center, chunk))
+        #     offset_rows += rows_here
         return msgs
 
     def flat_map(self, value):
