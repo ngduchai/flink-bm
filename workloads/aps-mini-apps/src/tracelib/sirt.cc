@@ -112,7 +112,7 @@ void SIRTReconSpace::Initialize(int n_grids){
     coordx[i] = coordy[i] = ax[i] = ay[i] = bx[i] = by[i] = 0;
   }
   for (int i = 0; i < 2*num_grids; ++i) {
-    coorx[i] = coory[i] = leng[i] = leng2[i] - indi[i] = 0;
+    coorx[i] = coory[i] = leng[i] = leng2[i] = indi[i] = 0;
   }
 
   std::cout << "SIRTReconSpace initialized with num_grids=" << num_grids << std::endl;
