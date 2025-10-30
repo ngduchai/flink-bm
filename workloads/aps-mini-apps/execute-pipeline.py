@@ -415,8 +415,8 @@ class DistOperator(FlatMapFunction):
         # #     msgs.append(self.prepare_data_rep_msg(rank, seq, projection_id, theta, center, chunk))
         # #     offset_rows += rows_here
         for offset_sinogram in range(self.args.num_sinograms):
-            location = offset_sinogram % row
-            print(f"DistOperator: location = {location}, offset_sinogram: {offset_sinogram}, row: {row}")
+            location = offset_sinogram % int(data.size / col)
+            print(f"DistOperator: location = {location}, offset_sinogram: {offset_sinogram}")
             chunk = data[location*col : (location+1)*col]
             msgs.append(self.prepare_data_rep_msg(offset_sinogram, seq, projection_id, theta, center, chunk))
         # nsin, rem = row // self.args.num_sinograms, row % self.args.num_sinograms
