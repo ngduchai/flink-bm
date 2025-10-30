@@ -98,30 +98,31 @@ def setup_simulation_data(input_f, beg_sinogram=0, num_sinograms=0):
     idata, flat, dark, itheta = dxchange.read_aps_32id(input_f)
     idata = np.array(idata, dtype=np.float32)
 
-    if num_sinograms > 0 and idata.shape[1] < num_sinograms:
-        print(f"num_sinograms = {num_sinograms} < loaded sinograms = {idata.shape[1]}. Duplicating.")
-        # n_copies = math.ceil(num_sinograms / idata.shape[1])
-        # duplicated = np.tile(idata, (1, n_copies, 1))
-        # if duplicated.shape[1] > num_sinograms:
-        #     duplicated = duplicated[:, :num_sinograms, :]
-        # idata = duplicated
+    # if num_sinograms > 0 and idata.shape[1] < num_sinograms:
+    #     print(f"num_sinograms = {num_sinograms} < loaded sinograms = {idata.shape[1]}. Duplicating.")
+    #     n_copies = math.ceil(num_sinograms / idata.shape[1])
+    #     duplicated = np.tile(idata, (1, n_copies, 1))
+    #     if duplicated.shape[1] > num_sinograms:
+    #         duplicated = duplicated[:, :num_sinograms, :]
+    #     idata = duplicated
 
-        # loaded = idata.shape[1]
-        # print(f"loaded sinograms = {loaded} < requested = {num_sinograms}. Duplicating.")
+    #     # loaded = idata.shape[1]
+    #     # print(f"loaded sinograms = {loaded} < requested = {num_sinograms}. Duplicating.")
 
-        # # Indices that wrap around the existing columns to reach the target count
-        # idx = np.arange(num_sinograms) % loaded
-        # # Build a slicer that selects along the given axis
-        # slc = [slice(None)] * idata.ndim
-        # slc[1] = idx
-        # # np.take handles arbitrary axis; advanced indexing returns a view/copy as needed
-        # idata = idata[tuple(slc)]
-        duplicated = np.zeros((idata.shape[0], num_sinograms, idata.shape[2]), dtype=idata.dtype)
-        for i in range(idata.shape[0]):
-            for j in range(num_sinograms):
-                for k in range(idata.shape[2]):
-                    duplicated[i, j, k] = idata[i, j % idata.shape[1], k]
-        idata = duplicated
+    #     # # Indices that wrap around the existing columns to reach the target count
+    #     # idx = np.arange(num_sinograms) % loaded
+    #     # # Build a slicer that selects along the given axis
+    #     # slc = [slice(None)] * idata.ndim
+    #     # slc[1] = idx
+    #     # # np.take handles arbitrary axis; advanced indexing returns a view/copy as needed
+    #     # idata = idata[tuple(slc)]
+        
+    #     # duplicated = np.zeros((idata.shape[0], num_sinograms, idata.shape[2]), dtype=idata.dtype)
+    #     # for i in range(idata.shape[0]):
+    #     #     for j in range(num_sinograms):
+    #     #         for k in range(idata.shape[2]):
+    #     #             duplicated[i, j, k] = idata[i, j % idata.shape[1], k]
+    #     # idata = duplicated
 
     flat = None if flat is None else np.array(flat, dtype=np.float32)
     dark = None if dark is None else np.array(dark, dtype=np.float32)
@@ -243,6 +244,16 @@ class DaqEmitter(FlatMapFunction):
             if self.iteration_sleep > 0:
                 print(f"[DaqEmitter.open] initial iteration_sleep={self.iteration_sleep}s")
                 time.sleep(self.iteration_sleep)
+
+            # Duplicate data if needed to fit the reconstruction output
+            print(f"Serialized data shape: {self.serialized_data.shape}")
+            if self.num_sinograms > 0 and self.serialized_data.shape[1] < self.num_sinograms:
+                print(f"num_sinograms = {self.num_sinograms} < loaded sinograms = {self.serialized_data.shape[1]}. Duplicating.")
+                n_copies = math.ceil(self.num_sinograms / self.serialized_data.shape[1])
+                duplicated = np.tile(self.serialized_data, (1, n_copies, 1))
+                if duplicated.shape[1] > self.num_sinograms:
+                    duplicated = duplicated[:, :self.num_sinograms, :]
+                self.serialized_data = duplicated
 
             # Load index state
             index_desc = ValueStateDescriptor("daq_emitter_index_v1", Types.INT())
