@@ -239,14 +239,14 @@ ProcessResult SirtProcessor::process(
       {"recon_slice_data_index", std::to_string(recon_slice_data_index)}
     };
 
-    std::cout << "[Task-" << task_id << "] ---- Reconstructed image data index: " << recon_slice_data_index << std::endl;
-
     // result.data = &recon[recon_slice_data_index];
     result.data.insert(result.data.end(), 
         &recon[recon_slice_data_index], 
         &recon[recon_slice_data_index] +  data_size);
     result.meta = md;
     // MPI_Barrier(MPI_COMM_WORLD);
+
+    std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Reconstructed image data index: " << recon_slice_data_index << " checksum: " << fnv1a32(result.data) << std::endl;
     
     std::string outputpath = iteration_stream.str() + "-" + std::to_string(row_id) + "-recon.h5";
     saveAsHDF5(outputpath.c_str(), 
