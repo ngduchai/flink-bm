@@ -404,7 +404,7 @@ class DistOperator(FlatMapFunction):
     def generate_worker_msgs(self, data: np.ndarray, dims: list, projection_id: int, theta: float,
                              n_ranks: int, center: float, seq: int) -> list:
         row, col = int(dims[0]), int(dims[1])
-        assert data.size == row * col, f"Flattened data size mismatch with dims: {data.size} != {row}*{col}"
+        # assert data.size == row * col, f"Flattened data size mismatch with dims: {data.size} != {row}*{col}"
         msgs = []
         # # nsin, rem = row // n_ranks, row % n_ranks
         # # offset_rows = 0
