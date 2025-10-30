@@ -118,9 +118,9 @@ def setup_simulation_data(input_f, beg_sinogram=0, num_sinograms=0):
         # idata = idata[tuple(slc)]
         duplicated = np.zeros((idata.shape[0], num_sinograms, idata.shape[2]), dtype=idata.dtype)
         for i in range(idata.shape[0]):
-        for j in range(num_sinograms):
-            for k in range(idata.shape[2]):
-                duplicated[i, j, k] = idata[i, j % idata.shape[1], k]
+            for j in range(num_sinograms):
+                for k in range(idata.shape[2]):
+                    duplicated[i, j, k] = idata[i, j % idata.shape[1], k]
         idata = duplicated
 
     flat = None if flat is None else np.array(flat, dtype=np.float32)
