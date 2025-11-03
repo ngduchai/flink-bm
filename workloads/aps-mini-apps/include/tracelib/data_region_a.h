@@ -193,6 +193,8 @@ class ADataRegion {
     T& operator[](size_t index) { return data_[index]; }
     const T& operator[](size_t index) const { return data_[index]; }
 
+    T* get_data() { return data_; }
+
     /**
      * \brief Accessor for #count_.
      *
