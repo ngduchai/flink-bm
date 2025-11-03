@@ -97,6 +97,9 @@ class SIRTReconSpace : public AReductionSpaceBase<SIRTReconSpace, float> {
       Finalize();
     }
 
+    int row_id;
+    int task_id;
+
     void Reduce(MirroredRegionBareBase<float> &input);
     // Backward Projection
     void UpdateRecon(

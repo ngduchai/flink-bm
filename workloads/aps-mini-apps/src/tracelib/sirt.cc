@@ -148,6 +148,7 @@ void SIRTReconSpace::Reduce(MirroredRegionBareBase<float> &input)
     float sinq = sinf(theta_q);
     float cosq = cosf(theta_q);
     //std::cout << "Current proj=" << curr_proj  << "; Theta=" << theta_q << std::endl;
+    std::cout << "[Row-" << row_id << "/" << task_id << "] Current proj=" << curr_proj  << "; Theta=" << theta_q << std::endl;
 
     int curr_slice = metadata.RaySlice(rays.index());
     int curr_slice_offset = curr_slice*num_grids*num_grids;

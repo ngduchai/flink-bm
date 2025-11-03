@@ -94,6 +94,9 @@ void SirtProcessor::setup(int row_id, const SirtMetadata& tmetadata) {
       n_blocks, 2*num_cols*num_cols);
   main_recon_space->Initialize(num_cols*num_cols);
 
+  main_recon_space->row_id = row_id;
+  main_recon_space->task_id = task_id;
+
   main_recon_replica = &main_recon_space->reduction_objects();
   
   /* Prepare processing engine and main reduction space for other threads */
