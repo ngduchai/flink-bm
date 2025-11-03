@@ -185,7 +185,7 @@ ProcessResult SirtProcessor::process(
   ADataRegion<float> &recon_data = curr_slices->metadata().recon();
 
   if (passes == 0) {
-    std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Initializing recon_data ----" << std::endl;
+    // std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Initializing recon_data ----" << std::endl;
     for(size_t i=0; i<recon_data.count(); ++i)
       recon_data[i]=0.; /// Initial values of the reconstructe image
   }
@@ -194,23 +194,23 @@ ProcessResult SirtProcessor::process(
 
     std::cout << "[Row-" << row_id << "/" << task_id << "] passes = " << passes << " -- Iteration " << i+1 << "/" << window_iter << " on current window" << std::endl;
 
-    std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Before reconstruction ---- Checksum: " << fnv1a32(recon_data.get_data(), recon_data.count()) <<  std::endl;
+    // std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Before reconstruction ---- Checksum: " << fnv1a32(recon_data.get_data(), recon_data.count()) <<  std::endl;
 
     engine->RunParallelReduction(*curr_slices, req_number);  /// Reconstruction
-    std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete parallel reduction ---- Checksum: " << fnv1a32(recon_data.get_data(), recon_data.count()) <<  std::endl;
+    // std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete parallel reduction ---- Checksum: " << fnv1a32(recon_data.get_data(), recon_data.count()) <<  std::endl;
     
     engine->ParInPlaceLocalSynchWrapper();              /// Local combination
-    std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete par in-place local synch ---- Checksum: " << fnv1a32(recon_data.get_data(), recon_data.count()) <<  std::endl;
+    // std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete par in-place local synch ---- Checksum: " << fnv1a32(recon_data.get_data(), recon_data.count()) <<  std::endl;
    
     main_recon_space->UpdateRecon(*recon_image, *main_recon_replica);
     // main_recon_space->UpdateRecon(*recon_image, recon_replica);
-    std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete updating reconstruction ---- Checksum: " << fnv1a32(recon_data.get_data(), recon_data.count()) <<  std::endl;
+    // std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete updating reconstruction ---- Checksum: " << fnv1a32(recon_data.get_data(), recon_data.count()) <<  std::endl;
     
     engine->ResetReductionSpaces(init_val);
-    std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete resetting reduction spaces ---- Checksum: " << fnv1a32(recon_data.get_data(), recon_data.count()) <<  std::endl;
+    // std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete resetting reduction spaces ---- Checksum: " << fnv1a32(recon_data.get_data(), recon_data.count()) <<  std::endl;
 
     curr_slices->ResetMirroredRegionIter();
-    std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete resetting mirrored region iter ---- Checksum: " << fnv1a32(recon_data.get_data(), recon_data.count()) <<  std::endl;
+    // std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete resetting mirrored region iter ---- Checksum: " << fnv1a32(recon_data.get_data(), recon_data.count()) <<  std::endl;
   }
   /* Emit reconstructed data */
   if(!(passes%write_freq)){
@@ -261,11 +261,11 @@ ProcessResult SirtProcessor::process(
     result.meta = md;
     // MPI_Barrier(MPI_COMM_WORLD);
 
-    std::cout << "[Row-" << row_id << "/" << task_id << "] ---- DataEmit: iteration_stream: " << iteration_stream.str() << " checksum: " << fnv1a32(result.data) << " Reconstruction checksum: " << fnv1a32(recon.get_data(), recon.count()) << std::endl;
+    // std::cout << "[Row-" << row_id << "/" << task_id << "] ---- DataEmit: iteration_stream: " << iteration_stream.str() << " checksum: " << fnv1a32(result.data) << " Reconstruction checksum: " << fnv1a32(recon.get_data(), recon.count()) << std::endl;
     
-    std::string outputpath = iteration_stream.str() + "-" + std::to_string(row_id) + "-recon.h5";
-    saveAsHDF5(outputpath.c_str(), 
-        &recon[recon_slice_data_index], app_dims);
+    // std::string outputpath = iteration_stream.str() + "-" + std::to_string(row_id) + "-recon.h5";
+    // saveAsHDF5(outputpath.c_str(), 
+    //     &recon[recon_slice_data_index], app_dims);
   }
 
   passes++;

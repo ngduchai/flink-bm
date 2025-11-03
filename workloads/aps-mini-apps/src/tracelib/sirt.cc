@@ -153,7 +153,7 @@ void SIRTReconSpace::Reduce(MirroredRegionBareBase<float> &input)
     int curr_slice_offset = curr_slice*num_grids*num_grids;
     float *recon = (&(metadata.recon()[0])+curr_slice_offset);
 
-    std::cout << "[Row-" << row_id << "/" << task_id << "] Current proj=" << curr_proj  << "; Theta=" << theta_q << " curr_slice_offset: " << curr_slice_offset << std::endl;
+    // std::cout << "[Row-" << row_id << "/" << task_id << "] Current proj=" << curr_proj  << "; Theta=" << theta_q << " curr_slice_offset: " << curr_slice_offset << std::endl;
 
     for (int curr_col=0; curr_col<num_cols; ++curr_col) {
       /// Calculate coordinates

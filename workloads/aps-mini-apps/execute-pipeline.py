@@ -655,7 +655,7 @@ class SirtOperator(KeyedProcessFunction):
 
     def process_element(self, value, ctx):
         meta_in, payload = value
-        # self._maybe_restore()
+        self._maybe_restore()
         print(f"SirtOperator: Received msg: {meta_in}, size {len(payload)} bytes")
 
         # FIN: persist one final snapshot then pass through
