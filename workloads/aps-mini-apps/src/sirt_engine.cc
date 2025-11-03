@@ -188,6 +188,8 @@ ProcessResult SirtProcessor::process(
 
     std::cout << "[Row-" << row_id << "/" << task_id << "] passes = " << passes << " -- Iteration " << i+1 << "/" << window_iter << " on current window" << std::endl;
 
+    std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Before reconstruction ---- Checksum: " << fnv1a32(recon_data.get_data(), recon_data.count()) <<  std::endl;
+
     engine->RunParallelReduction(*curr_slices, req_number);  /// Reconstruction
     std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete parallel reduction ---- Checksum: " << fnv1a32(recon_data.get_data(), recon_data.count()) <<  std::endl;
     
