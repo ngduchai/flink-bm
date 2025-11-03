@@ -619,11 +619,11 @@ class SirtOperator(KeyedProcessFunction):
                 import sirt_ops
                 with sirt_ops.ostream_redirect(): 
                     self.engine.restore(raw_bytes)
-                print(f"[SirtOperator] restored {len(raw_bytes)} bytes from state")
                 # also restore counter if present
-                cnt = self.count_state.value()
-                cnt = cnt_state
-                self.processed_local = int(cnt) if cnt is not None else self.processed_local
+                # cnt = self.count_state.value()
+                # cnt = cnt_state
+                self.processed_local = int(cnt_state) if cnt_state is not None else self.processed_local
+                print(f"[SirtOperator] restored {len(raw_bytes)} bytes from state with processed_local = {cnt_state}")
             else:
                 # No bytes yet for this key; don't flip the flag so we can retry
                 print(f"[SirtOperator] cannot find previous state. Start from beginning")
