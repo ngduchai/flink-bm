@@ -182,25 +182,27 @@ ProcessResult SirtProcessor::process(
 
   // DataRegion2DBareBase<float> &recon_replica = main_recon_space->reduction_objects();
 
+  ADataRegion<float> &recon_data = curr_slices->metadata().recon();
+
   for(int i=0; i<window_iter; ++i){
 
     std::cout << "[Row-" << row_id << "/" << task_id << "] passes = " << passes << " -- Iteration " << i+1 << "/" << window_iter << " on current window" << std::endl;
 
     engine->RunParallelReduction(*curr_slices, req_number);  /// Reconstruction
-    // std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete parallel reduction ---- " << std::endl;
+    std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete parallel reduction ---- Checksum: " << fnv1a32(recon_data.get_data(), recon_data.count()) <<  std::endl;
     
     engine->ParInPlaceLocalSynchWrapper();              /// Local combination
-    // std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete par in-place local synch ---- " << std::endl;
+    std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete par in-place local synch ---- Checksum: " << fnv1a32(recon_data.get_data(), recon_data.count()) <<  std::endl;
    
     main_recon_space->UpdateRecon(*recon_image, *main_recon_replica);
     // main_recon_space->UpdateRecon(*recon_image, recon_replica);
-    // std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete updating reconstruction ---- " << std::endl;
+    std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete updating reconstruction ---- Checksum: " << fnv1a32(recon_data.get_data(), recon_data.count()) <<  std::endl;
     
     engine->ResetReductionSpaces(init_val);
-    // std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete resetting reduction spaces ---- " << std::endl;
+    std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete resetting reduction spaces ---- Checksum: " << fnv1a32(recon_data.get_data(), recon_data.count()) <<  std::endl;
 
     curr_slices->ResetMirroredRegionIter();
-    // std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete resetting mirrored region iter ---- " << std::endl;
+    std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Complete resetting mirrored region iter ---- Checksum: " << fnv1a32(recon_data.get_data(), recon_data.count()) <<  std::endl;
   }
   /* Emit reconstructed data */
   if(!(passes%write_freq)){
