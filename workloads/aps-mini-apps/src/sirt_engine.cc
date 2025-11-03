@@ -77,9 +77,9 @@ void SirtProcessor::setup(int row_id, const SirtMetadata& tmetadata) {
   h5md.dims[2] = ds.n_rays_per_proj_row;
   
   /// Reconstructed image
-  recon_image = new DataRegionBareBase<float>(n_blocks*num_cols*num_cols);
-  for(size_t i=0; i<recon_image->count(); ++i)
-    (*recon_image)[i]=0.; /// Initial values of the reconstructe image
+  this->recon_image = new DataRegionBareBase<float>(n_blocks*num_cols*num_cols);
+  for(size_t i=0; i<this->recon_image->count(); ++i)
+    (*(this->recon_image))[i]=0.; /// Initial values of the reconstructe image
 
   // /// Required data structure for dumping image to h5 file
   // h5md.ndims=3;
@@ -183,6 +183,11 @@ ProcessResult SirtProcessor::process(
   // DataRegion2DBareBase<float> &recon_replica = main_recon_space->reduction_objects();
 
   ADataRegion<float> &recon_data = curr_slices->metadata().recon();
+
+  if (passes == 0) {
+    for(size_t i=0; i<this->recon_image->count(); ++i)
+      (*(this->recon_image))[i]=0.; /// Initial values of the reconstructe image
+  }
 
   for(int i=0; i<window_iter; ++i){
 

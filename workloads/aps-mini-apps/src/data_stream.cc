@@ -53,23 +53,23 @@ void DataStream::eraseBegTraceMsg(){
 DataRegionBase<float, TraceMetadata>* DataStream::setupTraceDataRegion(
   DataRegionBareBase<float> &recon_image){
 
-    // std::cout << "[Row-" << getRow() << "/" << getRank() << "]: Setting up data region from sliding window with " << vtheta.size() << " projections" << std::endl;
-    
-    // int center = std::stoi(require_str(vmeta.back(), "center"));
-    int center = vcenters.back();
+  // std::cout << "[Row-" << getRow() << "/" << getRank() << "]: Setting up data region from sliding window with " << vtheta.size() << " projections" << std::endl;
+  
+  // int center = std::stoi(require_str(vmeta.back(), "center"));
+  int center = vcenters.back();
 
-    TraceMetadata *mdata = new TraceMetadata(
-      vtheta.data(),
-      0,                                // metadata().proj_id(),
-      beg_sinograms,                    // metadata().slice_id(),
-      0,                                // metadata().col_id(),
-      // tn_sinograms,                     // metadata().num_total_slices(),
-      n_sinograms,
-      vtheta.size(),                    // int const num_projs,
-      n_sinograms,                      // metadata().num_slices(),
-      n_rays_per_proj_row,              // metadata().num_cols(),
-      n_rays_per_proj_row,              // * metadata().n_rays_per_proj_row, // metadata().num_grids(),
-      center);                          // use the last incoming center for recon.);
+  TraceMetadata *mdata = new TraceMetadata(
+    vtheta.data(),
+    0,                                // metadata().proj_id(),
+    beg_sinograms,                    // metadata().slice_id(),
+    0,                                // metadata().col_id(),
+    // tn_sinograms,                     // metadata().num_total_slices(),
+    n_sinograms,
+    vtheta.size(),                    // int const num_projs,
+    n_sinograms,                      // metadata().num_slices(),
+    n_rays_per_proj_row,              // metadata().num_cols(),
+    n_rays_per_proj_row,              // * metadata().n_rays_per_proj_row, // metadata().num_grids(),
+    center);                          // use the last incoming center for recon.);
 
   mdata->recon(recon_image);
 
