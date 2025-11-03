@@ -185,8 +185,9 @@ ProcessResult SirtProcessor::process(
   ADataRegion<float> &recon_data = curr_slices->metadata().recon();
 
   if (passes == 0) {
-    for(size_t i=0; i<this->recon_image->count(); ++i)
-      (*(this->recon_image))[i]=0.; /// Initial values of the reconstructe image
+    std::cout << "[Row-" << row_id << "/" << task_id << "] ---- Initializing recon_data ----" << std::endl;
+    for(size_t i=0; i<recon_data.count(); ++i)
+      recon_data[i]=0.; /// Initial values of the reconstructe image
   }
 
   for(int i=0; i<window_iter; ++i){
