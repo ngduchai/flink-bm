@@ -442,7 +442,8 @@ class DistOperator(FlatMapFunction):
                 yield [{"Type": "WARMUP", "row_id": str(rank)}, b""]
             return
         if metadata.get("Type") == "FIN":
-            for rank in range(int(self.args.ntask_sirt)):
+            # for rank in range(int(self.args.ntask_sirt)):
+            for rank in range(int(self.args.num_sinograms)):
                 yield [{"Type": "FIN", "row_id": str(rank)}, b""]
             self.running = False
             return
