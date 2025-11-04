@@ -630,7 +630,7 @@ class SirtOperator(KeyedProcessFunction):
             #     return
             cnt_state = self.count_state.value()
             self.processed_local = int(cnt_state) if cnt_state is not None else self.processed_local
-            print(f"[SirtOperator] restored with processed_local = {cnt_state}")
+            print(f"[SirtOperator] restored with processed_local = {self.processed_local}")
         except Exception as e:
             print("[SirtOperator] restore step failed:", e, file=sys.stderr)
             traceback.print_exc()
@@ -650,7 +650,8 @@ class SirtOperator(KeyedProcessFunction):
             self.count_state.update(self.processed_local)
             # raw = self.snap_state.value()
             cnt = self.count_state.value()
-            print(f"[SirtOperator] snapshot at {self.processed_local} tuples: {len(snap_bytes)} bytes: self = {len(raw)}, count = {cnt}")
+            # print(f"[SirtOperator] snapshot at {self.processed_local} tuples: {len(snap_bytes)} bytes: self = {len(raw)}, count = {cnt}")
+            print(f"[SirtOperator] snapshot at {self.processed_local} tuples: count = {cnt}")
         except Exception as e:
             print("[SirtOperator] engine.snapshot failed:", e, file=sys.stderr)
             traceback.print_exc()
