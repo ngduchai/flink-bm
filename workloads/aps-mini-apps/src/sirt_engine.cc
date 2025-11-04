@@ -263,9 +263,9 @@ ProcessResult SirtProcessor::process(
 
     // std::cout << "[Row-" << row_id << "/" << task_id << "] ---- DataEmit: iteration_stream: " << iteration_stream.str() << " checksum: " << fnv1a32(result.data) << " Reconstruction checksum: " << fnv1a32(recon.get_data(), recon.count()) << std::endl;
     
-    // std::string outputpath = iteration_stream.str() + "-" + std::to_string(row_id) + "-recon.h5";
-    // saveAsHDF5(outputpath.c_str(), 
-    //     &recon[recon_slice_data_index], app_dims);
+    std::string outputpath = iteration_stream.str() + "-" + std::to_string(row_id) + "-recon.h5";
+    saveAsHDF5(outputpath.c_str(), 
+        &recon[recon_slice_data_index], app_dims);
   }
 
   passes++;
