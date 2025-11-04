@@ -589,10 +589,10 @@ class SirtOperator(KeyedProcessFunction):
 
         # --- managed state ---
         try:
-            snap_desc = ValueStateDescriptor(
-                "sirt_engine_snapshot_v1", Types.PICKLED_BYTE_ARRAY()
-            )
-            self.snap_state = ctx.get_state(snap_desc)
+            # snap_desc = ValueStateDescriptor(
+            #     "sirt_engine_snapshot_v1", Types.PICKLED_BYTE_ARRAY()
+            # )
+            # self.snap_state = ctx.get_state(snap_desc)
             count_desc = ValueStateDescriptor("processed_count_v1", Types.LONG())
             self.count_state = ctx.get_state(count_desc)
         except Exception as e:
@@ -609,25 +609,28 @@ class SirtOperator(KeyedProcessFunction):
         if self._restored:
             return
         try:
-            raw = self.snap_state.value()   # keyed ValueState for the current key
+            # raw = self.snap_state.value()   # keyed ValueState for the current key
+            # cnt_state = self.count_state.value()
+            # # print(f"[SirtOperator]: restoring from checkpoint: count = {cnt_state}")
+            # # print(f"[SirtOperator]: restoring from checkpoint: self = {len(raw)}")
+            # if raw:
+            #     raw_bytes = raw if isinstance(raw, (bytes, bytearray)) else bytes(raw)
+            #     print(f"[SirtOperator]: found previous state: {len(raw_bytes)} bytes. Restoring")
+            #     import sirt_ops
+            #     with sirt_ops.ostream_redirect(): 
+            #         self.engine.restore(raw_bytes)
+            #     # also restore counter if present
+            #     # cnt = self.count_state.value()
+            #     # cnt = cnt_state
+            #     self.processed_local = int(cnt_state) if cnt_state is not None else self.processed_local
+            #     print(f"[SirtOperator] restored {len(raw_bytes)} bytes from state with processed_local = {cnt_state}")
+            # else:
+            #     # No bytes yet for this key; don't flip the flag so we can retry
+            #     print(f"[SirtOperator] cannot find previous state. Start from beginning")
+            #     return
             cnt_state = self.count_state.value()
-            # print(f"[SirtOperator]: restoring from checkpoint: count = {cnt_state}")
-            # print(f"[SirtOperator]: restoring from checkpoint: self = {len(raw)}")
-            if raw:
-                raw_bytes = raw if isinstance(raw, (bytes, bytearray)) else bytes(raw)
-                print(f"[SirtOperator]: found previous state: {len(raw_bytes)} bytes. Restoring")
-                import sirt_ops
-                with sirt_ops.ostream_redirect(): 
-                    self.engine.restore(raw_bytes)
-                # also restore counter if present
-                # cnt = self.count_state.value()
-                # cnt = cnt_state
-                self.processed_local = int(cnt_state) if cnt_state is not None else self.processed_local
-                print(f"[SirtOperator] restored {len(raw_bytes)} bytes from state with processed_local = {cnt_state}")
-            else:
-                # No bytes yet for this key; don't flip the flag so we can retry
-                print(f"[SirtOperator] cannot find previous state. Start from beginning")
-                return
+            self.processed_local = int(cnt_state) if cnt_state is not None else self.processed_local
+            print(f"[SirtOperator] restored with processed_local = {cnt_state}")
         except Exception as e:
             print("[SirtOperator] restore step failed:", e, file=sys.stderr)
             traceback.print_exc()
@@ -642,10 +645,10 @@ class SirtOperator(KeyedProcessFunction):
             with sirt_ops.ostream_redirect(): 
                 snap = self.engine.snapshot()
             snap_bytes = snap if isinstance(snap, (bytes, bytearray)) else bytes(snap)
-            self.snap_state.update(snap_bytes)
+            # self.snap_state.update(snap_bytes)
             # self.snap_state.update(bytes([1, 2, 3]))
             self.count_state.update(self.processed_local)
-            raw = self.snap_state.value()
+            # raw = self.snap_state.value()
             cnt = self.count_state.value()
             print(f"[SirtOperator] snapshot at {self.processed_local} tuples: {len(snap_bytes)} bytes: self = {len(raw)}, count = {cnt}")
         except Exception as e:
