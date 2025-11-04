@@ -925,9 +925,11 @@ def main():
     cfg.set_string("state.backend.type", "rocksdb")
     # cfg.set_string("execution.checkpointing.storage", "filesystem")
     # cfg.set_string("state.backend.rocksdb.predefined-options", "SPINNING_DISK_OPTIMIZED")
-    cfg.set_integer("state.backend.rocksdb.block.cache-size", 128 * 1024 * 1024)  # 128MB
-    cfg.set_integer("state.backend.rocksdb.write-buffer-size", 128 * 1024 * 1024)  # 128MB
-    cfg.set_integer("state.backend.rocksdb.max-write-buffer-number", 4)
+
+    # cfg.set_integer("state.backend.rocksdb.block.cache-size", 128 * 1024 * 1024)  # 128MB
+    # cfg.set_integer("state.backend.rocksdb.write-buffer-size", 128 * 1024 * 1024)  # 128MB
+    # cfg.set_integer("state.backend.rocksdb.max-write-buffer-number", 4)
+    
     cfg.set_string("execution.checkpointing.dir", ckpt_dir)
     cfg.set_string("execution.checkpointing.savepoint-dir", ckpt_dir)
     # cfg.set_boolean("execution.checkpointing.unaligned.enabled", True)
