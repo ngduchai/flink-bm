@@ -927,8 +927,8 @@ def main():
     # cfg.set_string("execution.batch-shuffle-mode", "ALL_EXCHANGES_PIPELINED")
 
     ckpt_dir = "file:///mnt/ckpts/"
-    # cfg.set_string("state.backend.type", "rocksdb")
-    # cfg.set_string("execution.checkpointing.storage", "filesystem")
+    cfg.set_string("state.backend.type", "rocksdb")
+    cfg.set_string("execution.checkpointing.storage", "filesystem")
     # cfg.set_string("state.backend.rocksdb.predefined-options", "SPINNING_DISK_OPTIMIZED")
 
     # cfg.set_integer("state.backend.rocksdb.block.cache-size", 128 * 1024 * 1024)  # 128MB
