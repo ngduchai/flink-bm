@@ -720,7 +720,7 @@ class DenoiserOperator(FlatMapFunction):
         self.running = True
         self.waitting_state = None
         self._restored = False
-        self.count = None
+        self.count = 0
 
     def open(self, ctx: RuntimeContext):
         self.serializer = TraceSerializer.ImageSerializer()
