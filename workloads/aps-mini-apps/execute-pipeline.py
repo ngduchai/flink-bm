@@ -720,6 +720,7 @@ class DenoiserOperator(FlatMapFunction):
         self.running = True
         self.waitting_state = None
         self._restored = False
+        self.count = None
 
     def open(self, ctx: RuntimeContext):
         self.serializer = TraceSerializer.ImageSerializer()
@@ -737,7 +738,8 @@ class DenoiserOperator(FlatMapFunction):
                 state_obj = snap  # already de-pickled by PICKLED_BYTE_ARRAY
                 self.waiting_metadata = state_obj.get("metadata", {}) or {}
                 self.waiting_data = state_obj.get("data", {}) or {}
-                print(f"[DenoiserOperator]: Recover from checkpoint: metadata = {self.waiting_metadata}")
+                self.count = state_obj.get("count", 0)
+                print(f"[DenoiserOperator]: Recover from checkpoint: metadata = {self.waiting_metadata}, count: {self.count}")
             except Exception:
                 # if you had stored raw bytes earlier, optionally pickle.loads(snap)
                 self.waiting_metadata, self.waiting_data = {}, {}
@@ -787,8 +789,8 @@ class DenoiserOperator(FlatMapFunction):
             self.waiting_metadata[iteration_stream][row_id] = meta
             self.waiting_data[iteration_stream][row_id] = dd
 
-            self.waitting_state.update({"metadata": self.waiting_metadata, "data": self.waiting_data})
-            print(f"[DenoiserOperator]: Saved state: {self.waiting_metadata}")
+            self.waitting_state.update({"metadata": self.waiting_metadata, "data": self.waiting_data, "count" : self.count})
+            print(f"[DenoiserOperator]: Saved state: {self.waiting_metadata}, count: {self.count}")
 
             print(f"DenoiserOperator: receive data stream={iteration_stream}, count: {len(self.waiting_metadata[iteration_stream])}, need: {num_sinograms}")
 
@@ -800,6 +802,7 @@ class DenoiserOperator(FlatMapFunction):
                 out_path = os.path.join(self.args.logdir, f"{iteration_stream}-denoised.h5")
                 with h5py.File(out_path, 'w') as h5_output:
                     h5_output.create_dataset('/data', data=np.concatenate(sorted_data, axis=0))
+                self.count += 1
                 del self.waiting_metadata[iteration_stream]
                 del self.waiting_data[iteration_stream]
                 yield ("DENOISED", str(iteration_stream))
