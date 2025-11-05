@@ -22,7 +22,7 @@ except ModuleNotFoundError:
 
 from pyflink.common import Types, Configuration, Duration
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
-from pyflink.datastream.functions import FlatMapFunction, MapFunction, KeyedProcessFunction, RuntimeContext, ProcessFunction
+from pyflink.datastream.functions import FlatMapFunction, CheckpointedFunction, MapFunction, KeyedProcessFunction, RuntimeContext, ProcessFunction
 from pyflink.datastream.state import ValueStateDescriptor, ListStateDescriptor
 from pyflink.datastream.state_backend import EmbeddedRocksDBStateBackend
 from pyflink.datastream.execution_mode import RuntimeExecutionMode
@@ -181,7 +181,7 @@ def ordered_subset(max_ind, nelem):
 # -------------------------
 # DAQ emitter (preload in open(), warm-up first)
 # -------------------------
-class DaqEmitter(FlatMapFunction):
+class DaqEmitter(FlatMapFunction, CheckpointedFunction):
     def __init__(self, *, input_f, beg_sinogram, num_sinograms, seq0,
                  iteration_sleep, d_iteration, proj_sleep, logdir,
                  save_after_serialize=False):
@@ -254,18 +254,19 @@ class DaqEmitter(FlatMapFunction):
             #     if duplicated.shape[1] > self.num_sinograms:
             #         duplicated = duplicated[:, :self.num_sinograms, :]
             #     self.serialized_data = duplicated
-
-            # Load index state
-            index_desc = ListStateDescriptor("daq_emitter_index_v1", Types.INT())
-            seq_desc = ListStateDescriptor("daq_emitter_seq_v1", Types.LONG())
-            self.index_state = _ctx.get_list_state(index_desc)
-            self.seq_state = _ctx.get_list_state(seq_desc)
-
         except Exception as e:
             print("[DaqEmitter.open] failed to prepare dataset:", e, file=sys.stderr)
             traceback.print_exc()
             # Let the job fail early—downstream will restore on restart
             raise
+
+    # Load index state
+    def initialize_state(self, _ctx):
+        ops = _ctx.get_operator_state_store()
+        index_desc = ListStateDescriptor("daq_emitter_index_v1", Types.INT())
+        seq_desc = ListStateDescriptor("daq_emitter_seq_v1", Types.LONG())
+        self.index_state = ops.get_list_state(index_desc)
+        self.seq_state = ops.get_list_state(seq_desc)
 
     def close(self):
         """Free references to help GC in long sessions."""
@@ -347,7 +348,7 @@ class DaqEmitter(FlatMapFunction):
 # -------------------------
 # FlatMap distributor (yield-style)
 # -------------------------
-class DistOperator(FlatMapFunction):
+class DistOperator(FlatMapFunction, CheckpointedFunction):
     def __init__(self, args):
         super().__init__()
         self.args = args
@@ -372,8 +373,10 @@ class DistOperator(FlatMapFunction):
         except Exception as e:
             print("[DistOperator] flatbuffers probe failed:", e)
 
+    def initialize_state(self, context):
+        ops = context.get_operator_state_store()
         seq_desc = ListStateDescriptor("dist_seq_v1", Types.LONG())
-        self.seq_state = ctx.get_list_state(seq_desc)
+        self.seq_state = ops.get_list_state(seq_desc)
         self.seq_loaded = False
 
     @staticmethod
@@ -801,7 +804,11 @@ class DenoiserOperator(FlatMapFunction):
 
     def open(self, ctx: RuntimeContext):
         self.serializer = TraceSerializer.ImageSerializer()
-        self.waitting_state = ctx.get_list_state(
+        
+    def initialize_state(self, context):
+        # operator state store (works without key_by)
+        ops = context.get_operator_state_store()
+        self.waitting_state = ops.get_list_state(
             ValueStateDescriptor("denoiser_waiting_state_v1", Types.PICKLED_BYTE_ARRAY())
         )
 
