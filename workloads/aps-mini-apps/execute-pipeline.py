@@ -717,6 +717,7 @@ class SimplifiedSirtOperator(KeyedProcessFunction):
         self.processed_local = 0
         self._restored = False
         self.task_id = -1
+        self.every_n = every_n
 
     def open(self, ctx: RuntimeContext):
         try:
