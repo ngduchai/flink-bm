@@ -1076,7 +1076,7 @@ def main():
             .set_parallelism(1) \
             # .slot_sharing_group("ticker")
     
-    daq = kick.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
+    daq = kick.key_by(lambda _: 0, key_type=Types.INT()) \
         .flat_map(
         DaqEmitter(
             input_f=args.simulation_file,
