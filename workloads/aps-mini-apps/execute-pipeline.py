@@ -1140,7 +1140,8 @@ def main():
     # # sirt = routed.process(
     # #         SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
     # #         output_type=Types.PICKLED_BYTE_ARRAY()) \
-    sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
+    # sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
+    sirt = dist.key_by(lambda _: 0, key_type=Types.INT()) \
         .process(SimplifiedSirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
             output_type=Types.PICKLED_BYTE_ARRAY()) \
         .name("Sirt Operator") \
