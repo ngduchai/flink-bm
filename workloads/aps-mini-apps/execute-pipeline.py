@@ -729,8 +729,7 @@ class SimplifiedSirtOperator(KeyedProcessFunction):
             return
 
         print(f"SirtOperator initialized: every_n={self.every_n}, "
-              f"restored_count=deferred, "
-              f"thread_count={self.cfg['thread_count']}")
+              f"restored_count=deferred")
     
     def _maybe_restore(self):
         if self._restored:
