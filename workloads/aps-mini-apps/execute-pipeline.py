@@ -929,6 +929,8 @@ def _ship_local_modules(env):
 key_rotation = 0
 num_keys = 0
 def task_key_selector(value):
+    global key_rotation
+    global num_keys
     # md = value[0] if isinstance(value, (list, tuple)) and value else {}
     try:
         [md, _] = value
