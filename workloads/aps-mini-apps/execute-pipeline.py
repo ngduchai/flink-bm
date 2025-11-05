@@ -1076,7 +1076,7 @@ def main():
             .set_parallelism(1) \
             # .slot_sharing_group("ticker")
     
-    daq = kick.key_by(lambda _: 0, key_type=Types.INT()) \
+    daq = kick.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
         .flat_map(
         DaqEmitter(
             input_f=args.simulation_file,
@@ -1096,7 +1096,7 @@ def main():
 
     # probe = daq.map(VersionProbe(), output_type=Types.PICKLED_BYTE_ARRAY()).name("Version Probe")
     # dist = probe.flat_map(
-    dist = daq.key_by(lambda _: 0, key_type=Types.INT())  \
+    dist = daq.key_by(key_selector=task_key_selector, key_type=Types.INT())  \
         .flat_map(
         DistOperator(args),
         output_type=Types.PICKLED_BYTE_ARRAY()
@@ -1141,7 +1141,7 @@ def main():
     # #         SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
     # #         output_type=Types.PICKLED_BYTE_ARRAY()) \
     # sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
-    sirt = dist.key_by(lambda _: 0, key_type=Types.INT()) \
+    sirt = dist.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
         .process(SimplifiedSirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
             output_type=Types.PICKLED_BYTE_ARRAY()) \
         .name("Sirt Operator") \
@@ -1152,7 +1152,7 @@ def main():
         # .slot_sharing_group("sirt")
 
 
-    den = sirt.key_by(lambda _: 0, key_type=Types.INT())  \
+    den = sirt.key_by(key_selector=task_key_selector, key_type=Types.INT())  \
         .flat_map(
         DenoiserOperator(args),
         output_type=Types.PICKLED_BYTE_ARRAY()
