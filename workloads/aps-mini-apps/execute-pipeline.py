@@ -1160,8 +1160,8 @@ def main():
         .process(SimplifiedSirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
             output_type=Types.PICKLED_BYTE_ARRAY()) \
         .name("Sirt Operator") \
-        .uid("sirt-operator") \
         .set_parallelism(max(1, args.ntask_sirt)) \
+        # .uid("sirt-operator") \
         # .set_max_parallelism(max(1, args.ntask_sirt)) \
         # .disable_chaining().start_new_chain() \
         # .slot_sharing_group("sirt")
