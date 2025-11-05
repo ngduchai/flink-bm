@@ -1082,7 +1082,7 @@ def main():
     t_env.execute_sql(ddl)
 
     global num_keys
-    num_keys = args.ntask_sirt
+    num_keys = args.num_sinograms
 
     kick = t_env.to_data_stream(t_env.from_path("tick_src")) \
             .map(lambda row: int(row[0]), output_type=Types.LONG()) \
