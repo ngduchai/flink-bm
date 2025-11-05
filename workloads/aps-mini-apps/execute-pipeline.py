@@ -758,14 +758,15 @@ class SimplifiedSirtOperator(KeyedProcessFunction):
     def process_element(self, value, ctx):
         meta_in, payload = value
         # self._maybe_restore()
-        """Snapshot engine & persist to Flink state. Crash if it fails so Flink restores."""
-        try:
-            self.count_state.update(self.processed_local)
-            print(f"[SirtOperator] snapshot at processed_local = {self.processed_local} tuples")
-        except Exception as e:
-            print("[SirtOperator] engine.snapshot failed:", e, file=sys.stderr)
-            traceback.print_exc()
-            return
+        if self._restored == False:
+            try:
+                cnt_state = self.count_state.value()
+                self.processed_local = int(cnt_state) if cnt_state is not None else self.processed_local
+                print(f"[SirtOperator] restored with processed_local = {self.processed_local}")
+            except Exception as e:
+                print("[SirtOperator] restore step failed:", e, file=sys.stderr)
+                traceback.print_exc()
+            self._restored = True
         
         rank = meta_in["row_id"]
         yield [{"Type": "WARMUP", "row_id": str(rank)}, b""]
