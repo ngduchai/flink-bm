@@ -708,6 +708,65 @@ class SirtOperator(KeyedProcessFunction):
             print(f"[{now}] SirtOperator -- Task-{self.task_id}: Sent: row_id={row_id} stream={iteration_stream}")
             yield [dict(out_meta), bytes(out_bytes)]
 
+
+
+
+class SimplifiedSirtOperator(KeyedProcessFunction):
+    def __init__(self, cfg, every_n: int = 1000):
+        super().__init__()
+        self.processed_local = 0
+        self._restored = False
+        self.task_id = -1
+
+    def open(self, ctx: RuntimeContext):
+        try:
+            count_desc = ValueStateDescriptor("processed_count_v1", Types.LONG())
+            self.count_state = ctx.get_state(count_desc)
+        except Exception as e:
+            print("[SirtOperator.open] state init failed:", e, file=sys.stderr)
+            traceback.print_exc()
+            return
+
+        print(f"SirtOperator initialized: every_n={self.every_n}, "
+              f"restored_count=deferred, "
+              f"thread_count={self.cfg['thread_count']}")
+    
+    def _maybe_restore(self):
+        if self._restored:
+            return
+        try:
+            cnt_state = self.count_state.value()
+            self.processed_local = int(cnt_state) if cnt_state is not None else self.processed_local
+            print(f"[SirtOperator] restored with processed_local = {self.processed_local}")
+        except Exception as e:
+            print("[SirtOperator] restore step failed:", e, file=sys.stderr)
+            traceback.print_exc()
+        self._restored = True
+
+
+    def _do_snapshot(self):
+        """Snapshot engine & persist to Flink state. Crash if it fails so Flink restores."""
+        try:
+            self.count_state.update(self.processed_local)
+            print(f"[SirtOperator] snapshot at processed_local = {self.processed_local} tuples")
+        except Exception as e:
+            print("[SirtOperator] engine.snapshot failed:", e, file=sys.stderr)
+            traceback.print_exc()
+            return
+
+    def process_element(self, value, ctx):
+        meta_in, payload = value
+        self._maybe_restore()
+        
+        rank = meta_in["row_id"]
+        yield [{"Type": "WARMUP", "row_id": str(rank)}, b""]
+        
+        self.processed_local += 1
+
+        # count-based snapshot
+        if self.processed_local % self.every_n == 0:
+            self._do_snapshot()
+
 # -------------------------
 # Sink: Denoiser (yield-style)
 # -------------------------
@@ -1064,7 +1123,7 @@ def main():
     # #         SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
     # #         output_type=Types.PICKLED_BYTE_ARRAY()) \
     sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
-        .process(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
+        .process(SimplifiedSirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
             output_type=Types.PICKLED_BYTE_ARRAY()) \
         .name("Sirt Operator") \
         .uid("sirt-operator") \
