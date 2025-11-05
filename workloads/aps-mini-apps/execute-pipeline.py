@@ -778,7 +778,8 @@ class SimplifiedSirtOperator(KeyedProcessFunction):
             # self._do_snapshot()
             try:
                 self.count_state.update(self.processed_local)
-                print(f"[SirtOperator] snapshot at processed_local = {self.processed_local} tuples")
+                count = self.count_state.value()
+                print(f"[SirtOperator] snapshot at processed_local = {count} tuples")
             except Exception as e:
                 print("[SirtOperator] engine.snapshot failed:", e, file=sys.stderr)
                 traceback.print_exc()
