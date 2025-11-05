@@ -711,7 +711,7 @@ class SirtOperator(KeyedProcessFunction):
 
 
 
-class SimplifiedSirtOperator(KeyedProcessFunction):
+class SimplifiedSirtOperator(FlatMapFunction):
     def __init__(self, cfg, every_n: int = 1000):
         super().__init__()
         self.processed_local = 0
@@ -755,7 +755,7 @@ class SimplifiedSirtOperator(KeyedProcessFunction):
     #         traceback.print_exc()
     #         return
 
-    def process_element(self, value, ctx):
+    def flat_map(self, value):
         meta_in, payload = value
         # self._maybe_restore()
         if self._restored == False:
