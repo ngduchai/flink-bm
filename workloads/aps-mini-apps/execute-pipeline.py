@@ -23,7 +23,7 @@ except ModuleNotFoundError:
 from pyflink.common import Types, Configuration, Duration
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
 from pyflink.datastream.functions import FlatMapFunction, MapFunction, KeyedProcessFunction, RuntimeContext, ProcessFunction
-from pyflink.datastream.state import ValueStateDescriptor
+from pyflink.datastream.state import ValueStateDescriptor, ListStateDescriptor
 from pyflink.datastream.state_backend import EmbeddedRocksDBStateBackend
 from pyflink.datastream.execution_mode import RuntimeExecutionMode
 from pyflink.datastream.functions import SourceFunction
@@ -256,10 +256,10 @@ class DaqEmitter(FlatMapFunction):
             #     self.serialized_data = duplicated
 
             # Load index state
-            index_desc = ValueStateDescriptor("daq_emitter_index_v1", Types.INT())
-            seq_desc = ValueStateDescriptor("daq_emitter_seq_v1", Types.LONG())
-            self.index_state = _ctx.get_state(index_desc)
-            self.seq_state = _ctx.get_state(seq_desc)
+            index_desc = ListStateDescriptor("daq_emitter_index_v1", Types.INT())
+            seq_desc = ListStateDescriptor("daq_emitter_seq_v1", Types.LONG())
+            self.index_state = _ctx.get_list_state(index_desc)
+            self.seq_state = _ctx.get_list_state(seq_desc)
 
         except Exception as e:
             print("[DaqEmitter.open] failed to prepare dataset:", e, file=sys.stderr)
@@ -281,10 +281,10 @@ class DaqEmitter(FlatMapFunction):
             return
         
         if not self._index_loaded:
-            v = self.index_state.value()
-            s = self.seq_state.value()
-            self.index = int(v) if v is not None else 0
-            self.seq = int(s) if s is not None else self.seq0
+            v = self.index_state.get()
+            s = self.seq_state.get()
+            self.index = int(v[0]) if v is not None else 0
+            self.seq = int(s[0]) if s is not None else self.seq0
             print(f"[DaqEmitter] start with index state: {self.index}, seq state: {self.seq}")
             self._index_loaded = True
         
@@ -338,8 +338,8 @@ class DaqEmitter(FlatMapFunction):
                 self.it += 1
 
             # Save index and sequence state
-            self.index_state.update(self.index)
-            self.seq_state.update(self.seq)
+            self.index_state.update([self.index])
+            self.seq_state.update([self.seq])
             print(f"[DaqEmitter] checkpointed index state: {self.index_state.value()}, seq state: {self.seq_state.value()}")
 
             yield [md, payload]
@@ -372,8 +372,8 @@ class DistOperator(FlatMapFunction):
         except Exception as e:
             print("[DistOperator] flatbuffers probe failed:", e)
 
-        seq_desc = ValueStateDescriptor("dist_seq_v1", Types.LONG()) 
-        self.seq_state = ctx.get_state(seq_desc)
+        seq_desc = ListStateDescriptor("dist_seq_v1", Types.LONG())
+        self.seq_state = ctx.get_list_state(seq_desc)
         self.seq_loaded = False
 
     @staticmethod
@@ -431,8 +431,8 @@ class DistOperator(FlatMapFunction):
         metadata, data = value
 
         if not self.seq_loaded:
-            s = self.seq_state.value()
-            self.seq = int(s) if s is not None else 0
+            s = self.seq_state.get()
+            self.seq = int(s[0]) if s is not None else 0
             print(f"[DistOperator] start with seq state: {self.seq}")
             self.seq_loaded = True
 
@@ -516,7 +516,7 @@ class DistOperator(FlatMapFunction):
             self.dark_imgs = []; self.dark_imgs.extend(sub); self.tot_dark_imgs += 1
 
         self.seq += 1
-        self.seq_state.update(self.seq)
+        self.seq_state.update([self.seq])
         print(f"[DistOperator] checkpointed with seq state: {self.seq_state.value()}")
 
 # -------------------------
@@ -801,18 +801,18 @@ class DenoiserOperator(FlatMapFunction):
 
     def open(self, ctx: RuntimeContext):
         self.serializer = TraceSerializer.ImageSerializer()
-        self.waitting_state = ctx.get_state(
+        self.waitting_state = ctx.get_list_state(
             ValueStateDescriptor("denoiser_waiting_state_v1", Types.PICKLED_BYTE_ARRAY())
         )
 
     def _maybe_restore(self):
         if self._restored:
             return
-        snap = self.waitting_state.value()
+        snap = self.waitting_state.get()
         if snap:
             # snap is whatever you stored (dict via PICKLED), handle both dict/bytes if needed
             try:
-                state_obj = snap  # already de-pickled by PICKLED_BYTE_ARRAY
+                state_obj = snap[0]  # already de-pickled by PICKLED_BYTE_ARRAY
                 self.waiting_metadata = state_obj.get("metadata", {}) or {}
                 self.waiting_data = state_obj.get("data", {}) or {}
                 self.count = state_obj.get("count", 0)
@@ -866,7 +866,7 @@ class DenoiserOperator(FlatMapFunction):
             self.waiting_metadata[iteration_stream][row_id] = meta
             self.waiting_data[iteration_stream][row_id] = dd
 
-            self.waitting_state.update({"metadata": self.waiting_metadata, "data": self.waiting_data, "count" : self.count})
+            self.waitting_state.update([{"metadata": self.waiting_metadata, "data": self.waiting_data, "count" : self.count}])
             print(f"[DenoiserOperator]: Saved state: {self.waiting_metadata}, count: {self.count}")
 
             print(f"DenoiserOperator: receive data stream={iteration_stream}, count: {len(self.waiting_metadata[iteration_stream])}, need: {num_sinograms}")
