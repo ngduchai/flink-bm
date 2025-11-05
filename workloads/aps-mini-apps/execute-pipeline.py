@@ -926,12 +926,21 @@ def _ship_local_modules(env):
         env.add_python_file(zip_path)
 
 # top-level key selector
+key_rotation = 0
+num_keys = 0
 def task_key_selector(value):
     # md = value[0] if isinstance(value, (list, tuple)) and value else {}
-    [md, _] = value
-    tid = int(md.get("row_id", 0))  # default 0 for FIN or unexpected msgs
-    print(f"Key selector received meta: {md} --> key = {tid}")
-    return int(tid)
+    try:
+        [md, _] = value
+        # tid = int(md.get("row_id", 0))  # default 0 for FIN or unexpected msgs
+        tid = int(md["row_id"])
+        print(f"KeySelector: Received meta: {md} --> key = {tid}")
+        return int(tid)
+    except:
+        tid = key_rotation
+        key_rotation = (key_rotation + 1) % num_keys
+        print(f"KeySelector: row_id not found, try round-robin --> key = {tid}")
+        return tid
 
 class TaskIdPartitioner(Partitioner):
     def partition(self, key, num_partitions: int):
@@ -1070,13 +1079,17 @@ def main():
     """
     t_env.execute_sql(ddl)
 
+    global num_keys
+    num_keys = args.ntask_sirt
+
     kick = t_env.to_data_stream(t_env.from_path("tick_src")) \
             .map(lambda row: int(row[0]), output_type=Types.LONG()) \
             .name("Ticker") \
             .set_parallelism(1) \
             # .slot_sharing_group("ticker")
     
-    daq = kick.key_by(lambda _: 0, key_type=Types.INT()) \
+    # daq = kick.key_by(lambda _: 0, key_type=Types.INT()) \
+    daq = kick.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
         .flat_map(
         DaqEmitter(
             input_f=args.simulation_file,
