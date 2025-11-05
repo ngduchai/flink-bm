@@ -1157,7 +1157,7 @@ def main():
     # #         output_type=Types.PICKLED_BYTE_ARRAY()) \
     # sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
     sirt = dist.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
-        .process(SimplifiedSirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
+        .flat_map(SimplifiedSirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
             output_type=Types.PICKLED_BYTE_ARRAY()) \
         .name("Sirt Operator") \
         .set_parallelism(max(1, args.ntask_sirt)) \
