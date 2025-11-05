@@ -1091,8 +1091,7 @@ def main():
             # .slot_sharing_group("ticker")
     
     # daq = kick.key_by(lambda _: 0, key_type=Types.INT()) \
-    daq = kick.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
-        .flat_map(
+    daq = kick.flat_map(
         DaqEmitter(
             input_f=args.simulation_file,
             beg_sinogram=args.beg_sinogram,
@@ -1111,8 +1110,7 @@ def main():
 
     # probe = daq.map(VersionProbe(), output_type=Types.PICKLED_BYTE_ARRAY()).name("Version Probe")
     # dist = probe.flat_map(
-    dist = daq.key_by(key_selector=task_key_selector, key_type=Types.INT())  \
-        .flat_map(
+    dist = daq.flat_map(
         DistOperator(args),
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("Data Distributor").set_parallelism(1) \
@@ -1167,8 +1165,7 @@ def main():
         # .slot_sharing_group("sirt")
 
 
-    den = sirt.key_by(key_selector=task_key_selector, key_type=Types.INT())  \
-        .flat_map(
+    den = sirt.flat_map(
         DenoiserOperator(args),
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("Denoiser Operator").set_parallelism(1) \
