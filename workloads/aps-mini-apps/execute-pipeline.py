@@ -939,9 +939,9 @@ def task_key_selector(value):
         print(f"KeySelector: Received meta: {md} --> key = {tid}")
         return int(tid)
     except:
-        tid = key_rotation
-        key_rotation = (key_rotation + 1) % num_keys
-        print(f"KeySelector: row_id not found, try round-robin --> key = {tid}")
+        import random
+        tid = random.randint(0, num_keys-1)
+        print(f"KeySelector: row_id not found, try random --> key = {tid}, num_keys={num_keys}")
         return tid
 
 class TaskIdPartitioner(Partitioner):
