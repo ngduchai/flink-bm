@@ -595,10 +595,11 @@ class DistOperator(FlatMapFunction):
         # print(f"[DistOperator] checkpointed with seq state: {self.seq_state.value()}")
 
 
-class DaqDistSource(SourceFunction):
+class DaqDistSource(RichSourceFunction):
     def __init__(self, *, input_f, beg_sinogram, num_sinograms, seq0,
                  iteration_sleep, d_iteration, proj_sleep, logdir, args,
                  save_after_serialize=False):
+        super().__init__()
         self.input_f = input_f
         self.beg_sinogram = int(beg_sinogram)
         self.num_sinograms = int(num_sinograms)
