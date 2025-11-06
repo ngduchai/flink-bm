@@ -1539,12 +1539,21 @@ def main():
 
     # Convert to DataStream with explicit type
     kick = (
-        t_env.to_data_stream(t_env.from_path("tick_src_all"))
-            .map(
-                lambda r: Row(int(r[0]), int(r[1]), int(r[2]), str(r[3])),
-                output_type=Types.ROW([Types.LONG(), Types.INT(), Types.INT(), Types.STRING()])
-            )
-            .name("Tick+RowId")
+        env.add_source(TickerSource(period_ms=int(max(1, args.proj_sleep * 1000)),
+                                    start=0, max_count=total_rows))
+        .map(
+            # Map seq -> (seq, row_id, iter, kind)
+            lambda s: (
+                int(s),
+                # DATA rows choose row_id by mod; for WARMUP/FIN we still emit one per row downstream
+                int((s - 1) % n) if 0 < s < (total_rows - 1) else 0,
+                int(max(0, (s - 1)) // args.num_sinogram_projections),
+                "WARMUP" if s == 0 else ("FIN" if s == (total_rows - 1) else "DATA")
+            ),
+            output_type=Types.ROW([Types.LONG(), Types.INT(), Types.INT(), Types.STRING()])
+        )
+        .name("OrderedTicks")
+        .set_parallelism(1)
     )
 
     global num_keys
