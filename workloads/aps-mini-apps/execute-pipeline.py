@@ -1391,6 +1391,23 @@ class TickerSource(SourceFunction):
 
 PY_EXEC = "/opt/micromamba/envs/aps/bin/python"
 
+class TickMapper(MapFunction):
+    def __init__(self, proj_sleep: float, n_rows: int, total_rows: int, nproj_per_iter: int):
+        self.proj_sleep = float(proj_sleep)
+        self.n = int(n_rows)
+        self.total_rows = int(total_rows)
+        self.nproj = int(nproj_per_iter)
+
+    def map(self, s: int):
+        # optional pacing for DATA ticks; WARMUP/FIN don’t sleep
+        if 0 < s < (self.total_rows - 1) and self.proj_sleep > 0:
+            time.sleep(self.proj_sleep)
+
+        row_id = int((s - 1) % self.n) if 0 < s < (self.total_rows - 1) else 0
+        it = int(max(0, (s - 1)) // self.nproj)
+        kind = "WARMUP" if s == 0 else ("FIN" if s == (self.total_rows - 1) else "DATA")
+        return (int(s), row_id, it, kind)
+
 def main():
     args = parse_arguments()
     # logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
@@ -1535,25 +1552,17 @@ def main():
     # Union all three
     tick_src_all = (
         t_env.from_path("warmup_view")
-            .union_all(t_env.from_path("data_view"))
-            .union_all(t_env.from_path("fin_view"))
+            .append(t_env.from_path("data_view"))
+            .append(t_env.from_path("fin_view"))
     )
 
     t_env.create_temporary_view("tick_src_all", tick_src_all)
 
     # Convert to DataStream with explicit type
     kick = (
-        env.add_source(TickerSource(period_ms=int(max(1, args.proj_sleep * 1000)),
-                                    start=0, max_count=total_rows))
+        env.from_collection(list(range(total_rows)), type_info=Types.LONG())
         .map(
-            # Map seq -> (seq, row_id, iter, kind)
-            lambda s: (
-                int(s),
-                # DATA rows choose row_id by mod; for WARMUP/FIN we still emit one per row downstream
-                int((s - 1) % n) if 0 < s < (total_rows - 1) else 0,
-                int(max(0, (s - 1)) // args.num_sinogram_projections),
-                "WARMUP" if s == 0 else ("FIN" if s == (total_rows - 1) else "DATA")
-            ),
+            TickMapper(args.proj_sleep, n, total_rows, args.num_sinogram_projections),
             output_type=Types.ROW([Types.LONG(), Types.INT(), Types.INT(), Types.STRING()])
         )
         .name("OrderedTicks")
