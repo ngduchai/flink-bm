@@ -1496,7 +1496,7 @@ def main():
                 E.call_sql(f"CAST(MOD(seq - 1, {n}) AS INT)").alias("row_id"),
                 # iter = FLOOR((seq-1)/num_sinogram_projections)
                 E.call_sql(f"CAST(FLOOR((seq - 1) / {args.num_sinogram_projections}) AS INT)").alias("iter"),
-                E.literal("DATA").alias("kind"))
+                E.lit("DATA").alias("kind"))
     )
 
     t_env.create_temporary_view("data_view", data_view)
@@ -1505,10 +1505,10 @@ def main():
     warmup_view = (
         t_env.from_path("rows_tbl")
             .select(
-                E.literal(0).cast(DataTypes.BIGINT()).alias("seq"),
+                E.lit(0).cast(DataTypes.BIGINT()).alias("seq"),
                 E.col("row_id"),
-                E.literal(0).cast(DataTypes.INT()).alias("iter"),
-                E.literal("WARMUP").alias("kind"))
+                E.lit(0).cast(DataTypes.INT()).alias("iter"),
+                E.lit("WARMUP").alias("kind"))
     )
 
     t_env.create_temporary_view("warmup_view", warmup_view)
@@ -1517,10 +1517,10 @@ def main():
     fin_view = (
         t_env.from_path("rows_tbl")
             .select(
-                E.literal(total_rows - 1).cast(DataTypes.BIGINT()).alias("seq"),
+                E.lit(total_rows - 1).cast(DataTypes.BIGINT()).alias("seq"),
                 E.col("row_id"),
-                E.literal(int(args.d_iteration)).cast(DataTypes.INT()).alias("iter"),
-                E.literal("FIN").alias("kind"))
+                E.lit(int(args.d_iteration)).cast(DataTypes.INT()).alias("iter"),
+                E.lit("FIN").alias("kind"))
     )
 
     t_env.create_temporary_view("fin_view", fin_view)
