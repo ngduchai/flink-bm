@@ -1459,77 +1459,81 @@ def main():
 
     print(f"row_per_second: {rows_per_second}")
 
-    # 1) DATA: seq = 1..(total_rows-2)
-    t_env.execute_sql(f"""
-    CREATE TEMPORARY TABLE tick_data (
-    seq BIGINT
-    ) WITH (
-    'connector'='datagen',
-    'rows-per-second'='{rows_per_second}',
-    'fields.seq.kind'='sequence',
-    'fields.seq.start'='1',
-    'fields.seq.end'='{total_rows - 2}'
+    # tick_data: seq = 1..total_rows-2
+    t_env.create_temporary_table(
+        "tick_data",
+        TableDescriptor.for_connector("datagen")
+        .schema(Schema.new_builder()
+                .column("seq", DataTypes.BIGINT())
+                .build())
+        .option("rows-per-second", str(rows_per_second))
+        .option("fields.seq.kind", "sequence")
+        .option("fields.seq.start", "1")
+        .option("fields.seq.end", str(total_rows - 2))
+        .build()
     )
-    """)
 
-    # 2) ROW IDS: row_id = 0..n-1 (emit once per second; tiny)
-    t_env.execute_sql(f"""
-    CREATE TEMPORARY TABLE rows (
-    row_id INT
-    ) WITH (
-    'connector'='datagen',
-    'rows-per-second'='{max(1, n)}',
-    'fields.row_id.kind'='sequence',
-    'fields.row_id.start'='0',
-    'fields.row_id.end'='{n-1}'
+    # rows: row_id = 0..n-1 (exactly once each)
+    t_env.create_temporary_table(
+        "rows_tbl",
+        TableDescriptor.for_connector("datagen")
+        .schema(Schema.new_builder()
+                .column("row_id", DataTypes.INT())
+                .build())
+        .option("rows-per-second", str(max(1, n)))
+        .option("fields.row_id.kind", "sequence")
+        .option("fields.row_id.start", "0")
+        .option("fields.row_id.end", str(n - 1))
+        .build()
     )
-    """)
 
-    # 3) Final view with row_id
-    # DATA gets row_id = MOD(seq-1, n), iteration from seq
-    t_env.execute_sql(f"""
-    CREATE TEMPORARY VIEW data_view AS
-    SELECT
-    seq,
-    CAST(MOD(seq-1, {n}) AS INT) AS row_id,
-    CAST(FLOOR((seq-1)/{args.num_sinogram_projections}) AS INT) AS iter,
-    'DATA' AS kind
-    FROM tick_data
-    """)
+    # data_view: (seq, row_id, iter, kind='DATA')
+    data_view = (
+        t_env.from_path("tick_data")
+            .add_columns(
+                # row_id = MOD(seq-1, n)
+                E.call_sql(f"CAST(MOD(seq - 1, {n}) AS INT)").alias("row_id"),
+                # iter = FLOOR((seq-1)/num_sinogram_projections)
+                E.call_sql(f"CAST(FLOOR((seq - 1) / {args.num_sinogram_projections}) AS INT)").alias("iter"),
+                E.literal("DATA").alias("kind"))
+    )
 
-    # One WARMUP per row_id
-    t_env.execute_sql("""
-    CREATE TEMPORARY VIEW warmup_view AS
-    SELECT
-    CAST(0 AS BIGINT) AS seq,
-    row_id,
-    CAST(0 AS INT) AS iter,
-    'WARMUP' AS kind
-    FROM rows
-    """)
+    t_env.create_temporary_view("data_view", data_view)
 
-    # One FIN per row_id
-    t_env.execute_sql(f"""
-    CREATE TEMPORARY VIEW fin_view AS
-    SELECT
-    CAST({total_rows - 1} AS BIGINT) AS seq,
-    row_id,
-    CAST({args.d_iteration} AS INT) AS iter,
-    'FIN' AS kind
-    FROM rows
-    """)
+    # warmup_view: one WARMUP per row_id
+    warmup_view = (
+        t_env.from_path("rows_tbl")
+            .select(
+                E.literal(0).cast(DataTypes.BIGINT()).alias("seq"),
+                E.col("row_id"),
+                E.literal(0).cast(DataTypes.INT()).alias("iter"),
+                E.literal("WARMUP").alias("kind"))
+    )
 
-    # Union them (order doesn’t matter in streaming)
-    t_env.execute_sql("""
-    CREATE TEMPORARY VIEW tick_src_all AS
-    SELECT * FROM warmup_view
-    UNION ALL
-    SELECT * FROM data_view
-    UNION ALL
-    SELECT * FROM fin_view
-    """)
+    t_env.create_temporary_view("warmup_view", warmup_view)
 
-    from pyflink.common import Types
+    # fin_view: one FIN per row_id
+    fin_view = (
+        t_env.from_path("rows_tbl")
+            .select(
+                E.literal(total_rows - 1).cast(DataTypes.BIGINT()).alias("seq"),
+                E.col("row_id"),
+                E.literal(int(args.d_iteration)).cast(DataTypes.INT()).alias("iter"),
+                E.literal("FIN").alias("kind"))
+    )
+
+    t_env.create_temporary_view("fin_view", fin_view)
+
+    # Union all three
+    tick_src_all = (
+        t_env.from_path("warmup_view")
+            .union_all(t_env.from_path("data_view"))
+            .union_all(t_env.from_path("fin_view"))
+    )
+
+    t_env.create_temporary_view("tick_src_all", tick_src_all)
+
+    # Convert to DataStream with explicit type
     kick = t_env.to_data_stream(
         t_env.from_path("tick_src_all"),
         Types.ROW([Types.LONG(), Types.INT(), Types.INT(), Types.STRING()])  # (seq,row_id,iter,kind)
