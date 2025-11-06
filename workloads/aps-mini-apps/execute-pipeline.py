@@ -594,6 +594,343 @@ class DistOperator(FlatMapFunction):
         # self.seq_state.update([self.seq])
         # print(f"[DistOperator] checkpointed with seq state: {self.seq_state.value()}")
 
+
+class DaqDistOperator(FlatMapFunction):
+    def __init__(self, *, input_f, beg_sinogram, num_sinograms, seq0,
+                 iteration_sleep, d_iteration, proj_sleep, logdir,
+                 save_after_serialize=False):
+        super().__init__()
+        self.input_f = input_f
+        self.beg_sinogram = int(beg_sinogram)
+        self.num_sinograms = int(num_sinograms)
+        self.seq0 = int(seq0)
+        self.iteration_sleep = float(iteration_sleep)
+        self.d_iteration = int(d_iteration)
+        self.proj_sleep = float(proj_sleep)
+        self.logdir = logdir
+        self.save_after_serialize = bool(save_after_serialize)
+
+        # set in open()
+        self.serialized_data = None   # np.ndarray(dtype=object) of bytes
+        self.indices = None           # np.ndarray of ints (ordering across dataset)
+        self._running = True
+
+        self.warmup = False
+        # self.index_state = None
+        # self.seq_state = None
+
+        self.seq = self.seq0
+        self.tot_transfer_size = 0
+        self.t_start = time.time()
+        self.last_send = self.t_start
+        self.index = 0
+        self.it = 0
+        
+        self._progress_loaded = False
+        self.progress_path = logdir + "/daq_progress.json"
+        self.progress_info = None
+        self.serializer = None
+
+    # ---------- progress file helpers ----------
+    def _safe_mkdir(self, path):
+        if not path:
+            return
+        d = os.path.dirname(path)
+        if d and not os.path.isdir(d):
+            os.makedirs(d, exist_ok=True)
+
+    def _read_progress_file(self):
+        if not self.progress_path:
+            return None
+        try:
+            with open(self.progress_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return None
+        except Exception as e:
+            print(f"[DaqDist] WARN: failed to read progress file {self.progress_path}: {e}")
+            return None
+
+    def _atomic_write(self, path, data_bytes: bytes):
+        tmp = f"{path}.tmp.{os.getpid()}"
+        with open(tmp, "wb") as f:
+            f.write(data_bytes)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)  # atomic on POSIX
+
+    def _write_progress_file(self):
+        if not self.progress_path:
+            return
+        try:
+            self._safe_mkdir(self.progress_path)
+            now = time.time()
+            payload = {
+                "version": 1,
+                "ts": now,
+                "index": int(self.index),
+                "seq": int(self.seq),
+                "iteration": int(self.it),
+                "input": str(self.input_f),
+                "num_sinograms": int(self.num_sinograms),
+                "total_messages": int(self.serialized_data.shape[0]) if self.serialized_data is not None else 0
+            }
+            self._atomic_write(self.progress_path, json.dumps(payload).encode("utf-8"))
+            # minimal log
+            print(f"[DaqDist] progress saved -> {self.progress_path}: idx={payload['index']} seq={payload['seq']} it={payload['iteration']}")
+        except Exception as e:
+            print(f"[DaqDist] WARN: failed to write progress file {self.progress_path}: {e}")
+    
+    @staticmethod
+    def _msg(meta, data_bytes):
+        return [meta, data_bytes]
+
+    def prepare_data_rep_msg(self, row_id: int, seq: int, projection_id: int, theta: float,
+                             center: float, data: np.ndarray) -> list:
+        meta = {
+            "Type": "MSG_DATA_REP",
+            "row_id": str(row_id),
+            "seq_n": str(seq),
+            "projection_id": str(projection_id),
+            "theta": str(float(theta)),
+            "center": str(float(center)),
+            "dtype": str(data.dtype),
+        }
+
+        if self.args.checksum:
+            checksum = fnv1a32(data)
+            meta["checksum"] = checksum
+        else:
+            meta["checksum"] = 0
+
+        data_bytes = data.astype(np.float32, copy=False).tobytes()
+        return self._msg(meta, data_bytes)
+
+    def generate_worker_msgs(self, data: np.ndarray, dims: list, projection_id: int, theta: float,
+                             n_ranks: int, center: float, seq: int) -> list:
+        row, col = int(dims[0]), int(dims[1])
+        assert data.size == row * col, f"Flattened data size mismatch with dims: {data.size} != {row}*{col}"
+        msgs = []
+        # # nsin, rem = row // n_ranks, row % n_ranks
+        # # offset_rows = 0
+        # # for rank in range(n_ranks):
+        # #     rows_here = nsin + (1 if rank < rem else 0)
+        # #     elems = rows_here * col
+        # #     chunk = data[offset_rows * col:(offset_rows * col) + elems]
+        # #     msgs.append(self.prepare_data_rep_msg(rank, seq, projection_id, theta, center, chunk))
+        # #     offset_rows += rows_here
+        # for offset_sinogram in range(self.args.num_sinograms):
+        #     chunk = data[offset_sinogram*col : (offset_sinogram+1)*col]
+        #     msgs.append(self.prepare_data_rep_msg(offset_sinogram, seq, projection_id, theta, center, chunk))
+        nsin, rem = row // self.args.num_sinograms, row % self.args.num_sinograms
+        offset_rows = 0
+        for rank in range(self.args.num_sinograms):
+            rows_here = nsin + (1 if rank < rem else 0)
+            elems = rows_here * col
+            chunk = data[offset_rows * col:(offset_rows * col) + elems]
+            msgs.append(self.prepare_data_rep_msg(rank, seq, projection_id, theta, center, chunk))
+            offset_rows += rows_here
+        return msgs
+
+    def open(self, _ctx: RuntimeContext):
+        """Load & serialize once so the first record can flow immediately."""
+        try:
+            print(f"[DaqDist.open] preparing dataset from: {self.input_f}")
+            t0 = time.time()
+
+            if str(self.input_f).endswith('.npy'):
+                self.serialized_data = np.load(self.input_f, allow_pickle=True)
+                print(f"[DaqDist.open] loaded .npy pre-serialized data "
+                      f"({self.serialized_data.shape[0]} messages) in {time.time()-t0:.2f}s")
+            else:
+                idata, flat, dark, itheta = setup_simulation_data(
+                    self.input_f, self.beg_sinogram, self.num_sinograms
+                )
+                self.serialized_data = serialize_dataset(idata, flat, dark, itheta)
+                if self.save_after_serialize:
+                    np.save(f"{self.input_f}.npy", self.serialized_data)
+                # free large arrays ASAP
+                del idata, flat, dark
+
+                print(f"[DaqDist.open] serialized {self.serialized_data.shape[0]} messages "
+                      f"in {time.time()-t0:.2f}s")
+
+            # Precompute the access order once (keeps per-record overhead tiny)
+            self.indices = ordered_subset(self.serialized_data.shape[0], 16)
+            print(f"[DaqDist.open] precomputed index order of length {len(self.indices)}")
+
+            self.serializer = TraceSerializer.ImageSerializer()
+            import flatbuffers
+            has_force = hasattr(getattr(flatbuffers, "Builder"), "ForceDefaults")
+            print("[DaqDist] flatbuffers:", getattr(flatbuffers, "__version__", "unknown"),
+                "ForceDefaults?", has_force)
+            
+            
+        except Exception as e:
+            print("[DaqDist.open] failed to prepare dataset:", e, file=sys.stderr)
+            traceback.print_exc()
+            # Let the job fail early—downstream will restore on restart
+            raise
+
+        rec = self._read_progress_file()
+        self._progress_loaded = True
+        if rec is not None:
+            self.index = int(rec.get("index", 0))
+            self.seq = int(rec.get("seq", self.seq0))
+            self.it = int(rec.get("iteration", 0))
+            print(f"[DaqDist] restored from file: idx={self.index} seq={self.seq} it={self.it}")
+        else:
+            self.index = 0
+            self.seq = self.seq0
+            self.it = 0
+            print(f"[DaqDist] No state found: using idx={self.index} seq={self.seq} it={self.it}")
+
+    def close(self):
+        """Free references to help GC in long sessions."""
+        self._write_progress_file()
+        self.serialized_data = None
+        self.indices = None
+
+    # Cooperative cancellation support (Flink may call this on cancel)
+    def cancel(self):
+        self._running = False
+        self._write_progress_file()
+
+    def flat_map(self, _ignored):
+        if not self._running:
+            return
+        
+        # if not self._index_loaded:
+        #     v = self.index_state.get()
+        #     s = self.seq_state.get()
+        #     self.index = int(v[0]) if v is not None else 0
+        #     self.seq = int(s[0]) if s is not None else self.seq0
+        #     print(f"[DaqDist] start with index state: {self.index}, seq state: {self.seq}")
+        #     self._index_loaded = True
+        
+        if self.warmup == False:
+            self.warmup = True
+            for rank in range(int(self.args.num_sinograms)):
+                yield [{"Type": "WARMUP", "row_id": str(rank)}, b""]
+            return
+
+        if self.serialized_data is None or self.indices is None:
+            print("[DaqDist] not initialized—no data to emit", file=sys.stderr)
+            return
+
+        # 2) Stream real data
+        if self.it == self.d_iteration:
+            self._running = False
+            # 3) FIN marker so downstream can flush/close cleanly
+            for rank in range(int(self.args.num_sinograms)):
+                yield [{"Type": "FIN", "row_id": str(rank)}, b""]
+            self._write_progress_file()
+
+            elapsed = max(1e-9, time.time() - self.t_start)
+            nproj = (self.d_iteration * len(self.indices)) if self._running else (self.seq - self.seq0)
+            tot_MiB = self.tot_transfer_size / (1024.0 ** 2)
+            print(f"[DaqDist] sent={nproj} msgs size={tot_MiB:.2f} MiB "
+                  f"elapsed={elapsed:.2f}s rate={tot_MiB/elapsed:.2f} MiB/s "
+                  f"msgs/s={nproj/elapsed:.2f}")
+            return
+
+        else:
+            if self.index == 0:
+                print(f"[DaqDist] iteration {self.it+1}/{self.d_iteration}")
+
+            # now = time.time()
+            # waittime_left = self.proj_sleep - (now-self.last_send)
+            # if waittime_left > 0:
+            #     time.sleep(waittime_left)
+
+            metadata = {"index": int(self.index), "Type": "DATA", "seq_n": self.seq}
+            payload = self.serialized_data[self.index]
+
+            # minimal, useful log
+            now = time.time()
+            print(f"[DaqDist] send seq={self.seq} idx={self.index} dt={now-self.last_send:.3f}s "
+                    f"size={len(payload)}")
+            self.last_send = now
+
+            data = payload
+            sequence_id = metadata["seq_n"]
+            self.total_received += 1
+            self.total_size += len(data)
+
+            read_image = self.serializer.deserialize(serialized_image=data)
+
+            my_image_np = read_image.TdataAsNumpy()
+            if self.args.uint8_to_float32:
+                my_image_np.dtype = np.uint8
+                sub = np.array(my_image_np, dtype="float32")
+            elif self.args.uint16_to_float32:
+                my_image_np.dtype = np.uint16
+                sub = np.array(my_image_np, dtype="float32")
+            elif self.args.cast_to_float32:
+                my_image_np.dtype = np.float32
+                sub = my_image_np
+            else:
+                sub = my_image_np
+
+            sub = sub.reshape((1, read_image.Dims().Y(), read_image.Dims().X()))
+
+            if read_image.Itype() is self.serializer.ITypes.Projection:
+                rotation = read_image.Rotation()
+                if self.args.degree_to_radian:
+                    rotation = rotation * math.pi / 180.0
+
+                if self.args.normalize and self.tot_white_imgs > 0 and self.tot_dark_imgs > 0:
+                    sub = tp.normalize(sub, flat=self.white_imgs, dark=self.dark_imgs)
+                if self.args.remove_stripes:
+                    sub = tp.remove_stripe_fw(sub, level=7, wname='sym16', sigma=1, pad=True)
+                if self.args.mlog:
+                    sub = -np.log(sub)
+                if self.args.remove_invalids:
+                    sub = tp.remove_nan(sub, val=0.0)
+                    sub = tp.remove_neg(sub, val=0.00)
+                    sub[np.where(sub == np.inf)] = 0.00
+
+                data_flat = sub.flatten()
+                ncols = sub.shape[2]
+                theta = rotation
+                projection_id = read_image.UniqueId()
+                center = read_image.Center()
+                dims = [self.args.num_sinograms, ncols]
+                center = (dims[1] / 2.0) if center == 0.0 else center
+
+                msgs = self.generate_worker_msgs(data_flat, dims, projection_id, theta,
+                                                self.args.num_sinograms, center, sequence_id)
+                for i in range(len(msgs)):
+                    md = msgs[i][0]
+                    datalen = len(msgs[i][1])
+                    # print(f"Task {i}: seq_id {md['seq_n']} proj_id {md['projection_id']}, theta: {md['theta']} center: {md['center']}")
+                    print(f"DaqDist: Sent: {md}, data size: {datalen}")
+                    yield msgs[i]
+
+            if read_image.Itype() is self.serializer.ITypes.White:
+                self.white_imgs.extend(sub); self.tot_white_imgs += 1
+            if read_image.Itype() is self.serializer.ITypes.WhiteReset:
+                self.white_imgs = []; self.white_imgs.extend(sub); self.tot_white_imgs += 1
+            if read_image.Itype() is self.serializer.ITypes.Dark:
+                self.dark_imgs.extend(sub); self.tot_dark_imgs += 1
+            if read_image.Itype() is self.serializer.ITypes.DarkReset:
+                self.dark_imgs = []; self.dark_imgs.extend(sub); self.tot_dark_imgs += 1
+
+            self.tot_transfer_size += len(payload)
+            self.seq += 1
+            self.index += 1
+            if self.index == len(self.indices):
+                self.index = 0
+                self.it += 1
+
+            # # Save index and sequence state
+            # self.index_state.update([self.index])
+            # self.seq_state.update([self.seq])
+            # print(f"[DaqEmitter] checkpointed index state: {self.index_state.value()}, seq state: {self.seq_state.value()}")
+            self._write_progress_file()
+
+
+
 # -------------------------
 # Map: SIRT
 # -------------------------
@@ -1168,7 +1505,7 @@ def main():
             # .slot_sharing_group("ticker")
     
     # daq = kick.key_by(lambda _: 0, key_type=Types.INT()) \
-    daq = kick.flat_map(
+    daqdist = kick.flat_map(
         DaqEmitter(
             input_f=args.simulation_file,
             beg_sinogram=args.beg_sinogram,
@@ -1187,12 +1524,12 @@ def main():
 
     # probe = daq.map(VersionProbe(), output_type=Types.PICKLED_BYTE_ARRAY()).name("Version Probe")
     # dist = probe.flat_map(
-    dist = daq.flat_map(
-        DistOperator(args),
-        output_type=Types.PICKLED_BYTE_ARRAY()
-    ).name("Data Distributor").set_parallelism(1) \
-        # .disable_chaining().start_new_chain() \
-        # .slot_sharing_group("dist")
+    # dist = daq.flat_map(
+    #     DistOperator(args),
+    #     output_type=Types.PICKLED_BYTE_ARRAY()
+    # ).name("Data Distributor").set_parallelism(1) \
+    #     # .disable_chaining().start_new_chain() \
+    #     # .slot_sharing_group("dist")
 
     # probe = dist.key_by(
     #     task_key_selector,
@@ -1231,7 +1568,7 @@ def main():
     # #         SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
     # #         output_type=Types.PICKLED_BYTE_ARRAY()) \
     # sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
-    sirt = dist.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
+    sirt = daqdist.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
         .flat_map(SimplifiedSirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
             output_type=Types.PICKLED_BYTE_ARRAY()) \
         .name("Sirt Operator") \
