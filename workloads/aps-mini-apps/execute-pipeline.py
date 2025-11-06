@@ -595,7 +595,7 @@ class DistOperator(FlatMapFunction):
         # print(f"[DistOperator] checkpointed with seq state: {self.seq_state.value()}")
 
 
-class DaqDistSource(RichSourceFunction):
+class DaqDistSource(SourceFunction):
     def __init__(self, *, input_f, beg_sinogram, num_sinograms, seq0,
                  iteration_sleep, d_iteration, proj_sleep, logdir, args,
                  save_after_serialize=False):
@@ -730,7 +730,45 @@ class DaqDistSource(RichSourceFunction):
             offset_rows += rows_here
         return msgs
 
-    def open(self, ctx: RuntimeContext):
+    # def open(self, ctx: RuntimeContext):
+    #     print(f"[DaqDistSource.open] preparing dataset from: {self.input_f}")
+    #     t0 = time.time()
+    #     if str(self.input_f).endswith('.npy'):
+    #         self.serialized_data = np.load(self.input_f, allow_pickle=True)
+    #         print(f"[DaqDistSource.open] loaded .npy with {self.serialized_data.shape[0]} msgs in {time.time()-t0:.2f}s")
+    #     else:
+    #         idata, flat, dark, itheta = setup_simulation_data(self.input_f, self.beg_sinogram, self.num_sinograms)
+    #         self.serialized_data = serialize_dataset(idata, flat, dark, itheta)
+    #         if self.save_after_serialize:
+    #             np.save(f"{self.input_f}.npy", self.serialized_data)
+    #         del idata, flat, dark
+    #         print(f"[DaqDistSource.open] serialized {self.serialized_data.shape[0]} msgs in {time.time()-t0:.2f}s")
+
+    #     self.indices = ordered_subset(self.serialized_data.shape[0], 16)
+    #     self.serializer = TraceSerializer.ImageSerializer()
+
+    #     rec = self._read_progress_file()
+    #     if rec:
+    #         self.index = int(rec.get("index", 0))
+    #         self.seq   = int(rec.get("seq", self.seq0))
+    #         self.it    = int(rec.get("iteration", 0))
+    #         print(f"[DaqDistSource] restored: idx={self.index} seq={self.seq} it={self.it}")
+    #     else:
+    #         print(f"[DaqDistSource] no saved progress; start fresh")
+
+    # def close(self):
+    #     """Free references to help GC in long sessions."""
+    #     self._write_progress_file()
+    #     self.serialized_data = None
+    #     self.indices = None
+
+    # Cooperative cancellation support (Flink may call this on cancel)
+    def cancel(self):
+        self._running = False
+        self._write_progress_file()
+
+    def run(self, ctx):
+
         print(f"[DaqDistSource.open] preparing dataset from: {self.input_f}")
         t0 = time.time()
         if str(self.input_f).endswith('.npy'):
@@ -756,18 +794,6 @@ class DaqDistSource(RichSourceFunction):
         else:
             print(f"[DaqDistSource] no saved progress; start fresh")
 
-    def close(self):
-        """Free references to help GC in long sessions."""
-        self._write_progress_file()
-        self.serialized_data = None
-        self.indices = None
-
-    # Cooperative cancellation support (Flink may call this on cancel)
-    def cancel(self):
-        self._running = False
-        self._write_progress_file()
-
-    def run(self, ctx):
         # warm-up to all ranks
         for rank in range(int(self.args.num_sinograms)):
             ctx.collect([{"Type": "WARMUP", "row_id": str(rank)}, b""])
