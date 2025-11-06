@@ -768,12 +768,16 @@ class DaqDistLight(FlatMapFunction):
 
             # control messages pass through to every key
             if kind == "WARMUP":
-                yield [{"Type": "WARMUP", "row_id": str(row_id)}, b""]
+                # Broadcast one WARMUP per row_id, in-order, from the single ordered source
+                for r in range(int(self.args.num_sinograms)):
+                    yield [{"Type": "WARMUP", "row_id": str(r)}, b""]
                 return
+
             if kind == "FIN":
-                # force a save when a FIN hits this key
+                # Force a final save, then broadcast FIN to every row_id
                 self._maybe_save_progress(force=True)
-                yield [{"Type": "FIN", "row_id": str(row_id)}, b""]
+                for r in range(int(self.args.num_sinograms)):
+                    yield [{"Type": "FIN", "row_id": str(r)}, b""]
                 return
 
             # DATA path
