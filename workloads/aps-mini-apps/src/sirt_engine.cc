@@ -110,26 +110,25 @@ ProcessResult SirtEngine::process(
   const float* data,
   std::size_t len
 ) {
-  int row_id = std::stoi(require_str(metadata, "row_id"));
-  auto type = require_str(metadata, "Type");
-  if (type == "WARMUP") {
-    SirtProcessor * temp_processor = new SirtProcessor{row_id, this->sirt_metadata};
-    auto [ins_it, _] = sirt_processors.emplace(row_id, temp_processor);
-    // auto it = ins_it;
-    // it->second.setup(row_id, this->sirt_metadata);
-    ProcessResult result;
-    return result;
-  }else{
-    return sirt_processors[row_id]->process(config, metadata, data, len);
-  }
+    const int row_id = std::stoi(require_str(metadata, "row_id"));
+    const auto type  = require_str(metadata, "Type");
 
-  // auto it = sirt_processors.find(row_id);
-  // if (it == sirt_processors.end()) {
-  //   auto [ins_it, _] = sirt_processors.emplace(row_id, SirtProcessor{});
-  //   it = ins_it;
-  //   it->second.setup(row_id, this->sirt_metadata);
-  // }
-  // return it->second.process(config, metadata, data, len);
+    if (type == "WARMUP") {
+        // insert only if missing
+        if (sirt_processors.find(row_id) == sirt_processors.end()) {
+            sirt_processors.emplace(row_id,
+                std::make_unique<SirtProcessor>(row_id, this->sirt_metadata));
+        }
+        return {};
+    }
+
+    // create on first data use as well (no crash if WARMUP never came)
+    auto it = sirt_processors.find(row_id);
+    if (it == sirt_processors.end()) {
+        it = sirt_processors.emplace(row_id,
+                std::make_unique<SirtProcessor>(row_id, this->sirt_metadata)).first;
+    }
+    return it->second->process(config, metadata, data, len);
 }
 
 ProcessResult SirtProcessor::process(
@@ -280,10 +279,18 @@ ProcessResult SirtProcessor::process(
 
 std::vector<std::uint8_t> SirtEngine::snapshot() const {
   SirtCkpt ckpt;
-  for (const auto processor : this->sirt_processors) {
-    ckpt.add_processor(processor.first, processor.second->passes, processor.second->recon_image);
+  // NOTE: reference! do NOT copy pairs with unique_ptr
+  for (const auto& kv : this->sirt_processors) {
+    const int row_id = kv.first;
+    const SirtProcessor* proc = kv.second.get();  // still const-correct: we only read
+
+    if (!proc) continue; // defensive guard; shouldn't happen
+
+    // Store progress and the recon_image pointer as your SirtCkpt expects
+    ckpt.add_processor(row_id, proc->passes, proc->recon_image);
   }
 
+  // Serialize
   std::vector<std::uint8_t> saved_ckpt = ckpt.to_bytes();
 
   std::cout << "testing if the serialization works..." << std::endl;
@@ -304,23 +311,48 @@ std::vector<std::uint8_t> SirtEngine::snapshot() const {
 void SirtEngine::restore(const std::vector<std::uint8_t>& snapshot) {
   // TODO: replace these with actual boost deserialization
   SirtCkpt ckpt(snapshot);
-  for (int i = 0; i < ckpt.progresses.size(); ++i) {
-    int row_id = ckpt.row_ids[i];
-    int passes = ckpt.progresses[i];
-    DataRegionBareBase<float>* recon_image = ckpt.recon_images[i];
+  // Sanity-check structural integrity
+  if (ckpt.row_ids.size() != ckpt.progresses.size() ||
+      ckpt.row_ids.size() != ckpt.recon_images.size()) {
+    throw std::runtime_error(
+        "SirtEngine::restore: corrupted checkpoint (vector size mismatch)");
+  }
 
-    auto it = sirt_processors.find(row_id); 
+  for (std::size_t i = 0; i < ckpt.row_ids.size(); ++i) {
+    const int row_id = ckpt.row_ids[i];
+    const int passes = ckpt.progresses[i];
+    DataRegionBareBase<float>* restored_recon = ckpt.recon_images[i]; // allocated by Boost
+
+    // Find or create the processor
+    auto it = sirt_processors.find(row_id);
     if (it == sirt_processors.end()) {
-      SirtProcessor* processor = new SirtProcessor(row_id, this->sirt_metadata);
-      processor->setup(row_id, this->sirt_metadata);
-      processor->passes = passes;
-      processor->recon_image = recon_image;
-      sirt_processors.insert({row_id, processor});
-    }else{
-      it->second->passes = passes;
-      it->second->recon_image = recon_image;
+      // Constructor SirtProcessor(int, SirtMetadata&) already calls setup(row_id, sirt_metadata)
+      auto up = std::make_unique<SirtProcessor>(row_id, this->sirt_metadata);
+      auto emplaced = sirt_processors.emplace(row_id, std::move(up));
+      it = emplaced.first;
+    } else if (!it->second) {
+      // Defensive: ensure no null unique_ptr remains
+      it->second = std::make_unique<SirtProcessor>(row_id, this->sirt_metadata);
     }
-    std::cout << "Restored SirtProcessor for row_id " << row_id << " with passes " << passes << std::endl;
+
+    SirtProcessor* proc = it->second.get();
+
+    // Replace recon_image with the one from the checkpoint.
+    // Avoid leaks if a different buffer was already present.
+    if (proc->recon_image && proc->recon_image != restored_recon) {
+      delete proc->recon_image;
+    }
+    proc->recon_image = restored_recon;  // processor now takes ownership
+
+    // Restore progress counter
+    proc->passes = passes;
+
+    // Optional: log details
+    std::cout << "Restored SirtProcessor for row_id " << row_id
+              << " with passes " << passes
+              << " (recon_image count="
+              << (proc->recon_image ? proc->recon_image->count() : 0)
+              << ")" << std::endl;
   }
 }
 

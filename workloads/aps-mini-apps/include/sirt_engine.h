@@ -80,7 +80,7 @@ private:
 class SirtEngine {
 private:
     SirtMetadata sirt_metadata;
-    std::map<int, SirtProcessor*> sirt_processors;
+    std::map<int, std::unique_ptr<SirtProcessor>> sirt_processors;
 
 public:
 
