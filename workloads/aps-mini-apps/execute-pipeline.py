@@ -611,6 +611,12 @@ class DaqDistOperator(FlatMapFunction):
         self.save_after_serialize = bool(save_after_serialize)
         self.args = args
 
+        self.total_received = 0
+        self.total_size = 0
+        self.white_imgs, self.dark_imgs = [], []
+        self.tot_white_imgs = 0
+        self.tot_dark_imgs = 0
+
         # set in open()
         self.serialized_data = None   # np.ndarray(dtype=object) of bytes
         self.indices = None           # np.ndarray of ints (ordering across dataset)
