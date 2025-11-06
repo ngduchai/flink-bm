@@ -23,12 +23,14 @@ except ModuleNotFoundError:
 from pyflink.common import Types, Configuration, Duration
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
 from pyflink.datastream.functions import FlatMapFunction, MapFunction, KeyedProcessFunction, RuntimeContext, ProcessFunction
-from pyflink.datastream.state import ValueStateDescriptor
+from pyflink.datastream.state import ValueStateDescriptor, ListStateDescriptor
 from pyflink.datastream.state_backend import EmbeddedRocksDBStateBackend
 from pyflink.datastream.execution_mode import RuntimeExecutionMode
 from pyflink.datastream.functions import SourceFunction
 from pyflink.table import StreamTableEnvironment
 from pyflink.datastream.functions import Partitioner
+
+import json
 
 
 # -------------------------
@@ -202,8 +204,8 @@ class DaqEmitter(FlatMapFunction):
         self._running = True
 
         self.warmup = False
-        self.index_state = None
-        self.seq_state = None
+        # self.index_state = None
+        # self.seq_state = None
 
         self.seq = self.seq0
         self.tot_transfer_size = 0
@@ -211,7 +213,61 @@ class DaqEmitter(FlatMapFunction):
         self.last_send = self.t_start
         self.index = 0
         self.it = 0
-        self._index_loaded = False
+        
+        self._progress_loaded = False
+        self.progress_path = logdir + "/daq_progress.json"
+        self.progress_info = None
+
+    # ---------- progress file helpers ----------
+    def _safe_mkdir(self, path):
+        if not path:
+            return
+        d = os.path.dirname(path)
+        if d and not os.path.isdir(d):
+            os.makedirs(d, exist_ok=True)
+
+    def _read_progress_file(self):
+        if not self.progress_path:
+            return None
+        try:
+            with open(self.progress_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return None
+        except Exception as e:
+            print(f"[DaqEmitter] WARN: failed to read progress file {self.progress_path}: {e}")
+            return None
+
+    def _atomic_write(self, path, data_bytes: bytes):
+        tmp = f"{path}.tmp.{os.getpid()}"
+        with open(tmp, "wb") as f:
+            f.write(data_bytes)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)  # atomic on POSIX
+
+    def _write_progress_file(self):
+        if not self.progress_path:
+            return
+        try:
+            self._safe_mkdir(self.progress_path)
+            now = time.time()
+            payload = {
+                "version": 1,
+                "ts": now,
+                "index": int(self.index),
+                "seq": int(self.seq),
+                "iteration": int(self.it),
+                "input": str(self.input_f),
+                "num_sinograms": int(self.num_sinograms),
+                "total_messages": int(self.serialized_data.shape[0]) if self.serialized_data is not None else 0
+            }
+            self._atomic_write(self.progress_path, json.dumps(payload).encode("utf-8"))
+            # minimal log
+            print(f"[DaqEmitter] progress saved -> {self.progress_path}: idx={payload['index']} seq={payload['seq']} it={payload['iteration']}")
+        except Exception as e:
+            print(f"[DaqEmitter] WARN: failed to write progress file {self.progress_path}: {e}")
+    
 
     def open(self, _ctx: RuntimeContext):
         """Load & serialize once so the first record can flow immediately."""
@@ -254,39 +310,54 @@ class DaqEmitter(FlatMapFunction):
             #     if duplicated.shape[1] > self.num_sinograms:
             #         duplicated = duplicated[:, :self.num_sinograms, :]
             #     self.serialized_data = duplicated
-
-            # Load index state
-            index_desc = ValueStateDescriptor("daq_emitter_index_v1", Types.INT())
-            seq_desc = ValueStateDescriptor("daq_emitter_seq_v1", Types.LONG())
-            self.index_state = _ctx.get_state(index_desc)
-            self.seq_state = _ctx.get_state(seq_desc)
-
         except Exception as e:
             print("[DaqEmitter.open] failed to prepare dataset:", e, file=sys.stderr)
             traceback.print_exc()
             # Let the job fail early—downstream will restore on restart
             raise
 
+        # # Load index state
+        # def initialize_state(self, _ctx):
+        #     ops = _ctx.get_operator_state_store()
+        #     index_desc = ListStateDescriptor("daq_emitter_index_v1", Types.INT())
+        #     seq_desc = ListStateDescriptor("daq_emitter_seq_v1", Types.LONG())
+        #     self.index_state = ops.get_list_state(index_desc)
+        #     self.seq_state = ops.get_list_state(seq_desc)
+        rec = self._read_progress_file()
+        self._progress_loaded = True
+        if rec is not None:
+            self.index = int(rec.get("index", 0))
+            self.seq = int(rec.get("seq", self.seq0))
+            self.it = int(rec.get("iteration", 0))
+            print(f"[DaqEmitter] restored from file: idx={self.index} seq={self.seq} it={self.it}")
+        else:
+            self.index = 0
+            self.seq = self.seq0
+            self.it = 0
+            print(f"[DaqEmitter] No state found: using idx={self.index} seq={self.seq} it={self.it}")
+
     def close(self):
         """Free references to help GC in long sessions."""
+        self._write_progress_file()
         self.serialized_data = None
         self.indices = None
 
     # Cooperative cancellation support (Flink may call this on cancel)
     def cancel(self):
         self._running = False
+        self._write_progress_file()
 
     def flat_map(self, _ignored):
         if not self._running:
             return
         
-        if not self._index_loaded:
-            v = self.index_state.value()
-            s = self.seq_state.value()
-            self.index = int(v) if v is not None else 0
-            self.seq = int(s) if s is not None else self.seq0
-            print(f"[DaqEmitter] start with index state: {self.index}, seq state: {self.seq}")
-            self._index_loaded = True
+        # if not self._index_loaded:
+        #     v = self.index_state.get()
+        #     s = self.seq_state.get()
+        #     self.index = int(v[0]) if v is not None else 0
+        #     self.seq = int(s[0]) if s is not None else self.seq0
+        #     print(f"[DaqEmitter] start with index state: {self.index}, seq state: {self.seq}")
+        #     self._index_loaded = True
         
         if self.warmup == False:
             self.warmup = True
@@ -304,6 +375,7 @@ class DaqEmitter(FlatMapFunction):
             self._running = True
             # 3) FIN marker so downstream can flush/close cleanly
             yield [{"Type": "FIN"}, b""]
+            self._write_progress_file()
 
             elapsed = max(1e-9, time.time() - self.t_start)
             nproj = (self.d_iteration * len(self.indices)) if self._running else (self.seq - self.seq0)
@@ -337,10 +409,11 @@ class DaqEmitter(FlatMapFunction):
                 self.index = 0
                 self.it += 1
 
-            # Save index and sequence state
-            self.index_state.update(self.index)
-            self.seq_state.update(self.seq)
-            print(f"[DaqEmitter] checkpointed index state: {self.index_state.value()}, seq state: {self.seq_state.value()}")
+            # # Save index and sequence state
+            # self.index_state.update([self.index])
+            # self.seq_state.update([self.seq])
+            # print(f"[DaqEmitter] checkpointed index state: {self.index_state.value()}, seq state: {self.seq_state.value()}")
+            self._write_progress_file()
 
             yield [md, payload]
 
@@ -359,8 +432,8 @@ class DistOperator(FlatMapFunction):
         self.tot_white_imgs = 0
         self.tot_dark_imgs = 0
         self.seq = 0
-        self.seq_state = None
-        self.seq_loaded = False
+        # self.seq_state = None
+        # self.seq_loaded = False
 
     def open(self, ctx: RuntimeContext):
         self.serializer = TraceSerializer.ImageSerializer()
@@ -372,9 +445,11 @@ class DistOperator(FlatMapFunction):
         except Exception as e:
             print("[DistOperator] flatbuffers probe failed:", e)
 
-        seq_desc = ValueStateDescriptor("dist_seq_v1", Types.LONG()) 
-        self.seq_state = ctx.get_state(seq_desc)
-        self.seq_loaded = False
+    # def initialize_state(self, context):
+    #     ops = context.get_operator_state_store()
+    #     seq_desc = ListStateDescriptor("dist_seq_v1", Types.LONG())
+    #     self.seq_state = ops.get_list_state(seq_desc)
+    #     self.seq_loaded = False
 
     @staticmethod
     def _msg(meta, data_bytes):
@@ -430,11 +505,11 @@ class DistOperator(FlatMapFunction):
     def flat_map(self, value):
         metadata, data = value
 
-        if not self.seq_loaded:
-            s = self.seq_state.value()
-            self.seq = int(s) if s is not None else 0
-            print(f"[DistOperator] start with seq state: {self.seq}")
-            self.seq_loaded = True
+        # if not self.seq_loaded:
+        #     s = self.seq_state.get()
+        #     self.seq = int(s[0]) if s is not None else 0
+        #     print(f"[DistOperator] start with seq state: {self.seq}")
+        #     self.seq_loaded = True
 
          # Broadcast FIN to all SIRT ranks and include row_id so key_by works
         if isinstance(metadata, dict) and metadata.get("Type") == "WARMUP":
@@ -515,15 +590,327 @@ class DistOperator(FlatMapFunction):
         if read_image.Itype() is self.serializer.ITypes.DarkReset:
             self.dark_imgs = []; self.dark_imgs.extend(sub); self.tot_dark_imgs += 1
 
-        self.seq += 1
-        self.seq_state.update(self.seq)
-        print(f"[DistOperator] checkpointed with seq state: {self.seq_state.value()}")
+        # self.seq += 1
+        # self.seq_state.update([self.seq])
+        # print(f"[DistOperator] checkpointed with seq state: {self.seq_state.value()}")
+
+
+class DaqDistLight(FlatMapFunction):
+    """
+    Pre-partitioned replacer with file-backed progress.
+
+    Input (per-key = row_id):
+        (seq: BIGINT, row_id: INT, iteration: INT, kind: STRING)
+
+    Output:
+        [meta: dict, payload: bytes] where meta['row_id'] == row_id
+
+    File state (per row_id):
+        { "version":1, "ts": <unix>, "row_id": <int>,
+          "last_seq": <int>, "nmsgs": <int>, "input": <str> }
+    """
+
+    # ----- tunables -----
+    SAVE_EVERY_RECORDS = 64        # checkpoint-ish cadence for progress file
+    SAVE_EVERY_SECONDS = 3.0       # or time-based, whichever first
+
+    def __init__(self, args):
+        super().__init__()
+        self.args = args
+
+        # dataset / serializer
+        self.serializer = None
+        self.serialized_data = None   # np.ndarray(dtype=object) of bytes
+        self.nmsgs = 0
+
+        # calibration caches
+        self.white_imgs, self.dark_imgs = [], []
+        self.tot_white_imgs = 0
+        self.tot_dark_imgs = 0
+
+        # progress & stats (per subtask / key)
+        self._progress_loaded = False
+        self._progress_path = None
+        self._row_id = None
+        self._last_seq = -1          # last DATA seq we *emitted* for this row_id
+        self._emitted_since_save = 0
+        self._last_save_ts = 0.0
+
+        self._t0 = time.time()
+        self._sent_bytes = 0
+        self._last_log = self._t0
+
+    # ---------- small utils ----------
+    def _safe_mkdir_for_file(self, path):
+        if not path: return
+        d = os.path.dirname(path)
+        if d and not os.path.isdir(d):
+            os.makedirs(d, exist_ok=True)
+
+    def _atomic_write(self, path, data_bytes: bytes):
+        tmp = f"{path}.tmp.{os.getpid()}"
+        with open(tmp, "wb") as f:
+            f.write(data_bytes); f.flush(); os.fsync(f.fileno())
+        os.replace(tmp, path)
+
+    def _progress_file_for_row(self, row_id: int) -> str:
+        root = os.path.join(self.args.logdir or ".", "daqdist_progress")
+        return os.path.join(root, f"row_{row_id}.json")
+
+    def _maybe_load_progress(self, row_id: int):
+        """Load progress once we know row_id (first record for the key)."""
+        if self._progress_loaded:
+            return
+        self._row_id = int(row_id)
+        self._progress_path = self._progress_file_for_row(self._row_id)
+        try:
+            with open(self._progress_path, "r", encoding="utf-8") as f:
+                rec = json.load(f)
+            self._last_seq = int(rec.get("last_seq", -1))
+            print(f"[DaqDistLight] restore row={self._row_id} last_seq={self._last_seq} from {self._progress_path}")
+        except FileNotFoundError:
+            print(f"[DaqDistLight] no prior progress for row={self._row_id}; starting fresh")
+            self._last_seq = -1
+        except Exception as e:
+            print(f"[DaqDistLight] WARN: progress read failed for row={self._row_id}: {e}")
+        self._progress_loaded = True
+        self._last_save_ts = time.time()
+        self._emitted_since_save = 0
+
+    def _maybe_save_progress(self, force=False):
+        if not self._progress_loaded:
+            return
+        now = time.time()
+        if not force:
+            if self._emitted_since_save < self.SAVE_EVERY_RECORDS and (now - self._last_save_ts) < self.SAVE_EVERY_SECONDS:
+                return
+        try:
+            self._safe_mkdir_for_file(self._progress_path)
+            payload = {
+                "version": 1,
+                "ts": now,
+                "row_id": int(self._row_id),
+                "last_seq": int(self._last_seq),
+                "nmsgs": int(self.nmsgs),
+                "input": str(self.args.simulation_file),
+            }
+            self._atomic_write(self._progress_path, json.dumps(payload).encode("utf-8"))
+            self._last_save_ts = now
+            self._emitted_since_save = 0
+            # tiny log
+            print(f"[DaqDistLight] save row={self._row_id} last_seq={self._last_seq} -> {self._progress_path}")
+        except Exception as e:
+            print(f"[DaqDistLight] WARN: progress write failed for row={self._row_id}: {e}")
+
+    @staticmethod
+    def _split_rows(total_rows, parts, k):
+        base = total_rows // parts
+        rem  = total_rows % parts
+        rows_here  = base + (1 if k < rem else 0)
+        offset_rows = k * base + min(k, rem)
+        return offset_rows, rows_here
+
+    def _log_once_in_a_while(self, tag):
+        now = time.time()
+        if now - self._last_log >= 5.0:
+            mib = self._sent_bytes / (1024.0**2)
+            print(f"[DaqDistLight] {tag}: sent={mib:.2f} MiB in {now-self._t0:.1f}s")
+            self._last_log = now
+
+    # ---------- Flink lifecycle ----------
+    def open(self, ctx: RuntimeContext):
+        try:
+            # serializer
+            self.serializer = TraceSerializer.ImageSerializer()
+
+            # dataset
+            input_f = self.args.simulation_file
+            print(f"[DaqDistLight.open] loading dataset: {input_f}")
+            t0 = time.time()
+            if str(input_f).endswith(".npy"):
+                self.serialized_data = np.load(input_f, allow_pickle=True)
+            else:
+                idata, flat, dark, itheta = setup_simulation_data(
+                    input_f, self.args.beg_sinogram, self.args.num_sinograms
+                )
+                self.serialized_data = serialize_dataset(idata, flat, dark, itheta)
+            self.nmsgs = int(self.serialized_data.shape[0])
+            print(f"[DaqDistLight.open] messages={self.nmsgs} in {time.time()-t0:.2f}s")
+
+            if self.args.num_sinograms <= 0:
+                raise ValueError("--num_sinograms must be > 0 for pre-partitioning")
+
+        except Exception as e:
+            print("[DaqDistLight.open] failed:", e, file=sys.stderr)
+            traceback.print_exc()
+            raise
+
+    def close(self):
+        try:
+            self._maybe_save_progress(force=True)
+        finally:
+            self.serialized_data = None
+            self.white_imgs.clear()
+            self.dark_imgs.clear()
+
+    # ---------- main work ----------
+    def flat_map(self, row):
+        """
+        row: (seq, row_id, iteration, kind)
+        """
+        try:
+            seq, row_id, iteration, kind = row
+            row_id = int(row_id)
+            seq = int(seq)
+
+            # lazily load per-row progress
+            self._maybe_load_progress(row_id)
+
+            # control messages pass through to every key
+            if kind == "WARMUP":
+                yield [{"Type": "WARMUP", "row_id": str(row_id)}, b""]
+                return
+            if kind == "FIN":
+                # force a save when a FIN hits this key
+                self._maybe_save_progress(force=True)
+                yield [{"Type": "FIN", "row_id": str(row_id)}, b""]
+                return
+
+            # DATA path
+            if self.serialized_data is None or self.nmsgs == 0:
+                return
+
+            # idempotence: skip duplicates or old seq on recovery
+            if seq <= self._last_seq:
+                # already emitted this or newer; drop to keep exactly-once at the edge
+                return
+
+            # map seq to dataset index (wrap)
+            idx = (seq - 1) % self.nmsgs
+            payload = self.serialized_data[idx]
+
+            # decode one frame
+            img = self.serializer.deserialize(serialized_image=payload)
+            sub = img.TdataAsNumpy()
+
+            # dtype conversions
+            if self.args.uint8_to_float32:
+                sub.dtype = np.uint8;  sub = np.array(sub, dtype="float32")
+            elif self.args.uint16_to_float32:
+                sub.dtype = np.uint16; sub = np.array(sub, dtype="float32")
+            elif self.args.cast_to_float32:
+                sub.dtype = np.float32
+                if not sub.flags['C_CONTIGUOUS']:
+                    sub = np.ascontiguousarray(sub)
+
+            # shape (1,H,W)
+            sub = sub.reshape((1, img.Dims().Y(), img.Dims().X()))
+
+            # collect whites/darks for normalization (do not forward)
+            if img.Itype() is self.serializer.ITypes.White:
+                self.white_imgs.extend(sub); self.tot_white_imgs += 1
+                self._last_seq = seq
+                self._emitted_since_save += 1
+                self._maybe_save_progress()
+                return
+            if img.Itype() is self.serializer.ITypes.WhiteReset:
+                self.white_imgs = []; self.white_imgs.extend(sub); self.tot_white_imgs += 1
+                self._last_seq = seq
+                self._emitted_since_save += 1
+                self._maybe_save_progress()
+                return
+            if img.Itype() is self.serializer.ITypes.Dark:
+                self.dark_imgs.extend(sub); self.tot_dark_imgs += 1
+                self._last_seq = seq
+                self._emitted_since_save += 1
+                self._maybe_save_progress()
+                return
+            if img.Itype() is self.serializer.ITypes.DarkReset:
+                self.dark_imgs = []; self.dark_imgs.extend(sub); self.tot_dark_imgs += 1
+                self._last_seq = seq
+                self._emitted_since_save += 1
+                self._maybe_save_progress()
+                return
+
+            # only projections go downstream
+            if img.Itype() is not self.serializer.ITypes.Projection:
+                self._last_seq = seq
+                self._emitted_since_save += 1
+                self._maybe_save_progress()
+                return
+
+            # optional preprocessing
+            import tomopy as tp
+            if self.args.normalize and self.tot_white_imgs > 0 and self.tot_dark_imgs > 0:
+                sub = tp.normalize(sub, flat=self.white_imgs, dark=self.dark_imgs)
+            if self.args.remove_stripes:
+                sub = tp.remove_stripe_fw(sub, level=7, wname='sym16', sigma=1, pad=True)
+            if self.args.mlog:
+                sub = -np.log(sub)
+            if self.args.remove_invalids:
+                sub = tp.remove_nan(sub, val=0.0)
+                sub = tp.remove_neg(sub, val=0.0)
+                sub[np.where(sub == np.inf)] = 0.0
+
+            # split across num_sinograms and select ONLY this row_id's slice
+            H, W = sub.shape[1], sub.shape[2]
+            off, rows_here = self._split_rows(H, int(self.args.num_sinograms), row_id)
+            if rows_here == 0:
+                # nothing for this key; still advance progress
+                self._last_seq = seq
+                self._emitted_since_save += 1
+                self._maybe_save_progress()
+                yield [{"Type": "WARMUP", "row_id": str(row_id)}, b""]
+                return
+
+            chunk = sub[:, off:off+rows_here, :].astype(np.float32, copy=False).ravel()
+
+            # metadata expected downstream
+            theta = img.Rotation()
+            if self.args.degree_to_radian: theta *= math.pi / 180.0
+            center = img.Center() or (float(W) / 2.0)
+
+            meta = {
+                "Type": "MSG_DATA_REP",
+                "row_id": str(row_id),
+                "seq_n": str(seq),
+                "projection_id": str(img.UniqueId()),
+                "theta": str(float(theta)),
+                "center": str(float(center)),
+                "dtype": "float32",
+                "rank_dims_0": "1",
+                "rank_dims_1": str(int(rows_here)),
+                "rank_dims_2": str(int(W)),
+            }
+            if self.args.checksum:
+                meta["checksum"] = fnv1a32(chunk.view(np.uint8))
+            else:
+                meta["checksum"] = 0
+
+            out_bytes = chunk.tobytes()
+            self._sent_bytes += len(out_bytes)
+            self._log_once_in_a_while("DATA")
+
+            # update progress *after* we successfully build the record
+            self._last_seq = seq
+            self._emitted_since_save += 1
+            self._maybe_save_progress()
+
+            yield [meta, out_bytes]
+
+        except Exception as e:
+            print("[DaqDistLight] exception:", e, file=sys.stderr)
+            traceback.print_exc()
+            # If you want the job to restart on data errors, re-raise:
+            # raise
+
 
 # -------------------------
 # Map: SIRT
 # -------------------------
-class SirtOperator(KeyedProcessFunction):
+# class SirtOperator(KeyedProcessFunction):
 # class SirtOperator(ProcessFunction):
+class SirtOperator(FlatMapFunction):
     def __init__(self, cfg, every_n: int = 1000):
         super().__init__()
         self.cfg = {
@@ -658,7 +1045,8 @@ class SirtOperator(KeyedProcessFunction):
             traceback.print_exc()
             return
 
-    def process_element(self, value, ctx):
+    # def process_element(self, value, ctx):
+    def flat_map(self, value):
         meta_in, payload = value
         self._maybe_restore()
         print(f"SirtOperator: Received msg: {meta_in}, size {len(payload)} bytes")
@@ -768,8 +1156,9 @@ class SimplifiedSirtOperator(FlatMapFunction):
                 traceback.print_exc()
             self._restored = True
         
-        rank = meta_in["row_id"]
-        yield [{"Type": "WARMUP", "row_id": str(rank)}, b""]
+        # rank = meta_in["row_id"]
+        # yield [{"Type": "WARMUP", "row_id": str(rank)}, b""]
+        yield [{"Type": "WARMUP"}, b""]
         
         self.processed_local += 1
 
@@ -795,35 +1184,36 @@ class DenoiserOperator(FlatMapFunction):
         self.waiting_metadata = {}
         self.waiting_data = {}
         self.running = True
-        self.waitting_state = None
+        # self.waitting_state = None
         self._restored = False
         self.count = 0
 
     def open(self, ctx: RuntimeContext):
         self.serializer = TraceSerializer.ImageSerializer()
-        self.waitting_state = ctx.get_state(
-            ValueStateDescriptor("denoiser_waiting_state_v1", Types.PICKLED_BYTE_ARRAY())
-        )
+        # # operator state store (works without key_by)
+        # self.waitting_state = ctx.get_state(
+        #     ValueStateDescriptor("denoiser_waiting_state_v1", Types.PICKLED_BYTE_ARRAY())
+        # )
 
-    def _maybe_restore(self):
-        if self._restored:
-            return
-        snap = self.waitting_state.value()
-        if snap:
-            # snap is whatever you stored (dict via PICKLED), handle both dict/bytes if needed
-            try:
-                state_obj = snap  # already de-pickled by PICKLED_BYTE_ARRAY
-                self.waiting_metadata = state_obj.get("metadata", {}) or {}
-                self.waiting_data = state_obj.get("data", {}) or {}
-                self.count = state_obj.get("count", 0)
-                print(f"[DenoiserOperator]: Recover from checkpoint: metadata = {self.waiting_metadata}, count: {self.count}")
-            except Exception:
-                # if you had stored raw bytes earlier, optionally pickle.loads(snap)
-                self.waiting_metadata, self.waiting_data = {}, {}
-        self._restored = True
+    # def _maybe_restore(self):
+    #     if self._restored:
+    #         return
+    #     snap = self.waitting_state.value()
+    #     if snap:
+    #         # snap is whatever you stored (dict via PICKLED), handle both dict/bytes if needed
+    #         try:
+    #             state_obj = snap  # already de-pickled by PICKLED_BYTE_ARRAY
+    #             self.waiting_metadata = state_obj.get("metadata", {}) or {}
+    #             self.waiting_data = state_obj.get("data", {}) or {}
+    #             self.count = state_obj.get("count", 0)
+    #             print(f"[DenoiserOperator]: Recover from checkpoint: metadata = {self.waiting_metadata}, count: {self.count}")
+    #         except Exception:
+    #             # if you had stored raw bytes earlier, optionally pickle.loads(snap)
+    #             self.waiting_metadata, self.waiting_data = {}, {}
+    #     self._restored = True
 
     def flat_map(self, value):
-        self._maybe_restore()
+        # self._maybe_restore()
         try:
             meta, data = value
 
@@ -835,9 +1225,11 @@ class DenoiserOperator(FlatMapFunction):
             # Handle FIN first (FIN arrives with empty payload)
             if isinstance(meta, dict) and meta.get("Type") == "FIN":
                 self.running = False
+                print("DenoiserOperator: stopping processing", meta)
                 yield ("FIN", None)
                 return
             if not self.running:
+                print("DenoiserOperator: stopped running, skip processing", meta)
                 return
 
             if data is None or len(data) == 0:
@@ -866,8 +1258,8 @@ class DenoiserOperator(FlatMapFunction):
             self.waiting_metadata[iteration_stream][row_id] = meta
             self.waiting_data[iteration_stream][row_id] = dd
 
-            self.waitting_state.update({"metadata": self.waiting_metadata, "data": self.waiting_data, "count" : self.count})
-            print(f"[DenoiserOperator]: Saved state: {self.waiting_metadata}, count: {self.count}")
+            # self.waitting_state.update({"metadata": self.waiting_metadata, "data": self.waiting_data, "count" : self.count})
+            # print(f"[DenoiserOperator]: Saved state: {self.waiting_metadata}, count: {self.count}")
 
             print(f"DenoiserOperator: receive data stream={iteration_stream}, count: {len(self.waiting_metadata[iteration_stream])}, need: {num_sinograms}")
 
@@ -1064,60 +1456,140 @@ def main():
 
     rows_per_second = max(1, int(round(1.0 / max(args.proj_sleep, 1e-9)))) 
     total_rows = args.d_iteration * args.num_sinogram_projections + 2 #  extra for warmup and FIN
+    n = int(args.num_sinograms)
     t_env = StreamTableEnvironment.create(stream_execution_environment=env)
 
     print(f"row_per_second: {rows_per_second}")
 
-    ddl = f"""
-    CREATE TEMPORARY TABLE tick_src (
-    seq BIGINT
-    ) WITH (
-    'connector' = 'datagen',
-    'rows-per-second' = '{rows_per_second}',
-    'fields.seq.kind' = 'sequence',
-    'fields.seq.start' = '0',
-    'fields.seq.end' = '{total_rows - 1}'
+    from pyflink.table import TableDescriptor, Schema, DataTypes, expressions as E
+    from pyflink.common import Row
+    # tick_data: seq = 1..total_rows-2
+    t_env.create_temporary_table(
+        "tick_data",
+        TableDescriptor.for_connector("datagen")
+        .schema(Schema.new_builder()
+                .column("seq", DataTypes.BIGINT())
+                .build())
+        .option("rows-per-second", str(rows_per_second))
+        .option("fields.seq.kind", "sequence")
+        .option("fields.seq.start", "1")
+        .option("fields.seq.end", str(total_rows - 2))
+        .build()
     )
-    """
-    t_env.execute_sql(ddl)
+
+    # rows: row_id = 0..n-1 (exactly once each)
+    t_env.create_temporary_table(
+        "rows_tbl",
+        TableDescriptor.for_connector("datagen")
+        .schema(Schema.new_builder()
+                .column("row_id", DataTypes.INT())
+                .build())
+        .option("rows-per-second", str(max(1, n)))
+        .option("fields.row_id.kind", "sequence")
+        .option("fields.row_id.start", "0")
+        .option("fields.row_id.end", str(n - 1))
+        .build()
+    )
+
+    # data_view: (seq, row_id, iter, kind='DATA')
+    data_view = (
+        t_env.from_path("tick_data")
+            .add_columns(
+                # row_id = MOD(seq-1, n)
+                E.call_sql(f"CAST(MOD(seq - 1, {n}) AS INT)").alias("row_id"),
+                # iter = FLOOR((seq-1)/num_sinogram_projections)
+                E.call_sql(f"CAST(FLOOR((seq - 1) / {args.num_sinogram_projections}) AS INT)").alias("iter"),
+                E.lit("DATA").alias("kind"))
+    )
+
+    t_env.create_temporary_view("data_view", data_view)
+
+    # warmup_view: one WARMUP per row_id
+    warmup_view = (
+        t_env.from_path("rows_tbl")
+            .select(
+                E.lit(0).cast(DataTypes.BIGINT()).alias("seq"),
+                E.col("row_id"),
+                E.lit(0).cast(DataTypes.INT()).alias("iter"),
+                E.lit("WARMUP").alias("kind"))
+    )
+
+    t_env.create_temporary_view("warmup_view", warmup_view)
+
+    # fin_view: one FIN per row_id
+    fin_view = (
+        t_env.from_path("rows_tbl")
+            .select(
+                E.lit(total_rows - 1).cast(DataTypes.BIGINT()).alias("seq"),
+                E.col("row_id"),
+                E.lit(int(args.d_iteration)).cast(DataTypes.INT()).alias("iter"),
+                E.lit("FIN").alias("kind"))
+    )
+
+    t_env.create_temporary_view("fin_view", fin_view)
+
+    # Union all three
+    tick_src_all = (
+        t_env.from_path("warmup_view")
+            .union_all(t_env.from_path("data_view"))
+            .union_all(t_env.from_path("fin_view"))
+    )
+
+    t_env.create_temporary_view("tick_src_all", tick_src_all)
+
+    # Convert to DataStream with explicit type
+    kick = (
+        t_env.to_data_stream(t_env.from_path("tick_src_all"))
+            .map(
+                lambda r: Row(int(r[0]), int(r[1]), int(r[2]), str(r[3])),
+                output_type=Types.ROW([Types.LONG(), Types.INT(), Types.INT(), Types.STRING()])
+            )
+            .name("Tick+RowId")
+    )
 
     global num_keys
     num_keys = args.num_sinograms
 
-    kick = t_env.to_data_stream(t_env.from_path("tick_src")) \
-            .map(lambda row: int(row[0]), output_type=Types.LONG()) \
-            .name("Ticker") \
-            .set_parallelism(1) \
-            # .slot_sharing_group("ticker")
-    
-    # daq = kick.key_by(lambda _: 0, key_type=Types.INT()) \
-    daq = kick.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
-        .flat_map(
-        DaqEmitter(
-            input_f=args.simulation_file,
-            beg_sinogram=args.beg_sinogram,
-            num_sinograms=args.num_sinograms,
-            seq0=0,
-            iteration_sleep=args.iteration_sleep,
-            d_iteration=args.d_iteration,
-            proj_sleep=args.proj_sleep,
-            logdir=args.logdir,
-            save_after_serialize=False
-        ),
+    # kick = t_env.to_data_stream(t_env.from_path("tick_src")) \
+    #         .map(lambda row: int(row[0]), output_type=Types.LONG()) \
+    #         .name("Ticker") \
+    #         .set_parallelism(1) \
+    #         # .slot_sharing_group("ticker")
+    #
+    # # daq = kick.key_by(lambda _: 0, key_type=Types.INT()) \
+    # daqdist = kick.flat_map(
+    #     DaqEmitter(
+    #         input_f=args.simulation_file,
+    #         beg_sinogram=args.beg_sinogram,
+    #         num_sinograms=args.num_sinograms,
+    #         seq0=0,
+    #         iteration_sleep=args.iteration_sleep,
+    #         d_iteration=args.d_iteration,
+    #         proj_sleep=args.proj_sleep,
+    #         logdir=args.logdir,
+    #         # args=args,
+    #         save_after_serialize=False
+    #     ),
+    #     output_type=Types.PICKLED_BYTE_ARRAY()
+    # ).name("DAQ Emitter").set_parallelism(1) \
+    #     # .disable_chaining().start_new_chain() \
+    #     # .slot_sharing_group("daq")
+
+    pre = kick.key_by(lambda r: int(r[1]), key_type=Types.INT())
+
+    daqdist = pre.flat_map(
+        DaqDistLight(args),
         output_type=Types.PICKLED_BYTE_ARRAY()
-    ).name("DAQ Emitter").set_parallelism(1) \
-        # .disable_chaining().start_new_chain() \
-        # .slot_sharing_group("daq")
+    ).name("DaqDistLight").set_parallelism(max(1, args.ntask_sirt))
 
     # probe = daq.map(VersionProbe(), output_type=Types.PICKLED_BYTE_ARRAY()).name("Version Probe")
     # dist = probe.flat_map(
-    dist = daq.key_by(key_selector=task_key_selector, key_type=Types.INT())  \
-        .flat_map(
-        DistOperator(args),
-        output_type=Types.PICKLED_BYTE_ARRAY()
-    ).name("Data Distributor").set_parallelism(1) \
-        # .disable_chaining().start_new_chain() \
-        # .slot_sharing_group("dist")
+    # dist = daq.flat_map(
+    #     DistOperator(args),
+    #     output_type=Types.PICKLED_BYTE_ARRAY()
+    # ).name("Data Distributor").set_parallelism(1) \
+    #     # .disable_chaining().start_new_chain() \
+    #     # .slot_sharing_group("dist")
 
     # probe = dist.key_by(
     #     task_key_selector,
@@ -1156,19 +1628,18 @@ def main():
     # #         SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
     # #         output_type=Types.PICKLED_BYTE_ARRAY()) \
     # sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
-    sirt = dist.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
-        .flat_map(SimplifiedSirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
+    sirt = daqdist.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
+        .flat_map(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
             output_type=Types.PICKLED_BYTE_ARRAY()) \
         .name("Sirt Operator") \
         .set_parallelism(max(1, args.ntask_sirt)) \
-        # .uid("sirt-operator") \
+        .uid("sirt-operator") \
         # .set_max_parallelism(max(1, args.ntask_sirt)) \
         # .disable_chaining().start_new_chain() \
         # .slot_sharing_group("sirt")
 
 
-    den = sirt.key_by(key_selector=task_key_selector, key_type=Types.INT())  \
-        .flat_map(
+    den = sirt.flat_map(
         DenoiserOperator(args),
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("Denoiser Operator").set_parallelism(1) \
