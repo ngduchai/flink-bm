@@ -1185,69 +1185,61 @@ def main():
         # .disable_chaining().start_new_chain() \
         # .slot_sharing_group("daq")
 
+    # probe = daq.map(VersionProbe(), output_type=Types.PICKLED_BYTE_ARRAY()).name("Version Probe")
+    # dist = probe.flat_map(
+    dist = daq.flat_map(
+        DistOperator(args),
+        output_type=Types.PICKLED_BYTE_ARRAY()
+    ).name("Data Distributor").set_parallelism(1) \
+        # .disable_chaining().start_new_chain() \
+        # .slot_sharing_group("dist")
 
-    sirt = daq.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
+    # probe = dist.key_by(
+    #     task_key_selector,
+    #     key_type=Types.INT()
+    # ).map(
+    #     PrintProbe(),
+    #     output_type=Types.PICKLED_BYTE_ARRAY()
+    # ).name("Probe after keyBy").disable_chaining()
+
+    # # then feed SIRT from probe instead of directly from keyed
+    # sirt = probe.map(
+    #     SirtOperator(cfg=args),
+    #     output_type=Types.PICKLED_BYTE_ARRAY()
+    # ).name("SIRT Operator").set_parallelism(max(1, args.ntask_sirt)).disable_chaining()
+
+    # # route by task_id so record goes to subtask = task_id
+    # routed = dist.partition_custom(TaskIdPartitioner(), task_key_selector) \
+    #         .name("route_by_task_id") \
+    #         .set_parallelism(max(1, args.ntask_sirt))
+    # route by task_id so record goes to subtask = task_id
+    # sirt = dist.partition_custom(TaskIdPartitioner(), task_key_selector) \
+    #         .name("route_by_task_id") \
+    #         .set_parallelism(max(1, args.ntask_sirt)) \
+    #         .process( \
+    #             SirtOperator(cfg=args, every_n=int(args.ckpt_freq)), \
+    #             output_type=Types.PICKLED_BYTE_ARRAY()) \
+    #         .name("Sirt Operator") \
+    #         .uid("sirt-operator") \
+    #         .set_parallelism(max(1, args.ntask_sirt))
+
+
+    # # # sirt = routed.key_by(lambda _: 0, key_type=Types.INT()) \
+    # # #     .process(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
+    # # #                 output_type=Types.PICKLED_BYTE_ARRAY()) \
+    # # sirt = routed.process(
+    # #         SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
+    # #         output_type=Types.PICKLED_BYTE_ARRAY()) \
+    # sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
+    sirt = dist.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
         .flat_map(SimplifiedSirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
             output_type=Types.PICKLED_BYTE_ARRAY()) \
         .name("Sirt Operator") \
         .set_parallelism(max(1, args.ntask_sirt)) \
         .uid("sirt-operator") \
-
-    # # probe = daq.map(VersionProbe(), output_type=Types.PICKLED_BYTE_ARRAY()).name("Version Probe")
-    # # dist = probe.flat_map(
-    # dist = daq.flat_map(
-    #     DistOperator(args),
-    #     output_type=Types.PICKLED_BYTE_ARRAY()
-    # ).name("Data Distributor").set_parallelism(1) \
-    #     # .disable_chaining().start_new_chain() \
-    #     # .slot_sharing_group("dist")
-
-    # # probe = dist.key_by(
-    # #     task_key_selector,
-    # #     key_type=Types.INT()
-    # # ).map(
-    # #     PrintProbe(),
-    # #     output_type=Types.PICKLED_BYTE_ARRAY()
-    # # ).name("Probe after keyBy").disable_chaining()
-
-    # # # then feed SIRT from probe instead of directly from keyed
-    # # sirt = probe.map(
-    # #     SirtOperator(cfg=args),
-    # #     output_type=Types.PICKLED_BYTE_ARRAY()
-    # # ).name("SIRT Operator").set_parallelism(max(1, args.ntask_sirt)).disable_chaining()
-
-    # # # route by task_id so record goes to subtask = task_id
-    # # routed = dist.partition_custom(TaskIdPartitioner(), task_key_selector) \
-    # #         .name("route_by_task_id") \
-    # #         .set_parallelism(max(1, args.ntask_sirt))
-    # # route by task_id so record goes to subtask = task_id
-    # # sirt = dist.partition_custom(TaskIdPartitioner(), task_key_selector) \
-    # #         .name("route_by_task_id") \
-    # #         .set_parallelism(max(1, args.ntask_sirt)) \
-    # #         .process( \
-    # #             SirtOperator(cfg=args, every_n=int(args.ckpt_freq)), \
-    # #             output_type=Types.PICKLED_BYTE_ARRAY()) \
-    # #         .name("Sirt Operator") \
-    # #         .uid("sirt-operator") \
-    # #         .set_parallelism(max(1, args.ntask_sirt))
-
-
-    # # # # sirt = routed.key_by(lambda _: 0, key_type=Types.INT()) \
-    # # # #     .process(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
-    # # # #                 output_type=Types.PICKLED_BYTE_ARRAY()) \
-    # # # sirt = routed.process(
-    # # #         SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
-    # # #         output_type=Types.PICKLED_BYTE_ARRAY()) \
-    # # sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
-    # sirt = dist.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
-    #     .flat_map(SimplifiedSirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
-    #         output_type=Types.PICKLED_BYTE_ARRAY()) \
-    #     .name("Sirt Operator") \
-    #     .set_parallelism(max(1, args.ntask_sirt)) \
-    #     .uid("sirt-operator") \
-    #     # .set_max_parallelism(max(1, args.ntask_sirt)) \
-    #     # .disable_chaining().start_new_chain() \
-    #     # .slot_sharing_group("sirt")
+        # .set_max_parallelism(max(1, args.ntask_sirt)) \
+        # .disable_chaining().start_new_chain() \
+        # .slot_sharing_group("sirt")
 
 
     den = sirt.flat_map(
