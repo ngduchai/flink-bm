@@ -1560,14 +1560,14 @@ def main():
 
     # Convert to DataStream with explicit type
     kick = (
-        env.from_collection(list(range(total_rows)), type_info=Types.LONG())
-        .map(
-            TickMapper(args.proj_sleep, n, total_rows, args.num_sinogram_projections),
-            output_type=Types.ROW([Types.LONG(), Types.INT(), Types.INT(), Types.STRING()])
-        )
-        .name("OrderedTicks")
-        .set_parallelism(1)
-    )
+    env.from_collection(list(range(total_rows)), type_info=Types.LONG())
+       .map(
+           TickMapper(args.proj_sleep, n, total_rows, args.num_sinogram_projections),
+           output_type=Types.TUPLE([Types.LONG(), Types.INT(), Types.INT(), Types.STRING()])
+       )
+       .name("OrderedTicks")
+       .set_parallelism(1)
+)
 
     global num_keys
     num_keys = args.num_sinograms
