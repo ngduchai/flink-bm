@@ -1508,7 +1508,7 @@ def main():
     
     # daq = kick.key_by(lambda _: 0, key_type=Types.INT()) \
     daqdist = kick.flat_map(
-        DaqEmitter(
+        DaqDistOperator(
             input_f=args.simulation_file,
             beg_sinogram=args.beg_sinogram,
             num_sinograms=args.num_sinograms,
