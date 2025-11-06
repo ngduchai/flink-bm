@@ -1552,8 +1552,8 @@ def main():
     # Union all three
     tick_src_all = (
         t_env.from_path("warmup_view")
-            .append(t_env.from_path("data_view"))
-            .append(t_env.from_path("fin_view"))
+            .union_all(t_env.from_path("data_view"))
+            .union_all(t_env.from_path("fin_view"))
     )
 
     t_env.create_temporary_view("tick_src_all", tick_src_all)
