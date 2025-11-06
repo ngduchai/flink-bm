@@ -1166,8 +1166,8 @@ def main():
             .set_parallelism(1) \
             # .slot_sharing_group("ticker")
     
-    daq = kick.key_by(lambda _: 0, key_type=Types.INT()) \
-        .flat_map(
+    # daq = kick.key_by(lambda _: 0, key_type=Types.INT()) \
+    daq = kick.flat_map(
         DaqEmitter(
             input_f=args.simulation_file,
             beg_sinogram=args.beg_sinogram,
@@ -1186,8 +1186,7 @@ def main():
 
     # probe = daq.map(VersionProbe(), output_type=Types.PICKLED_BYTE_ARRAY()).name("Version Probe")
     # dist = probe.flat_map(
-    dist = daq.key_by(lambda _: 0, key_type=Types.INT()) \
-    .flat_map(
+    dist = daq.flat_map(
         DistOperator(args),
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("Data Distributor").set_parallelism(1) \
@@ -1236,7 +1235,7 @@ def main():
             output_type=Types.PICKLED_BYTE_ARRAY()) \
         .name("Sirt Operator") \
         .set_parallelism(max(1, args.ntask_sirt)) \
-        # .uid("sirt-operator") \
+        .uid("sirt-operator") \
         # .set_max_parallelism(max(1, args.ntask_sirt)) \
         # .disable_chaining().start_new_chain() \
         # .slot_sharing_group("sirt")
