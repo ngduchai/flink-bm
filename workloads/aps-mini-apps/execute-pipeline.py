@@ -330,7 +330,12 @@ class DaqEmitter(FlatMapFunction):
             self.seq = int(rec.get("seq", self.seq0))
             self.it = int(rec.get("iteration", 0))
             print(f"[DaqEmitter] restored from file: idx={self.index} seq={self.seq} it={self.it}")
-    
+        else:
+            self.index = 0
+            self.seq = self.seq0
+            self.it = 0
+            print(f"[DaqEmitter] No state found: using idx={self.index} seq={self.seq} it={self.it}")
+
     def close(self):
         """Free references to help GC in long sessions."""
         self._write_progress_file()
@@ -1161,8 +1166,8 @@ def main():
             .set_parallelism(1) \
             # .slot_sharing_group("ticker")
     
-    # daq = kick.key_by(lambda _: 0, key_type=Types.INT()) \
-    daq = kick.flat_map(
+    daq = kick.key_by(lambda _: 0, key_type=Types.INT()) \
+        .flat_map(
         DaqEmitter(
             input_f=args.simulation_file,
             beg_sinogram=args.beg_sinogram,
@@ -1181,7 +1186,8 @@ def main():
 
     # probe = daq.map(VersionProbe(), output_type=Types.PICKLED_BYTE_ARRAY()).name("Version Probe")
     # dist = probe.flat_map(
-    dist = daq.flat_map(
+    dist = daq.key_by(lambda _: 0, key_type=Types.INT()) \
+    .flat_map(
         DistOperator(args),
         output_type=Types.PICKLED_BYTE_ARRAY()
     ).name("Data Distributor").set_parallelism(1) \
