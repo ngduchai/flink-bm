@@ -597,7 +597,7 @@ class DistOperator(FlatMapFunction):
 
 class DaqDistOperator(FlatMapFunction):
     def __init__(self, *, input_f, beg_sinogram, num_sinograms, seq0,
-                 iteration_sleep, d_iteration, proj_sleep, logdir,
+                 iteration_sleep, d_iteration, proj_sleep, logdir, args,
                  save_after_serialize=False):
         super().__init__()
         self.input_f = input_f
@@ -609,6 +609,7 @@ class DaqDistOperator(FlatMapFunction):
         self.proj_sleep = float(proj_sleep)
         self.logdir = logdir
         self.save_after_serialize = bool(save_after_serialize)
+        self.args = args
 
         # set in open()
         self.serialized_data = None   # np.ndarray(dtype=object) of bytes
@@ -1517,6 +1518,7 @@ def main():
             d_iteration=args.d_iteration,
             proj_sleep=args.proj_sleep,
             logdir=args.logdir,
+            args=args,
             save_after_serialize=False
         ),
         output_type=Types.PICKLED_BYTE_ARRAY()
