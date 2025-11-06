@@ -1460,6 +1460,7 @@ def main():
     print(f"row_per_second: {rows_per_second}")
 
     from pyflink.table import TableDescriptor, Schema, DataTypes, expressions as E
+    from pyflink.common import Row
     # tick_data: seq = 1..total_rows-2
     t_env.create_temporary_table(
         "tick_data",
@@ -1538,7 +1539,7 @@ def main():
     kick = (
         t_env.to_data_stream(t_env.from_path("tick_src_all"))
             .map(
-                lambda r: (int(r[0]), int(r[1]), int(r[2]), str(r[3])),
+                lambda r: Row(int(r[0]), int(r[1]), int(r[2]), str(r[3])),
                 output_type=Types.ROW([Types.LONG(), Types.INT(), Types.INT(), Types.STRING()])
             )
             .name("Tick+RowId")
