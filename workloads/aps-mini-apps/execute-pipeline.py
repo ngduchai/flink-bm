@@ -1459,6 +1459,7 @@ def main():
 
     print(f"row_per_second: {rows_per_second}")
 
+    from pyflink.table import TableDescriptor, Schema, DataTypes, expressions as E
     # tick_data: seq = 1..total_rows-2
     t_env.create_temporary_table(
         "tick_data",
