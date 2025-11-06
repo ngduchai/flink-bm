@@ -595,7 +595,7 @@ class DistOperator(FlatMapFunction):
         # print(f"[DistOperator] checkpointed with seq state: {self.seq_state.value()}")
 
 
-class DaqDistLight(SourceFunction):
+class DaqDistLight(FlatMapFunction):
     """
     Pre-partitioned replacer with file-backed progress.
 
