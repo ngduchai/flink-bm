@@ -1535,10 +1535,14 @@ def main():
     t_env.create_temporary_view("tick_src_all", tick_src_all)
 
     # Convert to DataStream with explicit type
-    kick = t_env.to_data_stream(
-        t_env.from_path("tick_src_all"),
-        type_info=Types.ROW([Types.LONG(), Types.INT(), Types.INT(), Types.STRING()])  # (seq,row_id,iter,kind)
-    ).name("Tick+RowId")
+    kick = (
+        t_env.to_data_stream(t_env.from_path("tick_src_all"))
+            .map(
+                lambda r: (int(r[0]), int(r[1]), int(r[2]), str(r[3])),
+                output_type=Types.ROW([Types.LONG(), Types.INT(), Types.INT(), Types.STRING()])
+            )
+            .name("Tick+RowId")
+    )
 
     global num_keys
     num_keys = args.num_sinograms
