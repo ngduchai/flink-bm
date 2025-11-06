@@ -934,8 +934,9 @@ class DaqDistOperator(FlatMapFunction):
 # -------------------------
 # Map: SIRT
 # -------------------------
-class SirtOperator(KeyedProcessFunction):
+# class SirtOperator(KeyedProcessFunction):
 # class SirtOperator(ProcessFunction):
+class SirtOperator(FlatMapFunction):
     def __init__(self, cfg, every_n: int = 1000):
         super().__init__()
         self.cfg = {
@@ -1070,7 +1071,8 @@ class SirtOperator(KeyedProcessFunction):
             traceback.print_exc()
             return
 
-    def process_element(self, value, ctx):
+    # def process_element(self, value, ctx):
+    def flat_map(self, value):
         meta_in, payload = value
         self._maybe_restore()
         print(f"SirtOperator: Received msg: {meta_in}, size {len(payload)} bytes")
