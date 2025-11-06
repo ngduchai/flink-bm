@@ -595,7 +595,7 @@ class DistOperator(FlatMapFunction):
         # print(f"[DistOperator] checkpointed with seq state: {self.seq_state.value()}")
 
 
-class DaqDistLight(FlatMapFunction):
+class DaqDistLight(SourceFunction):
     """
     Pre-partitioned replacer with file-backed progress.
 
@@ -1232,9 +1232,9 @@ class DenoiserOperator(FlatMapFunction):
                 print("DenoiserOperator: stopping processing", meta)
                 yield ("FIN", None)
                 return
-            if not self.running:
-                print("DenoiserOperator: stopped running, skip processing", meta)
-                return
+            # if not self.running:
+            #     print("DenoiserOperator: stopped running, skip processing", meta)
+            #     return
 
             if data is None or len(data) == 0:
                 print("DenoiserOperator: empty/non-data message, skipping:", meta)
@@ -1391,23 +1391,6 @@ class TickerSource(SourceFunction):
 
 PY_EXEC = "/opt/micromamba/envs/aps/bin/python"
 
-class TickMapper(MapFunction):
-    def __init__(self, proj_sleep: float, n_rows: int, total_rows: int, nproj_per_iter: int):
-        self.proj_sleep = float(proj_sleep)
-        self.n = int(n_rows)
-        self.total_rows = int(total_rows)
-        self.nproj = int(nproj_per_iter)
-
-    def map(self, s: int):
-        # optional pacing for DATA ticks; WARMUP/FIN don’t sleep
-        if 0 < s < (self.total_rows - 1) and self.proj_sleep > 0:
-            time.sleep(self.proj_sleep)
-
-        row_id = int((s - 1) % self.n) if 0 < s < (self.total_rows - 1) else 0
-        it = int(max(0, (s - 1)) // self.nproj)
-        kind = "WARMUP" if s == 0 else ("FIN" if s == (self.total_rows - 1) else "DATA")
-        return (int(s), row_id, it, kind)
-
 def main():
     args = parse_arguments()
     # logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
@@ -1560,14 +1543,13 @@ def main():
 
     # Convert to DataStream with explicit type
     kick = (
-    env.from_collection(list(range(total_rows)), type_info=Types.LONG())
-       .map(
-           TickMapper(args.proj_sleep, n, total_rows, args.num_sinogram_projections),
-           output_type=Types.TUPLE([Types.LONG(), Types.INT(), Types.INT(), Types.STRING()])
-       )
-       .name("OrderedTicks")
-       .set_parallelism(1)
-)
+        t_env.to_data_stream(t_env.from_path("tick_src_all"))
+            .map(
+                lambda r: Row(int(r[0]), int(r[1]), int(r[2]), str(r[3])),
+                output_type=Types.ROW([Types.LONG(), Types.INT(), Types.INT(), Types.STRING()])
+            )
+            .name("Tick+RowId")
+    )
 
     global num_keys
     num_keys = args.num_sinograms
@@ -1602,7 +1584,7 @@ def main():
     daqdist = pre.flat_map(
         DaqDistLight(args),
         output_type=Types.PICKLED_BYTE_ARRAY()
-    ).name("DaqDistLight").set_parallelism(max(1, args.ntask_sirt))
+    ).name("DaqDistLight").set_parallelism(1)
 
     # probe = daq.map(VersionProbe(), output_type=Types.PICKLED_BYTE_ARRAY()).name("Version Probe")
     # dist = probe.flat_map(
