@@ -843,8 +843,9 @@ class SimplifiedSirtOperator(FlatMapFunction):
                 traceback.print_exc()
             self._restored = True
         
-        rank = meta_in["row_id"]
-        yield [{"Type": "WARMUP", "row_id": str(rank)}, b""]
+        # rank = meta_in["row_id"]
+        # yield [{"Type": "WARMUP", "row_id": str(rank)}, b""]
+        yield [{"Type": "WARMUP"}, b""]
         
         self.processed_local += 1
 
