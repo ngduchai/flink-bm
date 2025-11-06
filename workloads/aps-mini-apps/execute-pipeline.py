@@ -1537,7 +1537,7 @@ def main():
     # Convert to DataStream with explicit type
     kick = t_env.to_data_stream(
         t_env.from_path("tick_src_all"),
-        Types.ROW([Types.LONG(), Types.INT(), Types.INT(), Types.STRING()])  # (seq,row_id,iter,kind)
+        type_info=Types.ROW([Types.LONG(), Types.INT(), Types.INT(), Types.STRING()])  # (seq,row_id,iter,kind)
     ).name("Tick+RowId")
 
     global num_keys
