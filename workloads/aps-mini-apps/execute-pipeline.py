@@ -1225,9 +1225,11 @@ class DenoiserOperator(FlatMapFunction):
             # Handle FIN first (FIN arrives with empty payload)
             if isinstance(meta, dict) and meta.get("Type") == "FIN":
                 self.running = False
+                print("DenoiserOperator: stopping processing", meta)
                 yield ("FIN", None)
                 return
             if not self.running:
+                print("DenoiserOperator: stopped running, skip processing", meta)
                 return
 
             if data is None or len(data) == 0:
