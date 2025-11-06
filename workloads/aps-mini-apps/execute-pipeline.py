@@ -22,13 +22,15 @@ except ModuleNotFoundError:
 
 from pyflink.common import Types, Configuration, Duration
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
-from pyflink.datastream.functions import FlatMapFunction, CheckpointedFunction, MapFunction, KeyedProcessFunction, RuntimeContext, ProcessFunction
+from pyflink.datastream.functions import FlatMapFunction, MapFunction, KeyedProcessFunction, RuntimeContext, ProcessFunction
 from pyflink.datastream.state import ValueStateDescriptor, ListStateDescriptor
 from pyflink.datastream.state_backend import EmbeddedRocksDBStateBackend
 from pyflink.datastream.execution_mode import RuntimeExecutionMode
 from pyflink.datastream.functions import SourceFunction
 from pyflink.table import StreamTableEnvironment
 from pyflink.datastream.functions import Partitioner
+
+import json
 
 
 # -------------------------
@@ -181,7 +183,7 @@ def ordered_subset(max_ind, nelem):
 # -------------------------
 # DAQ emitter (preload in open(), warm-up first)
 # -------------------------
-class DaqEmitter(FlatMapFunction, CheckpointedFunction):
+class DaqEmitter(FlatMapFunction):
     def __init__(self, *, input_f, beg_sinogram, num_sinograms, seq0,
                  iteration_sleep, d_iteration, proj_sleep, logdir,
                  save_after_serialize=False):
@@ -202,8 +204,8 @@ class DaqEmitter(FlatMapFunction, CheckpointedFunction):
         self._running = True
 
         self.warmup = False
-        self.index_state = None
-        self.seq_state = None
+        # self.index_state = None
+        # self.seq_state = None
 
         self.seq = self.seq0
         self.tot_transfer_size = 0
@@ -211,7 +213,61 @@ class DaqEmitter(FlatMapFunction, CheckpointedFunction):
         self.last_send = self.t_start
         self.index = 0
         self.it = 0
-        self._index_loaded = False
+        
+        self._progress_loaded = False
+        self.progress_path = logdir + "/daq_progress.json"
+        self.progress_info = None
+
+    # ---------- progress file helpers ----------
+    def _safe_mkdir(self, path):
+        if not path:
+            return
+        d = os.path.dirname(path)
+        if d and not os.path.isdir(d):
+            os.makedirs(d, exist_ok=True)
+
+    def _read_progress_file(self):
+        if not self.progress_path:
+            return None
+        try:
+            with open(self.progress_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return None
+        except Exception as e:
+            print(f"[DaqEmitter] WARN: failed to read progress file {self.progress_path}: {e}")
+            return None
+
+    def _atomic_write(self, path, data_bytes: bytes):
+        tmp = f"{path}.tmp.{os.getpid()}"
+        with open(tmp, "wb") as f:
+            f.write(data_bytes)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)  # atomic on POSIX
+
+    def _write_progress_file(self):
+        if not self.progress_path:
+            return
+        try:
+            self._safe_mkdir(self.progress_path)
+            now = time.time()
+            payload = {
+                "version": 1,
+                "ts": now,
+                "index": int(self.index),
+                "seq": int(self.seq),
+                "iteration": int(self.it),
+                "input": str(self.input_f),
+                "num_sinograms": int(self.num_sinograms),
+                "total_messages": int(self.serialized_data.shape[0]) if self.serialized_data is not None else 0
+            }
+            self._atomic_write(self.progress_path, json.dumps(payload).encode("utf-8"))
+            # minimal log
+            print(f"[DaqEmitter] progress saved -> {self.progress_path}: idx={payload['index']} seq={payload['seq']} it={payload['iteration']}")
+        except Exception as e:
+            print(f"[DaqEmitter] WARN: failed to write progress file {self.progress_path}: {e}")
+    
 
     def open(self, _ctx: RuntimeContext):
         """Load & serialize once so the first record can flow immediately."""
@@ -260,34 +316,43 @@ class DaqEmitter(FlatMapFunction, CheckpointedFunction):
             # Let the job fail early—downstream will restore on restart
             raise
 
-    # Load index state
-    def initialize_state(self, _ctx):
-        ops = _ctx.get_operator_state_store()
-        index_desc = ListStateDescriptor("daq_emitter_index_v1", Types.INT())
-        seq_desc = ListStateDescriptor("daq_emitter_seq_v1", Types.LONG())
-        self.index_state = ops.get_list_state(index_desc)
-        self.seq_state = ops.get_list_state(seq_desc)
-
+        # # Load index state
+        # def initialize_state(self, _ctx):
+        #     ops = _ctx.get_operator_state_store()
+        #     index_desc = ListStateDescriptor("daq_emitter_index_v1", Types.INT())
+        #     seq_desc = ListStateDescriptor("daq_emitter_seq_v1", Types.LONG())
+        #     self.index_state = ops.get_list_state(index_desc)
+        #     self.seq_state = ops.get_list_state(seq_desc)
+        rec = self._read_progress_file()
+        self._progress_loaded = True
+        if rec is not None:
+            self.index = int(rec.get("index", 0))
+            self.seq = int(rec.get("seq", self.seq0))
+            self.it = int(rec.get("iteration", 0))
+            print(f"[DaqEmitter] restored from file: idx={self.index} seq={self.seq} it={self.it}")
+    
     def close(self):
         """Free references to help GC in long sessions."""
+        self._write_progress_file()
         self.serialized_data = None
         self.indices = None
 
     # Cooperative cancellation support (Flink may call this on cancel)
     def cancel(self):
         self._running = False
+        self._write_progress_file()
 
     def flat_map(self, _ignored):
         if not self._running:
             return
         
-        if not self._index_loaded:
-            v = self.index_state.get()
-            s = self.seq_state.get()
-            self.index = int(v[0]) if v is not None else 0
-            self.seq = int(s[0]) if s is not None else self.seq0
-            print(f"[DaqEmitter] start with index state: {self.index}, seq state: {self.seq}")
-            self._index_loaded = True
+        # if not self._index_loaded:
+        #     v = self.index_state.get()
+        #     s = self.seq_state.get()
+        #     self.index = int(v[0]) if v is not None else 0
+        #     self.seq = int(s[0]) if s is not None else self.seq0
+        #     print(f"[DaqEmitter] start with index state: {self.index}, seq state: {self.seq}")
+        #     self._index_loaded = True
         
         if self.warmup == False:
             self.warmup = True
@@ -305,6 +370,7 @@ class DaqEmitter(FlatMapFunction, CheckpointedFunction):
             self._running = True
             # 3) FIN marker so downstream can flush/close cleanly
             yield [{"Type": "FIN"}, b""]
+            self._write_progress_file()
 
             elapsed = max(1e-9, time.time() - self.t_start)
             nproj = (self.d_iteration * len(self.indices)) if self._running else (self.seq - self.seq0)
@@ -338,17 +404,18 @@ class DaqEmitter(FlatMapFunction, CheckpointedFunction):
                 self.index = 0
                 self.it += 1
 
-            # Save index and sequence state
-            self.index_state.update([self.index])
-            self.seq_state.update([self.seq])
-            print(f"[DaqEmitter] checkpointed index state: {self.index_state.value()}, seq state: {self.seq_state.value()}")
+            # # Save index and sequence state
+            # self.index_state.update([self.index])
+            # self.seq_state.update([self.seq])
+            # print(f"[DaqEmitter] checkpointed index state: {self.index_state.value()}, seq state: {self.seq_state.value()}")
+            self._write_progress_file()
 
             yield [md, payload]
 
 # -------------------------
 # FlatMap distributor (yield-style)
 # -------------------------
-class DistOperator(FlatMapFunction, CheckpointedFunction):
+class DistOperator(FlatMapFunction):
     def __init__(self, args):
         super().__init__()
         self.args = args
@@ -360,8 +427,8 @@ class DistOperator(FlatMapFunction, CheckpointedFunction):
         self.tot_white_imgs = 0
         self.tot_dark_imgs = 0
         self.seq = 0
-        self.seq_state = None
-        self.seq_loaded = False
+        # self.seq_state = None
+        # self.seq_loaded = False
 
     def open(self, ctx: RuntimeContext):
         self.serializer = TraceSerializer.ImageSerializer()
@@ -373,11 +440,11 @@ class DistOperator(FlatMapFunction, CheckpointedFunction):
         except Exception as e:
             print("[DistOperator] flatbuffers probe failed:", e)
 
-    def initialize_state(self, context):
-        ops = context.get_operator_state_store()
-        seq_desc = ListStateDescriptor("dist_seq_v1", Types.LONG())
-        self.seq_state = ops.get_list_state(seq_desc)
-        self.seq_loaded = False
+    # def initialize_state(self, context):
+    #     ops = context.get_operator_state_store()
+    #     seq_desc = ListStateDescriptor("dist_seq_v1", Types.LONG())
+    #     self.seq_state = ops.get_list_state(seq_desc)
+    #     self.seq_loaded = False
 
     @staticmethod
     def _msg(meta, data_bytes):
@@ -433,11 +500,11 @@ class DistOperator(FlatMapFunction, CheckpointedFunction):
     def flat_map(self, value):
         metadata, data = value
 
-        if not self.seq_loaded:
-            s = self.seq_state.get()
-            self.seq = int(s[0]) if s is not None else 0
-            print(f"[DistOperator] start with seq state: {self.seq}")
-            self.seq_loaded = True
+        # if not self.seq_loaded:
+        #     s = self.seq_state.get()
+        #     self.seq = int(s[0]) if s is not None else 0
+        #     print(f"[DistOperator] start with seq state: {self.seq}")
+        #     self.seq_loaded = True
 
          # Broadcast FIN to all SIRT ranks and include row_id so key_by works
         if isinstance(metadata, dict) and metadata.get("Type") == "WARMUP":
@@ -518,9 +585,9 @@ class DistOperator(FlatMapFunction, CheckpointedFunction):
         if read_image.Itype() is self.serializer.ITypes.DarkReset:
             self.dark_imgs = []; self.dark_imgs.extend(sub); self.tot_dark_imgs += 1
 
-        self.seq += 1
-        self.seq_state.update([self.seq])
-        print(f"[DistOperator] checkpointed with seq state: {self.seq_state.value()}")
+        # self.seq += 1
+        # self.seq_state.update([self.seq])
+        # print(f"[DistOperator] checkpointed with seq state: {self.seq_state.value()}")
 
 # -------------------------
 # Map: SIRT
@@ -798,39 +865,36 @@ class DenoiserOperator(FlatMapFunction):
         self.waiting_metadata = {}
         self.waiting_data = {}
         self.running = True
-        self.waitting_state = None
+        # self.waitting_state = None
         self._restored = False
         self.count = 0
 
     def open(self, ctx: RuntimeContext):
         self.serializer = TraceSerializer.ImageSerializer()
-        
-    def initialize_state(self, context):
-        # operator state store (works without key_by)
-        ops = context.get_operator_state_store()
-        self.waitting_state = ops.get_list_state(
-            ValueStateDescriptor("denoiser_waiting_state_v1", Types.PICKLED_BYTE_ARRAY())
-        )
+        # # operator state store (works without key_by)
+        # self.waitting_state = ctx.get_state(
+        #     ValueStateDescriptor("denoiser_waiting_state_v1", Types.PICKLED_BYTE_ARRAY())
+        # )
 
-    def _maybe_restore(self):
-        if self._restored:
-            return
-        snap = self.waitting_state.get()
-        if snap:
-            # snap is whatever you stored (dict via PICKLED), handle both dict/bytes if needed
-            try:
-                state_obj = snap[0]  # already de-pickled by PICKLED_BYTE_ARRAY
-                self.waiting_metadata = state_obj.get("metadata", {}) or {}
-                self.waiting_data = state_obj.get("data", {}) or {}
-                self.count = state_obj.get("count", 0)
-                print(f"[DenoiserOperator]: Recover from checkpoint: metadata = {self.waiting_metadata}, count: {self.count}")
-            except Exception:
-                # if you had stored raw bytes earlier, optionally pickle.loads(snap)
-                self.waiting_metadata, self.waiting_data = {}, {}
-        self._restored = True
+    # def _maybe_restore(self):
+    #     if self._restored:
+    #         return
+    #     snap = self.waitting_state.value()
+    #     if snap:
+    #         # snap is whatever you stored (dict via PICKLED), handle both dict/bytes if needed
+    #         try:
+    #             state_obj = snap  # already de-pickled by PICKLED_BYTE_ARRAY
+    #             self.waiting_metadata = state_obj.get("metadata", {}) or {}
+    #             self.waiting_data = state_obj.get("data", {}) or {}
+    #             self.count = state_obj.get("count", 0)
+    #             print(f"[DenoiserOperator]: Recover from checkpoint: metadata = {self.waiting_metadata}, count: {self.count}")
+    #         except Exception:
+    #             # if you had stored raw bytes earlier, optionally pickle.loads(snap)
+    #             self.waiting_metadata, self.waiting_data = {}, {}
+    #     self._restored = True
 
     def flat_map(self, value):
-        self._maybe_restore()
+        # self._maybe_restore()
         try:
             meta, data = value
 
@@ -873,8 +937,8 @@ class DenoiserOperator(FlatMapFunction):
             self.waiting_metadata[iteration_stream][row_id] = meta
             self.waiting_data[iteration_stream][row_id] = dd
 
-            self.waitting_state.update([{"metadata": self.waiting_metadata, "data": self.waiting_data, "count" : self.count}])
-            print(f"[DenoiserOperator]: Saved state: {self.waiting_metadata}, count: {self.count}")
+            # self.waitting_state.update({"metadata": self.waiting_metadata, "data": self.waiting_data, "count" : self.count})
+            # print(f"[DenoiserOperator]: Saved state: {self.waiting_metadata}, count: {self.count}")
 
             print(f"DenoiserOperator: receive data stream={iteration_stream}, count: {len(self.waiting_metadata[iteration_stream])}, need: {num_sinograms}")
 
