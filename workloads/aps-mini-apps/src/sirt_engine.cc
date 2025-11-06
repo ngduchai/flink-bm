@@ -113,13 +113,14 @@ ProcessResult SirtEngine::process(
   int row_id = std::stoi(require_str(metadata, "row_id"));
   auto type = require_str(metadata, "Type");
   if (type == "WARMUP") {
-    auto [ins_it, _] = sirt_processors.emplace(row_id, SirtProcessor{});
-    auto it = ins_it;
-    it->second.setup(row_id, this->sirt_metadata);
+    SirtProcessor * temp_processor = new SirtProcessor{row_id, this->sirt_metadata};
+    auto [ins_it, _] = sirt_processors.emplace(row_id, temp_processor);
+    // auto it = ins_it;
+    // it->second.setup(row_id, this->sirt_metadata);
     ProcessResult result;
     return result;
   }else{
-    return sirt_processors[row_id].process(config, metadata, data, len);
+    return sirt_processors[row_id]->process(config, metadata, data, len);
   }
 
   // auto it = sirt_processors.find(row_id);
@@ -279,8 +280,8 @@ ProcessResult SirtProcessor::process(
 
 std::vector<std::uint8_t> SirtEngine::snapshot() const {
   SirtCkpt ckpt;
-  for (const auto& processor : this->sirt_processors) {
-    ckpt.add_processor(processor.first, processor.second.passes, processor.second.recon_image);
+  for (const auto processor : this->sirt_processors) {
+    ckpt.add_processor(processor.first, processor.second->passes, processor.second->recon_image);
   }
 
   std::vector<std::uint8_t> saved_ckpt = ckpt.to_bytes();
@@ -310,14 +311,14 @@ void SirtEngine::restore(const std::vector<std::uint8_t>& snapshot) {
 
     auto it = sirt_processors.find(row_id); 
     if (it == sirt_processors.end()) {
-      SirtProcessor processor(row_id, this->sirt_metadata);
-      processor.setup(row_id, this->sirt_metadata);
-      processor.passes = passes;
-      processor.recon_image = recon_image;
+      SirtProcessor* processor = new SirtProcessor(row_id, this->sirt_metadata);
+      processor->setup(row_id, this->sirt_metadata);
+      processor->passes = passes;
+      processor->recon_image = recon_image;
       sirt_processors.insert({row_id, processor});
     }else{
-      it->second.passes = passes;
-      it->second.recon_image = recon_image;
+      it->second->passes = passes;
+      it->second->recon_image = recon_image;
     }
     std::cout << "Restored SirtProcessor for row_id " << row_id << " with passes " << passes << std::endl;
   }

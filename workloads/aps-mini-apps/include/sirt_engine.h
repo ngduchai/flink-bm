@@ -54,13 +54,6 @@ public:
 
     void setup(int row_id, const SirtMetadata& tmetadata);
 
-    SirtProcessor()
-        : ds(0, 0, 0), main_recon_space(nullptr), engine(nullptr),
-          recon_image(nullptr), main_recon_replica(nullptr), window_step(0), passes(0) {
-        h5md.ndims = 0;
-        h5md.dims  = nullptr;
-    }
-
     SirtProcessor(int row_id, SirtMetadata& tmetadata) : SirtProcessor() {
         this->setup(row_id, tmetadata);
     }
@@ -74,12 +67,20 @@ public:
 
     ~SirtProcessor();
 
+private:
+    SirtProcessor()
+        : ds(0, 0, 0), main_recon_space(nullptr), engine(nullptr),
+          recon_image(nullptr), main_recon_replica(nullptr), window_step(0), passes(0) {
+        h5md.ndims = 0;
+        h5md.dims  = nullptr;
+    }
+
 };
 
 class SirtEngine {
 private:
     SirtMetadata sirt_metadata;
-    std::map<int, SirtProcessor> sirt_processors;
+    std::map<int, SirtProcessor*> sirt_processors;
 
 public:
 
