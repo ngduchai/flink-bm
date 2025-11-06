@@ -981,10 +981,10 @@ class SirtOperator(FlatMapFunction):
 
         # --- managed state ---
         try:
-            # snap_desc = ValueStateDescriptor(
-            #     "sirt_engine_snapshot_v1", Types.PICKLED_BYTE_ARRAY()
-            # )
-            # self.snap_state = ctx.get_state(snap_desc)
+            snap_desc = ValueStateDescriptor(
+                "sirt_engine_snapshot_v1", Types.PICKLED_BYTE_ARRAY()
+            )
+            self.snap_state = ctx.get_state(snap_desc)
             count_desc = ValueStateDescriptor("processed_count_v1", Types.LONG())
             self.count_state = ctx.get_state(count_desc)
         except Exception as e:
