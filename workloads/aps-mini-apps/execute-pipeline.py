@@ -1515,7 +1515,7 @@ def main():
     
     # daq = kick.key_by(lambda _: 0, key_type=Types.INT()) \
     daqdist = kick.flat_map(
-        DaqDistOperator(
+        DaqEmitter(
             input_f=args.simulation_file,
             beg_sinogram=args.beg_sinogram,
             num_sinograms=args.num_sinograms,
@@ -1524,7 +1524,7 @@ def main():
             d_iteration=args.d_iteration,
             proj_sleep=args.proj_sleep,
             logdir=args.logdir,
-            args=args,
+            # args=args,
             save_after_serialize=False
         ),
         output_type=Types.PICKLED_BYTE_ARRAY()
