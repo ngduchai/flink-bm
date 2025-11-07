@@ -857,50 +857,51 @@ class DaqDistLight(FlatMapFunction):
                 sub[np.where(sub == np.inf)] = 0.0
 
             # split across num_sinograms and select ONLY this row_id's slice
-            H, W = sub.shape[1], sub.shape[2]
-            off, rows_here = self._split_rows(H, int(self.args.num_sinograms), row_id)
-            if rows_here == 0:
-                # nothing for this key; still advance progress
+            for row_id in range(int(self.args.num_sinograms)):
+                H, W = sub.shape[1], sub.shape[2]
+                off, rows_here = self._split_rows(H, int(self.args.num_sinograms), row_id)
+                if rows_here == 0:
+                    # nothing for this key; still advance progress
+                    self._last_seq = seq
+                    self._emitted_since_save += 1
+                    self._maybe_save_progress()
+                    yield [{"Type": "WARMUP", "row_id": str(row_id)}, b""]
+                    return
+
+                chunk = sub[:, off:off+rows_here, :].astype(np.float32, copy=False).ravel()
+
+                # metadata expected downstream
+                theta = img.Rotation()
+                if self.args.degree_to_radian: theta *= math.pi / 180.0
+                center = img.Center() or (float(W) / 2.0)
+
+                meta = {
+                    "Type": "MSG_DATA_REP",
+                    "row_id": str(row_id),
+                    "seq_n": str(seq),
+                    "projection_id": str(img.UniqueId()),
+                    "theta": str(float(theta)),
+                    "center": str(float(center)),
+                    "dtype": "float32",
+                    "rank_dims_0": "1",
+                    "rank_dims_1": str(int(rows_here)),
+                    "rank_dims_2": str(int(W)),
+                }
+                if self.args.checksum:
+                    meta["checksum"] = fnv1a32(chunk.view(np.uint8))
+                else:
+                    meta["checksum"] = 0
+
+                out_bytes = chunk.tobytes()
+                self._sent_bytes += len(out_bytes)
+                self._log_once_in_a_while("DATA")
+
+                # update progress *after* we successfully build the record
                 self._last_seq = seq
                 self._emitted_since_save += 1
                 self._maybe_save_progress()
-                yield [{"Type": "WARMUP", "row_id": str(row_id)}, b""]
-                return
 
-            chunk = sub[:, off:off+rows_here, :].astype(np.float32, copy=False).ravel()
-
-            # metadata expected downstream
-            theta = img.Rotation()
-            if self.args.degree_to_radian: theta *= math.pi / 180.0
-            center = img.Center() or (float(W) / 2.0)
-
-            meta = {
-                "Type": "MSG_DATA_REP",
-                "row_id": str(row_id),
-                "seq_n": str(seq),
-                "projection_id": str(img.UniqueId()),
-                "theta": str(float(theta)),
-                "center": str(float(center)),
-                "dtype": "float32",
-                "rank_dims_0": "1",
-                "rank_dims_1": str(int(rows_here)),
-                "rank_dims_2": str(int(W)),
-            }
-            if self.args.checksum:
-                meta["checksum"] = fnv1a32(chunk.view(np.uint8))
-            else:
-                meta["checksum"] = 0
-
-            out_bytes = chunk.tobytes()
-            self._sent_bytes += len(out_bytes)
-            self._log_once_in_a_while("DATA")
-
-            # update progress *after* we successfully build the record
-            self._last_seq = seq
-            self._emitted_since_save += 1
-            self._maybe_save_progress()
-
-            yield [meta, out_bytes]
+                yield [meta, out_bytes]
 
         except Exception as e:
             print("[DaqDistLight] exception:", e, file=sys.stderr)
@@ -1099,8 +1100,6 @@ class SirtOperator(FlatMapFunction):
             now = time.time()
             print(f"[{now}] SirtOperator -- Task-{self.task_id}: Sent: row_id={row_id} stream={iteration_stream}")
             yield [dict(out_meta), bytes(out_bytes)]
-
-
 
 
 class SimplifiedSirtOperator(FlatMapFunction):
