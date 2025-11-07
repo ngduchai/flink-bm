@@ -1373,21 +1373,6 @@ class PrintProbe(MapFunction):
         return value
 
 
-class TickerSource(SourceFunction):
-    def __init__(self, period_ms: int, start: int = 0, max_count: int | None = None):
-        self.period = period_ms / 1000.0
-        self.start = start
-        self.max_count = max_count
-        self._running = True
-    def run(self, ctx):
-        i, sent = self.start, 0
-        while self._running and (self.max_count is None or sent < self.max_count):
-            ctx.collect(i)
-            i += 1; sent += 1
-            time.sleep(self.period)
-    def cancel(self):
-        self._running = False
-
 PY_EXEC = "/opt/micromamba/envs/aps/bin/python"
 
 def main():
