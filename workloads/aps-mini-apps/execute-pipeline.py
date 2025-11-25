@@ -998,7 +998,7 @@ class SirtOperator(FlatMapFunction):
                 "sirt_engine_snapshot_v1", Types.PICKLED_BYTE_ARRAY()
             )
             self.snap_state = ctx.get_state(snap_desc)
-            count_desc = ValueStateDescriptor("processed_count_v1", Types.LONG())
+            count_desc = ValueStateDescriptor("processed_count_v1", Types.INT())
             self.count_state = ctx.get_state(count_desc)
         except Exception as e:
             print("[SirtOperator.open] state init failed:", e, file=sys.stderr)
