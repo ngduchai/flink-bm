@@ -723,6 +723,18 @@ class DaqDistLight(FlatMapFunction):
             # serializer
             self.serializer = TraceSerializer.ImageSerializer()
 
+            # # Identify row_id from subtask index
+            # subtask_index = ctx.get_index_of_this_subtask()
+            # total_subtasks = ctx.get_number_of_parallel_subtasks()
+            # print(f"[DaqDistLight.open] subtask_index={subtask_index} total_subtasks={total_subtasks}")
+            # offset_rows, rows_here = self._split_rows(
+            #     total_rows=int(self.args.num_sinograms),
+            #     parts=int(total_subtasks),
+            #     k=int(subtask_index)
+            # )
+            # print(f"[DaqDistLight.open] handling rows {offset_rows} .. {offset_rows + rows_here - 1} "
+            #       f"of {int(self.args.num_sinograms)} total")
+
             # dataset
             input_f = self.args.simulation_file
             print(f"[DaqDistLight.open] loading dataset: {input_f}")
@@ -764,7 +776,7 @@ class DaqDistLight(FlatMapFunction):
             seq = int(seq)
 
             # lazily load per-row progress
-            self._maybe_load_progress(row_id)
+            # self._maybe_load_progress(row_id)
 
             # control messages pass through to every key
             if kind == "WARMUP":
@@ -1568,7 +1580,8 @@ def main():
     daqdist = pre.flat_map(
         DaqDistLight(args),
         output_type=Types.PICKLED_BYTE_ARRAY()
-    ).name("DaqDistLight").set_parallelism(1)
+    # ).name("DaqDistLight").set_parallelism(1)
+    ).name("DaqDistLight").set_parallelism(max(1, args.ntask_sirt))
 
     # probe = daq.map(VersionProbe(), output_type=Types.PICKLED_BYTE_ARRAY()).name("Version Probe")
     # dist = probe.flat_map(
