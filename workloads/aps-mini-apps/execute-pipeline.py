@@ -775,6 +775,8 @@ class DaqDistLight(FlatMapFunction):
             row_id = int(row_id)
             seq = int(seq)
 
+            print(f"[DaqDistLight.flat_map] received: row_id={row_id} seq={seq} iteration={iteration} kind={kind}")
+
             # lazily load per-row progress
             # self._maybe_load_progress(row_id)
 
