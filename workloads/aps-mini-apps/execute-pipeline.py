@@ -771,7 +771,8 @@ class DaqDistLight(FlatMapFunction):
         row: (seq, row_id, iteration, kind)
         """
         try:
-            seq, row_id, iteration, kind = row
+            # seq, row_id, iteration, kind = row
+            row_id, seq, iteration, kind = row
             row_id = int(row_id)
             seq = int(seq)
 
@@ -784,14 +785,14 @@ class DaqDistLight(FlatMapFunction):
             if kind == "WARMUP":
                 # Broadcast one WARMUP per row_id, in-order, from the single ordered source
                 for r in range(int(self.args.num_sinograms)):
-                    yield [{"Type": "WARMUP", "row_id": str(r)}, b""]
+                    yield [row_id, {"Type": "WARMUP", "row_id": str(r)}, b""]
                 return
 
             if kind == "FIN":
                 # Force a final save, then broadcast FIN to every row_id
                 self._maybe_save_progress(force=True)
                 for r in range(int(self.args.num_sinograms)):
-                    yield [{"Type": "FIN", "row_id": str(r)}, b""]
+                    yield [row_id, {"Type": "FIN", "row_id": str(r)}, b""]
                 return
 
             # DATA path
@@ -879,7 +880,7 @@ class DaqDistLight(FlatMapFunction):
                     self._last_seq = seq
                     self._emitted_since_save += 1
                     self._maybe_save_progress()
-                    yield [{"Type": "WARMUP", "row_id": str(row_id)}, b""]
+                    yield [row_id, {"Type": "WARMUP", "row_id": str(row_id)}, b""]
                     return
 
                 chunk = sub[:, off:off+rows_here, :].astype(np.float32, copy=False).ravel()
@@ -915,7 +916,7 @@ class DaqDistLight(FlatMapFunction):
                 self._emitted_since_save += 1
                 self._maybe_save_progress()
 
-                yield [meta, out_bytes]
+                yield [row_id, meta, out_bytes]
 
         except Exception as e:
             print("[DaqDistLight] exception:", e, file=sys.stderr)
@@ -1066,7 +1067,7 @@ class SirtOperator(FlatMapFunction):
 
     # def process_element(self, value, ctx):
     def flat_map(self, value):
-        meta_in, payload = value
+        row_id, meta_in, payload = value
         self._maybe_restore()
         print(f"SirtOperator: Received msg: {meta_in}, size {len(payload)} bytes")
 
@@ -1113,7 +1114,7 @@ class SirtOperator(FlatMapFunction):
             import time
             now = time.time()
             print(f"[{now}] SirtOperator -- Task-{self.task_id}: Sent: row_id={row_id} stream={iteration_stream}")
-            yield [dict(out_meta), bytes(out_bytes)]
+            yield [row_id, dict(out_meta), bytes(out_bytes)]
 
 
 class SimplifiedSirtOperator(FlatMapFunction):
@@ -1161,7 +1162,7 @@ class SimplifiedSirtOperator(FlatMapFunction):
     #         return
 
     def flat_map(self, value):
-        meta_in, payload = value
+        row_id, meta_in, payload = value
         # self._maybe_restore()
         if self._restored == False:
             try:
@@ -1175,7 +1176,7 @@ class SimplifiedSirtOperator(FlatMapFunction):
         
         # rank = meta_in["row_id"]
         # yield [{"Type": "WARMUP", "row_id": str(rank)}, b""]
-        yield [{"Type": "WARMUP"}, b""]
+        yield [row_id, {"Type": "WARMUP"}, b""]
         
         self.processed_local += 1
 
@@ -1236,14 +1237,14 @@ class DenoiserOperator(FlatMapFunction):
 
             if meta.get("Type") == "WARMUP":
                 print(f"DenoiserOperator: Received warm-up msg: {meta}, size {len(data)} bytes")
-                yield (meta, data)
+                yield (row_id, meta, data)
                 return
 
             # Handle FIN first (FIN arrives with empty payload)
             if isinstance(meta, dict) and meta.get("Type") == "FIN":
                 self.running = False
                 print("DenoiserOperator: stopping processing", meta)
-                yield ("FIN", None)
+                yield (row_id, "FIN", None)
                 return
             # if not self.running:
             #     print("DenoiserOperator: stopped running, skip processing", meta)
@@ -1291,7 +1292,7 @@ class DenoiserOperator(FlatMapFunction):
                 self.count += 1
                 del self.waiting_metadata[iteration_stream]
                 del self.waiting_data[iteration_stream]
-                yield ("DENOISED", str(iteration_stream))
+                yield (row_id, "DENOISED", str(iteration_stream))
         except Exception as e:
             import sys, traceback
             print("[DenoiserOperator] exception:", e, file=sys.stderr)
@@ -1543,8 +1544,10 @@ def main():
     kick = (
         t_env.to_data_stream(t_env.from_path("tick_src_all"))
             .map(
-                lambda r: Row(int(r[0]), int(r[1]), int(r[2]), str(r[3])),
-                output_type=Types.ROW([Types.LONG(), Types.INT(), Types.INT(), Types.STRING()])
+                # lambda r: Row(int(r[0]), int(r[1]), int(r[2]), str(r[3])),
+                # output_type=Types.ROW([Types.LONG(), Types.INT(), Types.INT(), Types.STRING()])
+                lambda r: Row(int(r[1]), int(r[0]), int(r[2]), str(r[3])),
+                output_type=Types.ROW([Types.INT(), Types.LONG(), Types.INT(), Types.STRING()])
             )
             .name("Tick+RowId")
     )
@@ -1577,14 +1580,14 @@ def main():
     #     # .disable_chaining().start_new_chain() \
     #     # .slot_sharing_group("daq")
 
-    # pre = kick.key_by(lambda r: int(r[1]), key_type=Types.INT())
+    pre = kick.key_by(lambda r: r[0], key_type=Types.INT())
 
-    # daqdist = pre.flat_map(
-    daqdist = kick.flat_map(
-        DaqDistLight(args),
-        output_type=Types.PICKLED_BYTE_ARRAY()
-    # ).name("DaqDistLight").set_parallelism(1)
-    ).name("DaqDistLight").set_parallelism(max(1, args.ntask_sirt))
+    daqdist = pre.key_by(lambda r: r[0], key_type=Types.INT()) \
+        .flat_map(
+            DaqDistLight(args),
+            output_type=Types.PICKLED_BYTE_ARRAY()
+        # ).name("DaqDistLight").set_parallelism(1)
+        ).name("DaqDistLight").set_parallelism(max(1, args.ntask_sirt))
 
     # probe = daq.map(VersionProbe(), output_type=Types.PICKLED_BYTE_ARRAY()).name("Version Probe")
     # dist = probe.flat_map(
@@ -1632,7 +1635,8 @@ def main():
     # #         SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
     # #         output_type=Types.PICKLED_BYTE_ARRAY()) \
     # sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
-    sirt = daqdist.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
+    # sirt = daqdist.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
+    sirt = daqdist.key_by(lambda r: r[0], key_type=Types.INT()) \
         .flat_map(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
     # sirt = daqdist.flat_map(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
             output_type=Types.PICKLED_BYTE_ARRAY()) \
@@ -1644,12 +1648,13 @@ def main():
         # .slot_sharing_group("sirt")
 
 
-    den = sirt.flat_map(
-        DenoiserOperator(args),
-        output_type=Types.PICKLED_BYTE_ARRAY()
-    ).name("Denoiser Operator").set_parallelism(1) \
-        # .disable_chaining().start_new_chain() \
-        # .slot_sharing_group("den")
+    den = sirt.key_by(lambda r: r[0], key_type=Types.INT()) \
+        .flat_map(
+            DenoiserOperator(args),
+            output_type=Types.PICKLED_BYTE_ARRAY()
+        ).name("Denoiser Operator").set_parallelism(1) \
+            # .disable_chaining().start_new_chain() \
+            # .slot_sharing_group("den")
 
     den.print().name("Denoiser Sink").set_parallelism(1)
 
