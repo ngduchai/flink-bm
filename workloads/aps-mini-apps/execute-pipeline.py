@@ -1577,9 +1577,10 @@ def main():
     #     # .disable_chaining().start_new_chain() \
     #     # .slot_sharing_group("daq")
 
-    pre = kick.key_by(lambda r: int(r[1]), key_type=Types.INT())
+    # pre = kick.key_by(lambda r: int(r[1]), key_type=Types.INT())
 
-    daqdist = pre.flat_map(
+    # daqdist = pre.flat_map(
+    daqdist = kick.flat_map(
         DaqDistLight(args),
         output_type=Types.PICKLED_BYTE_ARRAY()
     # ).name("DaqDistLight").set_parallelism(1)
@@ -1631,9 +1632,9 @@ def main():
     # #         SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
     # #         output_type=Types.PICKLED_BYTE_ARRAY()) \
     # sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
-    # sirt = daqdist.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
-    #     .flat_map(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
-    sirt = daqdist.flat_map(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
+    sirt = daqdist.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
+        .flat_map(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
+    # sirt = daqdist.flat_map(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
             output_type=Types.PICKLED_BYTE_ARRAY()) \
         .name("Sirt Operator") \
         .set_parallelism(max(1, args.ntask_sirt)) \
