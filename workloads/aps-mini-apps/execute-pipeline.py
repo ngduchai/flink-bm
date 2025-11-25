@@ -1631,8 +1631,9 @@ def main():
     # #         SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
     # #         output_type=Types.PICKLED_BYTE_ARRAY()) \
     # sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
-    sirt = daqdist.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
-        .flat_map(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
+    # sirt = daqdist.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
+    #     .flat_map(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
+    sirt = daqdist.flat_map(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
             output_type=Types.PICKLED_BYTE_ARRAY()) \
         .name("Sirt Operator") \
         .set_parallelism(max(1, args.ntask_sirt)) \
