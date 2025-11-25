@@ -1233,7 +1233,7 @@ class DenoiserOperator(FlatMapFunction):
     def flat_map(self, value):
         # self._maybe_restore()
         try:
-            meta, data = value
+            row_id, meta, data = value
 
             if meta.get("Type") == "WARMUP":
                 print(f"DenoiserOperator: Received warm-up msg: {meta}, size {len(data)} bytes")
