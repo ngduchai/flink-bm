@@ -93,7 +93,7 @@ public:
 
     void setup(const std::unordered_map<std::string, int64_t>& tmetadata);
 
-    std::vector<std::uint8_t> snapshot() const;
+    std::vector<std::uint8_t> snapshot(int selected_id=-1) const;
     void restore(const std::vector<std::uint8_t>& snapshot);
 
     ~SirtEngine();

@@ -277,7 +277,7 @@ ProcessResult SirtProcessor::process(
 
 }
 
-std::vector<std::uint8_t> SirtEngine::snapshot() const {
+std::vector<std::uint8_t> SirtEngine::snapshot(int selected_id) const {
   SirtCkpt ckpt;
   // NOTE: reference! do NOT copy pairs with unique_ptr
   for (const auto& kv : this->sirt_processors) {
@@ -287,7 +287,9 @@ std::vector<std::uint8_t> SirtEngine::snapshot() const {
     if (!proc) continue; // defensive guard; shouldn't happen
 
     // Store progress and the recon_image pointer as your SirtCkpt expects
-    ckpt.add_processor(row_id, proc->passes, proc->recon_image);
+    if (row_id == selected_id || selected_id == -1) {
+      ckpt.add_processor(row_id, proc->passes, proc->recon_image);
+    }
   }
 
   // Serialize
@@ -309,7 +311,6 @@ std::vector<std::uint8_t> SirtEngine::snapshot() const {
 }
 
 void SirtEngine::restore(const std::vector<std::uint8_t>& snapshot) {
-  // TODO: replace these with actual boost deserialization
   SirtCkpt ckpt(snapshot);
   // Sanity-check structural integrity
   if (ckpt.row_ids.size() != ckpt.progresses.size() ||

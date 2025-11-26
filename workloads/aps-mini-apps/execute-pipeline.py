@@ -1037,7 +1037,6 @@ class SirtOperator(FlatMapFunction):
             else:
                 # No bytes yet for this key; don't flip the flag so we can retry
                 print(f"[SirtOperator] Cannot find previous state. Start from beginning")
-                return
             # cnt_state = self.count_state.value()
             # self.processed_local = int(cnt_state) if cnt_state is not None else self.processed_local
             # print(f"[SirtOperator] restored with processed_local = {self.processed_local}")
@@ -1053,7 +1052,7 @@ class SirtOperator(FlatMapFunction):
         try:
             import sirt_ops
             with sirt_ops.ostream_redirect(): 
-                snap = self.engine.snapshot()
+                snap = self.engine.snapshot(row_id)
             snap_bytes = snap if isinstance(snap, (bytes, bytearray)) else bytes(snap)
             self.snap_state.update(snap_bytes)
             # self.snap_state.update(bytes([1, 2, 3]))
