@@ -1354,6 +1354,20 @@ def task_key_selector(value):
         print(f"KeySelector: row_id not found, try random --> key = {tid}, num_keys={num_keys}")
         return tid
 
+def key_row_selector(value):
+    # try:
+    #     print(f"KeyRowSelector: Received value: {value}")
+    #     row_id, _ = value[0]
+    #     return int(row_id)
+    # except:
+    #     import random
+    #     row_id = random.randint(0, num_keys-1)
+    #     print(f"KeyRowSelector: row_id not found, try random --> row_id = {row_id}, num_keys={num_keys}")
+    #     return row_id
+    print(f"KeyRowSelector: Received value: {value}")
+    row_id, _ = value[0]
+    return int(row_id)
+
 class TaskIdPartitioner(Partitioner):
     def partition(self, key, num_partitions: int):
         # route directly to the target subtask = key
@@ -1583,7 +1597,8 @@ def main():
     # pre = kick.key_by(lambda r: r[0], key_type=Types.INT())
 
     # daqdist = pre.key_by(lambda r: r[0], key_type=Types.INT()) \
-    daqdist = kick.key_by(lambda r: r[0], key_type=Types.INT()) \
+    # daqdist = kick.key_by(lambda r: r[0], key_type=Types.INT()) \
+    daqdist = kick.key_by(key_row_selector, key_type=Types.INT()) \
         .flat_map(
             DaqDistLight(args),
             output_type=Types.PICKLED_BYTE_ARRAY()
@@ -1637,7 +1652,8 @@ def main():
     # #         output_type=Types.PICKLED_BYTE_ARRAY()) \
     # sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
     # sirt = daqdist.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
-    sirt = daqdist.key_by(lambda r: r[0], key_type=Types.INT()) \
+    # sirt = daqdist.key_by(lambda r: r[0], key_type=Types.INT()) \
+    sirt = daqdist.key_by(key_row_selector, key_type=Types.INT()) \
         .flat_map(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
     # sirt = daqdist.flat_map(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
             output_type=Types.PICKLED_BYTE_ARRAY()) \
@@ -1649,7 +1665,8 @@ def main():
         # .slot_sharing_group("sirt")
 
 
-    den = sirt.key_by(lambda r: r[0], key_type=Types.INT()) \
+    # den = sirt.key_by(lambda r: r[0], key_type=Types.INT()) \
+    den = sirt.key_by(key_row_selector, key_type=Types.INT()) \
         .flat_map(
             DenoiserOperator(args),
             output_type=Types.PICKLED_BYTE_ARRAY()
