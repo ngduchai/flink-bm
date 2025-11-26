@@ -1580,9 +1580,10 @@ def main():
     #     # .disable_chaining().start_new_chain() \
     #     # .slot_sharing_group("daq")
 
-    pre = kick.key_by(lambda r: r[0], key_type=Types.INT())
+    # pre = kick.key_by(lambda r: r[0], key_type=Types.INT())
 
-    daqdist = pre.key_by(lambda r: r[0], key_type=Types.INT()) \
+    # daqdist = pre.key_by(lambda r: r[0], key_type=Types.INT()) \
+    daqdist = kick.key_by(lambda r: r[0], key_type=Types.INT()) \
         .flat_map(
             DaqDistLight(args),
             output_type=Types.PICKLED_BYTE_ARRAY()
