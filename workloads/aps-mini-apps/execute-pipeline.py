@@ -950,7 +950,7 @@ class SirtOperator(FlatMapFunction):
         self.snap_state = None
         self.count_state = None
         self.processed_local = 0
-        self._restored = False
+        self._restored = {}
         self.task_id = -1
         self.num_tasks = 0
 
@@ -1013,9 +1013,9 @@ class SirtOperator(FlatMapFunction):
               f"restored_count=deferred, "
               f"thread_count={self.cfg['thread_count']}")
     
-    def _maybe_restore(self):
+    def _maybe_restore(self, row_id):
         # Try until we either restored bytes or confirmed there's nothing to restore.
-        if self._restored:
+        if row_id in self._restored and self._restored[row_id] == True:
             return
         try:
             raw = self.snap_state.value()   # keyed ValueState for the current key
@@ -1044,10 +1044,10 @@ class SirtOperator(FlatMapFunction):
             print("[SirtOperator] restore step failed:", e, file=sys.stderr)
             traceback.print_exc()
             # keep _restored = False to retry on the next element
-        self._restored = True
+        self._restored[row_id] = True
 
 
-    def _do_snapshot(self):
+    def _do_snapshot(self, row_id):
         """Snapshot engine & persist to Flink state. Crash if it fails so Flink restores."""
         try:
             import sirt_ops
@@ -1069,9 +1069,7 @@ class SirtOperator(FlatMapFunction):
     # def process_element(self, value, ctx):
     def flat_map(self, value):
         row_id, meta_in, payload = value
-        if self._restored == False:
-            print(f"SirtOperator: Task-{self.task_id}/{self.num_tasks} restoring state (row_id: {row_id})...")
-        self._maybe_restore()
+        self._maybe_restore(row_id)
         print(f"SirtOperator: Received msg: {meta_in}, size {len(payload)} bytes")
 
         # FIN: persist one final snapshot then pass through
@@ -1083,7 +1081,7 @@ class SirtOperator(FlatMapFunction):
             yield value
             return
         if isinstance(meta_in, dict) and meta_in.get("Type") == "FIN":
-            self._do_snapshot()
+            self._do_snapshot(row_id)
             yield value
             return
 
@@ -1107,7 +1105,7 @@ class SirtOperator(FlatMapFunction):
 
         # count-based snapshot
         if self.processed_local % self.every_n == 0:
-            self._do_snapshot()
+            self._do_snapshot(row_id)
 
         if len(out_bytes):
             # print(f"SirtOperator: Emitting msg: {meta_in}, size {len(out_bytes)} bytes")
