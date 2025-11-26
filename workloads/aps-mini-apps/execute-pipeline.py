@@ -1018,6 +1018,7 @@ class SirtOperator(FlatMapFunction):
         if row_id in self._restored and self._restored[row_id] == True:
             return
         try:
+            print(f"SirtOperator: Task-{self.task_id}/{self.num_tasks} restoring state (row_id: {row_id})...")
             raw = self.snap_state.value()   # keyed ValueState for the current key
             cnt_state = self.count_state.value()
             # print(f"[SirtOperator]: restoring from checkpoint: count = {cnt_state}")
