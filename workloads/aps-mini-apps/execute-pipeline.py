@@ -1365,7 +1365,7 @@ def key_row_selector(value):
     #     print(f"KeyRowSelector: row_id not found, try random --> row_id = {row_id}, num_keys={num_keys}")
     #     return row_id
     print(f"KeyRowSelector: Received value: {value}")
-    row_id, _ = value[0]
+    row_id, _ = value
     return int(row_id)
 
 class TaskIdPartitioner(Partitioner):
