@@ -1364,7 +1364,7 @@ def key_row_selector(value):
     #     row_id = random.randint(0, num_keys-1)
     #     print(f"KeyRowSelector: row_id not found, try random --> row_id = {row_id}, num_keys={num_keys}")
     #     return row_id
-    print(f"KeyRowSelector: Received value: {value}")
+    # print(f"KeyRowSelector: Received value: {value}")
     row_id = value[0]
     return int(row_id)
 
