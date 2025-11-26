@@ -949,7 +949,7 @@ class SirtOperator(FlatMapFunction):
         self.engine = None
         self.snap_state = None
         self.count_state = None
-        self.processed_local = 0
+        self.processed_local = {}
         self._restored = {}
         self.task_id = -1
         self.num_tasks = 0
@@ -1032,11 +1032,12 @@ class SirtOperator(FlatMapFunction):
                 # also restore counter if present
                 # cnt = self.count_state.value()
                 # cnt = cnt_state
-                self.processed_local = int(cnt_state) if cnt_state is not None else self.processed_local
+                self.processed_local[row_id] = int(cnt_state) if cnt_state is not None else 0
                 print(f"[SirtOperator] Restored {len(raw_bytes)} bytes from state with processed_local = {cnt_state}")
             else:
                 # No bytes yet for this key; don't flip the flag so we can retry
                 print(f"[SirtOperator] Cannot find previous state. Start from beginning")
+                self.processed_local[row_id] = 0
             # cnt_state = self.count_state.value()
             # self.processed_local = int(cnt_state) if cnt_state is not None else self.processed_local
             # print(f"[SirtOperator] restored with processed_local = {self.processed_local}")
@@ -1056,11 +1057,11 @@ class SirtOperator(FlatMapFunction):
             snap_bytes = snap if isinstance(snap, (bytes, bytearray)) else bytes(snap)
             self.snap_state.update(snap_bytes)
             # self.snap_state.update(bytes([1, 2, 3]))
-            self.count_state.update(self.processed_local)
+            self.count_state.update(self.processed_local[row_id])
             # raw = self.snap_state.value()
             cnt = self.count_state.value()
             # print(f"[SirtOperator] snapshot at {self.processed_local} tuples: {len(snap_bytes)} bytes: self = {len(raw)}, count = {cnt}")
-            print(f"[SirtOperator] snapshot at {self.processed_local} tuples: count = {cnt}")
+            print(f"[SirtOperator] snapshot at {self.processed_local[row_id]} tuples: count = {cnt}")
         except Exception as e:
             print("[SirtOperator] engine.snapshot failed:", e, file=sys.stderr)
             traceback.print_exc()
@@ -1101,10 +1102,10 @@ class SirtOperator(FlatMapFunction):
             traceback.print_exc()
             return
 
-        self.processed_local += 1
+        self.processed_local[row_id] += 1
 
         # count-based snapshot
-        if self.processed_local % self.every_n == 0:
+        if self.processed_local[row_id] % self.every_n == 0:
             self._do_snapshot(row_id)
 
         if len(out_bytes):
