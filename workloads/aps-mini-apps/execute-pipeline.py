@@ -1068,6 +1068,8 @@ class SirtOperator(FlatMapFunction):
     # def process_element(self, value, ctx):
     def flat_map(self, value):
         row_id, meta_in, payload = value
+        if self._restored == False:
+            print(f"SirtOperator: Task-{self.task_id} restoring state...")
         self._maybe_restore()
         print(f"SirtOperator: Received msg: {meta_in}, size {len(payload)} bytes")
 
