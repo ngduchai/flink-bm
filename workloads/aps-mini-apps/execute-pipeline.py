@@ -952,6 +952,7 @@ class SirtOperator(FlatMapFunction):
         self.processed_local = 0
         self._restored = False
         self.task_id = -1
+        self.num_tasks = 0
 
     def open(self, ctx: RuntimeContext):
         print("SirtOperator initializing (keyed)...")
@@ -967,7 +968,7 @@ class SirtOperator(FlatMapFunction):
         # --- partitioning / setup ---
         try:
             self.task_id = ctx.get_index_of_this_subtask()
-            num_tasks = ctx.get_number_of_parallel_subtasks()
+            self.num_tasks = ctx.get_number_of_parallel_subtasks()
             # total_sinograms = int(self.cfg["num_sinograms"])
             total_sinograms = 1
             n_sinograms = 1
@@ -1069,7 +1070,7 @@ class SirtOperator(FlatMapFunction):
     def flat_map(self, value):
         row_id, meta_in, payload = value
         if self._restored == False:
-            print(f"SirtOperator: Task-{self.task_id} restoring state...")
+            print(f"SirtOperator: Task-{self.task_id}/{self.num_tasks} restoring state (row_id: {row_id})...")
         self._maybe_restore()
         print(f"SirtOperator: Received msg: {meta_in}, size {len(payload)} bytes")
 
