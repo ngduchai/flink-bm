@@ -785,8 +785,8 @@ class DaqDistLight(FlatMapFunction):
             seq, iteration, kind = row
             seq = int(seq)
 
-            # print(f"[DaqDistLight.flat_map][{self.task_id}/{self.num_task}] received: row_id={row_id} seq={seq} iteration={iteration} kind={kind}")
-            print(f"[DaqDistLight.flat_map][{self.task_id}/{self.num_task}] received: seq={seq} iteration={iteration} kind={kind}")
+            # print(f"[DaqDistLight.flat_map][{self.task_id}/{self.num_tasks}] received: row_id={row_id} seq={seq} iteration={iteration} kind={kind}")
+            print(f"[DaqDistLight.flat_map][{self.task_id}/{self.num_tasks}] received: seq={seq} iteration={iteration} kind={kind}")
 
             # lazily load per-row progress
             # self._maybe_load_progress(row_id)
@@ -930,13 +930,13 @@ class DaqDistLight(FlatMapFunction):
                 self._emitted_since_save += 1
                 self._maybe_save_progress()
 
-                print(f"[DaqDistLight.flat_map][{self.task_id}/{self.num_task}] emitting row_id={row_id} seq={seq} "
+                print(f"[DaqDistLight.flat_map][{self.task_id}/{self.num_tasks}] emitting row_id={row_id} seq={seq} "
                       f"proj_id={img.UniqueId()} theta={theta:.4f} center={center:.2f} "
                       f"size={len(out_bytes)} bytes")
                 yield [row_id, meta, out_bytes]
 
         except Exception as e:
-            print(f"[DaqDistLight][{self.task_id}/{self.num_task}] exception:", e, file=sys.stderr)
+            print(f"[DaqDistLight][{self.task_id}/{self.num_tasks}] exception:", e, file=sys.stderr)
             traceback.print_exc()
             # If you want the job to restart on data errors, re-raise:
             # raise
