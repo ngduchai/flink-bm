@@ -1534,8 +1534,8 @@ def main():
         t_env.from_path("tick_data")
             .add_columns(
                 # row_id = MOD(seq-1, n)
-                E.call_sql(f"CAST(MOD(seq - 1, {n}) AS INT)").alias("row_id"),
-                # iter = FLOOR((seq-1)/num_sinogram_projections)
+                # E.call_sql(f"CAST(MOD(seq - 1, {n}) AS INT)").alias("row_id"),
+                iter = FLOOR((seq-1)/num_sinogram_projections)
                 E.call_sql(f"CAST(FLOOR((seq - 1) / {args.num_sinogram_projections}) AS INT)").alias("iter"),
                 E.lit("DATA").alias("kind"))
     )
