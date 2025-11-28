@@ -1097,6 +1097,8 @@ class SirtOperator(FlatMapFunction):
                 if checksum != meta_in["checksum"]:
                     print(f"SirtOperator: CORRUPTION -- checksum does not match: checksum = {checksum} --> {meta_in}, ")
                 meta_in["checksum"] = str(checksum)
+            else:
+                meta_in["checksum"] = "0"
             import sirt_ops
             with sirt_ops.ostream_redirect():  # RAII context from pybind11
                 out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
