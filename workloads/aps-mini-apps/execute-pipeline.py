@@ -916,6 +916,9 @@ class DaqDistLight(FlatMapFunction):
                 self._emitted_since_save += 1
                 self._maybe_save_progress()
 
+                print(f"[DaqDistLight.flat_map] emitting row_id={row_id} seq={seq} "
+                      f"proj_id={img.UniqueId()} theta={theta:.4f} center={center:.2f} "
+                      f"shape=({1},{rows_here},{W}) size={len(out_bytes)} bytes")
                 yield [row_id, meta, out_bytes]
 
         except Exception as e:
