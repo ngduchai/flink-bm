@@ -1547,9 +1547,9 @@ def main():
         # t_env.from_path("rows_tbl")
         t_env.from_path("tick_data")
             .select(
-                # E.lit(0).cast(DataTypes.BIGINT()).alias("seq"),
+                E.lit(0).cast(DataTypes.BIGINT()).alias("seq"),
                 # E.col("row_id"),
-                E.col("seq"),
+                # E.col("seq"),
                 E.lit(0).cast(DataTypes.INT()).alias("iter"),
                 E.lit("WARMUP").alias("kind"))
     )
@@ -1561,9 +1561,9 @@ def main():
         # t_env.from_path("rows_tbl")
         t_env.from_path("tick_data")
             .select(
-                # E.lit(total_rows - 1).cast(DataTypes.BIGINT()).alias("seq"),
+                E.lit(total_rows - 1).cast(DataTypes.BIGINT()).alias("seq"),
                 # E.col("row_id"),
-                E.col("seq"),
+                # E.col("seq"),
                 E.lit(int(args.d_iteration)).cast(DataTypes.INT()).alias("iter"),
                 E.lit("FIN").alias("kind"))
     )
