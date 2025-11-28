@@ -1566,28 +1566,20 @@ def main():
 
     # t_env.create_temporary_view("fin_view", fin_view)
 
-    warmup_view = t_env.from_values(
-        DataTypes.ROW(
-            [
-                DataTypes.FIELD("seq", DataTypes.BIGINT()),
-                DataTypes.FIELD("iter", DataTypes.INT()),
-                DataTypes.FIELD("kind", DataTypes.STRING()),
-            ]
-        ),
-        [(0, 0, "WARMUP")]
-    )
+    warmup_view = t_env.sql_query("""
+        SELECT
+            CAST(0 AS BIGINT) AS seq,
+            CAST(0 AS INT)    AS iter,
+            'WARMUP'          AS kind
+    """)
     t_env.create_temporary_view("warmup_view", warmup_view)
 
-    fin_view = t_env.from_values(
-        DataTypes.ROW(
-            [
-                DataTypes.FIELD("seq", DataTypes.BIGINT()),
-                DataTypes.FIELD("iter", DataTypes.INT()),
-                DataTypes.FIELD("kind", DataTypes.STRING()),
-            ]
-        ),
-        [(total_rows-1, 0, "FIN")]
-    )
+    fin_view = warmup_view = t_env.sql_query("""
+        SELECT
+            CAST(0 AS BIGINT) AS seq,
+            CAST(0 AS INT)    AS iter,
+            'WARMUP'          AS kind
+    """)
     t_env.create_temporary_view("fin_view", fin_view)
 
 
