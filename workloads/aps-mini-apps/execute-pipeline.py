@@ -873,22 +873,26 @@ class DaqDistLight(FlatMapFunction):
 
             # split across num_sinograms and select ONLY this row_id's slice
             for row_id in range(int(self.args.num_sinograms)):
-                H, W = sub.shape[1], sub.shape[2]
-                off, rows_here = self._split_rows(H, int(self.args.num_sinograms), row_id)
-                if rows_here == 0:
-                    # nothing for this key; still advance progress
-                    self._last_seq = seq
-                    self._emitted_since_save += 1
-                    self._maybe_save_progress()
-                    yield [row_id, {"Type": "WARMUP", "row_id": str(row_id)}, b""]
-                    return
+                # H, W = sub.shape[1], sub.shape[2]
+                # off, rows_here = self._split_rows(H, int(self.args.num_sinograms), row_id)
+                # if rows_here == 0:
+                #     # nothing for this key; still advance progress
+                #     self._last_seq = seq
+                #     self._emitted_since_save += 1
+                #     self._maybe_save_progress()
+                #     yield [row_id, {"Type": "WARMUP", "row_id": str(row_id)}, b""]
+                #     return
 
-                chunk = sub[:, off:off+rows_here, :].astype(np.float32, copy=False).ravel()
+                # chunk = sub[:, off:off+rows_here, :].astype(np.float32, copy=False).ravel()
 
-                # metadata expected downstream
+                # # metadata expected downstream
+                # theta = img.Rotation()
+                # if self.args.degree_to_radian: theta *= math.pi / 180.0
+                # center = img.Center() or (float(W) / 2.0)
+
+                chunk = sub[:, row_id, :].astype(np.float32, copy=False).ravel()
                 theta = img.Rotation()
-                if self.args.degree_to_radian: theta *= math.pi / 180.0
-                center = img.Center() or (float(W) / 2.0)
+                center = img.Center() or (float(sub.shape[2]) / 2.0)
 
                 meta = {
                     "Type": "MSG_DATA_REP",
@@ -898,9 +902,9 @@ class DaqDistLight(FlatMapFunction):
                     "theta": str(float(theta)),
                     "center": str(float(center)),
                     "dtype": "float32",
-                    "rank_dims_0": "1",
-                    "rank_dims_1": str(int(rows_here)),
-                    "rank_dims_2": str(int(W)),
+                    # "rank_dims_0": "1",
+                    # "rank_dims_1": str(int(rows_here)),
+                    # "rank_dims_2": str(int(W)),
                 }
                 if self.args.checksum:
                     meta["checksum"] = fnv1a32(chunk.view(np.uint8))
@@ -918,7 +922,7 @@ class DaqDistLight(FlatMapFunction):
 
                 print(f"[DaqDistLight.flat_map] emitting row_id={row_id} seq={seq} "
                       f"proj_id={img.UniqueId()} theta={theta:.4f} center={center:.2f} "
-                      f"shape=({1},{rows_here},{W}) size={len(out_bytes)} bytes")
+                      f"size={len(out_bytes)} bytes")
                 yield [row_id, meta, out_bytes]
 
         except Exception as e:
