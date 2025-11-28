@@ -1585,9 +1585,11 @@ def main():
             .map(
                 # lambda r: Row(int(r[0]), int(r[1]), int(r[2]), str(r[3])),
                 # output_type=Types.ROW([Types.LONG(), Types.INT(), Types.INT(), Types.STRING()])
+
                 # lambda r: Row(int(r[1]), int(r[0]), int(r[2]), str(r[3])),
+                # output_type=Types.ROW([Types.INT(), Types.LONG(), Types.INT(), Types.STRING()])
                 lambda r: Row(int(r[0]), int(r[1]), str(r[2])),
-                output_type=Types.ROW([Types.INT(), Types.LONG(), Types.INT(), Types.STRING()])
+                output_type=Types.ROW([Types.LONG(), Types.INT(), Types.STRING()])
             )
             .name("Tick+RowId")
     )
