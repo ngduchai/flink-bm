@@ -1544,7 +1544,8 @@ def main():
 
     # warmup_view: one WARMUP per row_id
     warmup_view = (
-        t_env.from_path("rows_tbl")
+        # t_env.from_path("rows_tbl")
+        t_env.from_path("tick_data")
             .select(
                 E.lit(0).cast(DataTypes.BIGINT()).alias("seq"),
                 E.col("row_id"),
@@ -1556,7 +1557,8 @@ def main():
 
     # fin_view: one FIN per row_id
     fin_view = (
-        t_env.from_path("rows_tbl")
+        # t_env.from_path("rows_tbl")
+        t_env.from_path("tick_data")
             .select(
                 E.lit(total_rows - 1).cast(DataTypes.BIGINT()).alias("seq"),
                 E.col("row_id"),
