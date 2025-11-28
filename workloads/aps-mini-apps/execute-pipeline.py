@@ -771,12 +771,16 @@ class DaqDistLight(FlatMapFunction):
         row: (seq, row_id, iteration, kind)
         """
         try:
+            # # seq, row_id, iteration, kind = row
+            # row_id, seq, iteration, kind = row
+            # row_id = int(row_id)
+            # seq = int(seq)
             # seq, row_id, iteration, kind = row
-            row_id, seq, iteration, kind = row
-            row_id = int(row_id)
+            seq, iteration, kind = row
             seq = int(seq)
 
-            print(f"[DaqDistLight.flat_map] received: row_id={row_id} seq={seq} iteration={iteration} kind={kind}")
+            # print(f"[DaqDistLight.flat_map] received: row_id={row_id} seq={seq} iteration={iteration} kind={kind}")
+            print(f"[DaqDistLight.flat_map] received: seq={seq} iteration={iteration} kind={kind}")
 
             # lazily load per-row progress
             # self._maybe_load_progress(row_id)
@@ -1505,19 +1509,19 @@ def main():
         .build()
     )
 
-    # rows: row_id = 0..n-1 (exactly once each)
-    t_env.create_temporary_table(
-        "rows_tbl",
-        TableDescriptor.for_connector("datagen")
-        .schema(Schema.new_builder()
-                .column("row_id", DataTypes.INT())
-                .build())
-        .option("rows-per-second", str(max(1, n)))
-        .option("fields.row_id.kind", "sequence")
-        .option("fields.row_id.start", "0")
-        .option("fields.row_id.end", str(n - 1))
-        .build()
-    )
+    # # rows: row_id = 0..n-1 (exactly once each)
+    # t_env.create_temporary_table(
+    #     "rows_tbl",
+    #     TableDescriptor.for_connector("datagen")
+    #     .schema(Schema.new_builder()
+    #             .column("row_id", DataTypes.INT())
+    #             .build())
+    #     .option("rows-per-second", str(max(1, n)))
+    #     .option("fields.row_id.kind", "sequence")
+    #     .option("fields.row_id.start", "0")
+    #     .option("fields.row_id.end", str(n - 1))
+    #     .build()
+    # )
 
     # data_view: (seq, row_id, iter, kind='DATA')
     data_view = (
@@ -1571,7 +1575,8 @@ def main():
             .map(
                 # lambda r: Row(int(r[0]), int(r[1]), int(r[2]), str(r[3])),
                 # output_type=Types.ROW([Types.LONG(), Types.INT(), Types.INT(), Types.STRING()])
-                lambda r: Row(int(r[1]), int(r[0]), int(r[2]), str(r[3])),
+                # lambda r: Row(int(r[1]), int(r[0]), int(r[2]), str(r[3])),
+                lambda r: Row(int(r[0]), int(r[1]), str(r[2])),
                 output_type=Types.ROW([Types.INT(), Types.LONG(), Types.INT(), Types.STRING()])
             )
             .name("Tick+RowId")
@@ -1609,8 +1614,9 @@ def main():
 
     # daqdist = pre.key_by(lambda r: r[0], key_type=Types.INT()) \
     # daqdist = kick.key_by(lambda r: r[0], key_type=Types.INT()) \
-    daqdist = kick.key_by(key_row_selector, key_type=Types.INT()) \
-        .flat_map(
+    # daqdist = kick.key_by(key_row_selector, key_type=Types.INT()) \
+    #     .flat_map(
+    daqdist = kick.flat_map(
             DaqDistLight(args),
             output_type=Types.PICKLED_BYTE_ARRAY()
         # ).name("DaqDistLight").set_parallelism(1)
