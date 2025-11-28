@@ -640,6 +640,9 @@ class DaqDistLight(FlatMapFunction):
         self._sent_bytes = 0
         self._last_log = self._t0
 
+        self.task_id = -1
+        self.num_tasks = 0
+
     # ---------- small utils ----------
     def _safe_mkdir_for_file(self, path):
         if not path: return
@@ -723,6 +726,9 @@ class DaqDistLight(FlatMapFunction):
             # serializer
             self.serializer = TraceSerializer.ImageSerializer()
 
+            self.task_id = ctx.get_index_of_this_subtask()
+            self.num_tasks = ctx.get_number_of_parallel_subtasks()
+
             # # Identify row_id from subtask index
             # subtask_index = ctx.get_index_of_this_subtask()
             # total_subtasks = ctx.get_number_of_parallel_subtasks()
@@ -779,8 +785,8 @@ class DaqDistLight(FlatMapFunction):
             seq, iteration, kind = row
             seq = int(seq)
 
-            # print(f"[DaqDistLight.flat_map] received: row_id={row_id} seq={seq} iteration={iteration} kind={kind}")
-            print(f"[DaqDistLight.flat_map] received: seq={seq} iteration={iteration} kind={kind}")
+            # print(f"[DaqDistLight.flat_map][{self.task_id}/{self.num_task}] received: row_id={row_id} seq={seq} iteration={iteration} kind={kind}")
+            print(f"[DaqDistLight.flat_map][{self.task_id}/{self.num_task}] received: seq={seq} iteration={iteration} kind={kind}")
 
             # lazily load per-row progress
             # self._maybe_load_progress(row_id)
@@ -924,13 +930,13 @@ class DaqDistLight(FlatMapFunction):
                 self._emitted_since_save += 1
                 self._maybe_save_progress()
 
-                print(f"[DaqDistLight.flat_map] emitting row_id={row_id} seq={seq} "
+                print(f"[DaqDistLight.flat_map][{self.task_id}/{self.num_task}] emitting row_id={row_id} seq={seq} "
                       f"proj_id={img.UniqueId()} theta={theta:.4f} center={center:.2f} "
                       f"size={len(out_bytes)} bytes")
                 yield [row_id, meta, out_bytes]
 
         except Exception as e:
-            print("[DaqDistLight] exception:", e, file=sys.stderr)
+            print(f"[DaqDistLight][{self.task_id}/{self.num_task}] exception:", e, file=sys.stderr)
             traceback.print_exc()
             # If you want the job to restart on data errors, re-raise:
             # raise
