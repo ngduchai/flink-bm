@@ -1542,33 +1542,54 @@ def main():
 
     t_env.create_temporary_view("data_view", data_view)
 
-    # warmup_view: one WARMUP per row_id
-    warmup_view = (
-        # t_env.from_path("rows_tbl")
-        t_env.from_path("tick_data")
-            .select(
-                E.lit(0).cast(DataTypes.BIGINT()).alias("seq"),
-                # E.col("row_id"),
-                # E.col("seq"),
-                E.lit(0).cast(DataTypes.INT()).alias("iter"),
-                E.lit("WARMUP").alias("kind"))
-    )
+    # # warmup_view: one WARMUP per row_id
+    # warmup_view = (
+    #     t_env.from_path("rows_tbl")
+    #         .select(
+    #             E.lit(0).cast(DataTypes.BIGINT()).alias("seq"),
+    #             E.col("row_id"),
+    #             E.lit(0).cast(DataTypes.INT()).alias("iter"),
+    #             E.lit("WARMUP").alias("kind"))
+    # )
 
+    # t_env.create_temporary_view("warmup_view", warmup_view)
+
+    # # fin_view: one FIN per row_id
+    # fin_view = (
+    #     t_env.from_path("rows_tbl")
+    #         .select(
+    #             E.lit(total_rows - 1).cast(DataTypes.BIGINT()).alias("seq"),
+    #             E.col("row_id"),
+    #             E.lit(int(args.d_iteration)).cast(DataTypes.INT()).alias("iter"),
+    #             E.lit("FIN").alias("kind"))
+    # )
+
+    # t_env.create_temporary_view("fin_view", fin_view)
+
+    warmup_view = t_env.from_values(
+        DataTypes.ROW(
+            [
+                DataTypes.FIELD("seq", DataTypes.BIGINT()),
+                DataTypes.FIELD("iter", DataTypes.INT()),
+                DataTypes.FIELD("kind", DataTypes.STRING()),
+            ]
+        ),
+        [(0, 0, "WARMUP")]
+    )
     t_env.create_temporary_view("warmup_view", warmup_view)
 
-    # fin_view: one FIN per row_id
-    fin_view = (
-        # t_env.from_path("rows_tbl")
-        t_env.from_path("tick_data")
-            .select(
-                E.lit(total_rows - 1).cast(DataTypes.BIGINT()).alias("seq"),
-                # E.col("row_id"),
-                # E.col("seq"),
-                E.lit(int(args.d_iteration)).cast(DataTypes.INT()).alias("iter"),
-                E.lit("FIN").alias("kind"))
+    fin_view = t_env.from_values(
+        DataTypes.ROW(
+            [
+                DataTypes.FIELD("seq", DataTypes.BIGINT()),
+                DataTypes.FIELD("iter", DataTypes.INT()),
+                DataTypes.FIELD("kind", DataTypes.STRING()),
+            ]
+        ),
+        [(total_rows-1, 0, "FIN")]
     )
-
     t_env.create_temporary_view("fin_view", fin_view)
+
 
     # Union all three
     tick_src_all = (
