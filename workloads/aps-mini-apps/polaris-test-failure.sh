@@ -73,11 +73,8 @@ DIR="$HOME/diaspora/src/flink"
 echo "DIR: $DIR"
 workload="workloads/aps-mini-apps"
 
-HOSTFILE="${PBS_NODEFILE:-/dev/null}"
-NUM_HOSTS=1
-if [[ -f "$HOSTFILE" ]]; then
-  NUM_HOSTS="$(wc -l < "$HOSTFILE" | tr -d ' ')"
-fi
+PBS_HOSTFILE="${PBS_NODEFILE:-/dev/null}"
+HOSTFILE="$DIR/host-file.txt"
 
 TOP="$(cat "$DIR/recent-run")"
 
@@ -96,6 +93,13 @@ count=0
 
 for num_sirt in "${num_sirts[@]}"; do
   for failure_period in "${failure_periods[@]}"; do
+
+    NUM_HOSTS=1
+    head $PBS_HOSTFILE -n ${num_sirt} > "$HOSTFILE"
+    if [[ -f "$PBS_HOSTFILE" ]]; then
+      NUM_HOSTS="$(wc -l < "$HOSTFILE" | tr -d ' ')"
+    fi
+
     # ceil(num_sirt / NUM_HOSTS), minimum 1
     taskmanager_per_node=$(( (num_sirt + NUM_HOSTS - 1) / NUM_HOSTS ))
     if (( taskmanager_per_node < 1 )); then taskmanager_per_node=1; fi
@@ -111,7 +115,7 @@ for num_sirt in "${num_sirts[@]}"; do
 
     echo "Start Flink cluster"
     bash stop-all.sh
-    bash start-all.sh "$taskmanager_per_node"
+    bash start-all.sh "$taskmanager_per_node" "$HOSTFILE"
 
     cd "$workload"
     echo "Install workload"
@@ -131,7 +135,7 @@ for num_sirt in "${num_sirts[@]}"; do
 
     echo "Run the test"
     bash test-failure.sh \
-      taskmanager-${failure_mode}-failure-inject-local.sh \
+      taskmanager-${failure_mode}-failure-inject.sh \
       "$failure_period" \
       "$recover_interval" \
       execute-pipeline.py \
