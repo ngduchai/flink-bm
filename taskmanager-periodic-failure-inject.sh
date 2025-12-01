@@ -64,7 +64,7 @@ while true; do
 
   # Find TaskManagerRunner instances on the target node
   mapfile -t INSTANCES < <(
-    ssh "$TARGET_NODE" "apptainer instance list | grep flink-taskmanager- | awk '{print \$1}'" 2>/dev/null
+    ssh "$TARGET_NODE" "cd \"\$HOME\" && source load-apptainer.sh && apptainer instance list | grep flink-taskmanager- | awk '{print \$1}'" 2>/dev/null
   )
 
   # Strip the prefix to get logical instance names
