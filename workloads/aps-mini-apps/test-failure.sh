@@ -1,5 +1,5 @@
 
-if [[ $# -lt 4 ]]; then
+if [[ $# -lt 5 ]]; then
   echo "Usage: $0 <FailureInjectionScript> <MeanFailureInterval> <MeanRecoverInterval> <hostfile> <FlinkJob> <params>"
   echo "Example: $0 taskmanager-single-failure-inject.sh 30 ${PBS_NODEFILE:-nodes.txt} /path/to/job.jar --rateMs 100 --sourceParallelism 2 --downstreamParallelism 2 --downstreamDelayMs 0 --maxRecords 1000"
   exit 1

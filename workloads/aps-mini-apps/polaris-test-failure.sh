@@ -138,6 +138,7 @@ for num_sirt in "${num_sirts[@]}"; do
       taskmanager-${failure_mode}-failure-inject.sh \
       "$failure_period" \
       "$recover_interval" \
+      "$HOSTFILE" \
       execute-pipeline.py \
       "$PARAMS_FILE" \
       > $WORKSPACE/test-log.out 2> $WORKSPACE/test-log.err
