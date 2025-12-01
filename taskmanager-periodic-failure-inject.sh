@@ -78,7 +78,7 @@ while true; do
     FAIL_COUNT=$(( FAIL_COUNT + 1 ))
     echo "[$(date '+%F %T')] Failure #$FAIL_COUNT on $TARGET_NODE: stopping instance $inst"
 
-    ssh "$TARGET_NODE" "apptainer instance stop \"$inst\""
+    ssh "$TARGET_NODE" "cd \"\$HOME\" && source load-apptainer.sh && apptainer instance stop \"$inst\""
 
     # Sample an exponential delay for restart around RECOVER_INTERVAL
     delay=$(awk -v m="$RECOVER_INTERVAL" 'BEGIN{srand(); u=rand(); if(u<1e-9) u=1e-9; print -m * log(u)}')
