@@ -21,7 +21,7 @@ recover_interval=1
 sinograms_per_task=2
 # Number of reconstruction processes (consumer/main computation tasks)
 #num_sirts=(2 4 8)
-num_sirts=(1 2)
+num_sirts=(2)
 #num_sirts=(4 8)
 # Mean time between failures
 #failure_periods=(1000000 160 80 40 20)
