@@ -1481,7 +1481,7 @@ def main():
     # ck.set_min_pause_between_checkpoints(5 * 1000)     # 5s pause
 
     # Comment out because we use custom partitioning
-    ck.enable_unaligned_checkpoints(True)              # helps under backpressure
+    # ck.enable_unaligned_checkpoints(True)              # helps under backpressure
     # ck.set_aligned_checkpoint_timeout(Duration.of_seconds(0))        # switch to unaligned if align >3s
 
     # env.disable_operator_chaining()
@@ -1695,16 +1695,24 @@ def main():
     # sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
     # sirt = daqdist.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
     # sirt = daqdist.key_by(lambda r: r[0], key_type=Types.INT()) \
-    sirt = daqdist.key_by(key_row_selector, key_type=Types.INT()) \
-        .flat_map(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
-    # sirt = daqdist.flat_map(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
-            output_type=Types.PICKLED_BYTE_ARRAY()) \
+    sirt = daqdist.partition_custom(TaskIdPartitioner(), key_row_selector) \
         .name("Sirt Operator") \
+        .process(
+            SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
+            output_type=Types.PICKLED_BYTE_ARRAY()
+        ) \
         .set_parallelism(max(1, args.ntask_sirt)) \
-        .uid("sirt-operator") \
-        # .set_max_parallelism(max(1, args.ntask_sirt)) \
-        # .disable_chaining().start_new_chain() \
-        # .slot_sharing_group("sirt")
+        .uid("sirt-operator")
+    
+    # sirt = daqdist.key_by(key_row_selector, key_type=Types.INT()) \
+    #     .flat_map(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
+    #         output_type=Types.PICKLED_BYTE_ARRAY()) \
+    #     .name("Sirt Operator") \
+    #     .set_parallelism(max(1, args.ntask_sirt)) \
+    #     .uid("sirt-operator") \
+    #     # .set_max_parallelism(max(1, args.ntask_sirt)) \
+    #     # .disable_chaining().start_new_chain() \
+    #     # .slot_sharing_group("sirt")
 
 
     # den = sirt.key_by(lambda r: r[0], key_type=Types.INT()) \
