@@ -1,5 +1,5 @@
 #!/bin/bash
-#PBS -l select=4:system=polaris
+#PBS -l select=8:system=polaris
 #PBS -l walltime=01:00:00
 #PBS -N Flink
 #PBS -q debug-scaling
@@ -21,12 +21,12 @@ recover_interval=1
 sinograms_per_task=2
 # Number of reconstruction processes (consumer/main computation tasks)
 #num_sirts=(2 4 8)
-num_sirts=(2)
+num_sirts=(1 2 4 8)
 #num_sirts=(4 8)
 # Mean time between failures
 #failure_periods=(1000000 160 80 40 20)
-failure_periods=(160)
-#failure_periods=(1000000)
+# failure_periods=(160)
+failure_periods=(1000000)
 # Failure modes:
 #   - periodic: failures happen once every a fixed interval
 #   - singe:    failure happen only once
@@ -34,6 +34,9 @@ failure_periods=(160)
 failure_mode=periodic
 #failure_mode=single
 #failure_mode=limited
+
+# workflow=execute-pipeline.py
+workflow=execute-pipeline-random-no-ckpt.py
 
 
 # --- generic: set JSON value at a (possibly dotted) path using jq ---
@@ -132,9 +135,6 @@ for num_sirt in "${num_sirts[@]}"; do
     # json_set "$PARAMS_FILE" "proj_sleep" "0.1"
     # json_set "$PARAMS_FILE" "cast_to_float32" "true"
     # json_set "$PARAMS_FILE" "simulation_file" "./data/foo.h5"
-
-    workflow=execute-pipeline.py
-    # workflow=execute-pipeline-random-no-ckpt.py
 
     echo "Run the test"
     bash test-failure.sh \
