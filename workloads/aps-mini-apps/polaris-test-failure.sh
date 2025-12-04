@@ -133,13 +133,16 @@ for num_sirt in "${num_sirts[@]}"; do
     # json_set "$PARAMS_FILE" "cast_to_float32" "true"
     # json_set "$PARAMS_FILE" "simulation_file" "./data/foo.h5"
 
+    workflow=execute-pipeline.py
+    # workflow=execute-pipeline-random-no-ckpt.py
+
     echo "Run the test"
     bash test-failure.sh \
       taskmanager-${failure_mode}-failure-inject.sh \
       "$failure_period" \
       "$recover_interval" \
       "$HOSTFILE" \
-      execute-pipeline.py \
+      $workflow \
       "$PARAMS_FILE" \
       > $WORKSPACE/test-log.out 2> $WORKSPACE/test-log.err
 
