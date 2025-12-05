@@ -1486,7 +1486,7 @@ def main():
 
     # # env.disable_operator_chaining()
     # # env.set_buffer_timeout(100)
-    env.get_checkpoint_config().disable_checkpointing()
+    # env.get_checkpoint_config().disable_checkpointing()
 
     _ship_local_modules(env)
 
