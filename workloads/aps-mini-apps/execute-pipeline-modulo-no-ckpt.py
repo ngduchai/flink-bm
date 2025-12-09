@@ -1125,6 +1125,8 @@ class SirtOperator(FlatMapFunction):
             traceback.print_exc()
             return
 
+        if row_id not in self.processed_local:
+            self.processed_local[row_id] = 0
         self.processed_local[row_id] += 1
 
         # count-based snapshot
