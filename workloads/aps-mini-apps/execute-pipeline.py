@@ -91,6 +91,45 @@ def fnv1a32(data) -> int:
         h = (h * 0x01000193) & 0xFFFFFFFF
     return h
 
+
+MASK32 = 0xFFFFFFFF
+
+def rotl(x, r):
+    return ((x << r) | (x >> (32 - r))) & MASK32
+
+def rotr(x, r):
+    return ((x >> r) | (x << (32 - r))) & MASK32
+
+def hash_u32(k):
+    k = (k * 0xcc9e2d51) & MASK32
+    k = rotl(k, 15)
+    k = (k * 0x1b873593) & MASK32
+    k = rotl(k, 13)
+    k = (k * 5 + 0xe6546b64) & MASK32
+    k ^= 4
+    k ^= (k >> 16)
+    k = (k * 0x85ebca6b) & MASK32
+    k ^= (k >> 13)
+    k = (k * 0xc2b2ae35) & MASK32
+    k ^= (k >> 16)
+    return k & MASK32
+
+def invhash_u32(k):
+    k ^= (k >> 16)
+    k = (k * 0x7ed1b41d) & MASK32
+    k ^= (k >> 13)
+    k ^= (k >> 26)
+    k = (k * 0xa5cb9243) & MASK32
+    k ^= (k >> 16)
+    k ^= 4
+    k = ((k - 0xe6546b64) * 0xcccccccd) & MASK32
+    k = rotr(k, 13)
+    k = (k * 0x56ed309b) & MASK32
+    k = rotr(k, 15)
+    k = (k * 0xdee13bb1) & MASK32
+    return k & MASK32
+
+
 # -------------------------
 # IO helpers
 # -------------------------
@@ -882,7 +921,8 @@ class DaqDistLight(FlatMapFunction):
                 sub[np.where(sub == np.inf)] = 0.0
 
             # split across num_sinograms and select ONLY this row_id's slice
-            for row_id in range(int(self.args.num_sinograms)):
+            for original_row_id in range(int(self.args.num_sinograms)):
+                row_id = invhash_u32(original_row_id)
                 # H, W = sub.shape[1], sub.shape[2]
                 # off, rows_here = self._split_rows(H, int(self.args.num_sinograms), row_id)
                 # if rows_here == 0:
@@ -930,7 +970,7 @@ class DaqDistLight(FlatMapFunction):
                 self._emitted_since_save += 1
                 self._maybe_save_progress()
 
-                print(f"[DaqDistLight.flat_map][{self.task_id}/{self.num_tasks}] emitting row_id={row_id} seq={seq} "
+                print(f"[DaqDistLight.flat_map][{self.task_id}/{self.num_tasks}] emitting row_id={row_id}({original_row_id}) seq={seq} "
                       f"proj_id={img.UniqueId()} theta={theta:.4f} center={center:.2f} "
                       f"size={len(out_bytes)} bytes")
                 yield [row_id, meta, out_bytes]
@@ -1087,6 +1127,7 @@ class SirtOperator(FlatMapFunction):
     # def process_element(self, value, ctx):
     def flat_map(self, value):
         row_id, meta_in, payload = value
+        original_row_id = hash_u32(row_id)
         self._maybe_restore(row_id)
         print(f"SirtOperator: Received msg: {meta_in}, size {len(payload)} bytes")
 
@@ -1134,7 +1175,7 @@ class SirtOperator(FlatMapFunction):
             row_id = out_meta["row_id"]
             import time
             now = time.time()
-            print(f"[{now}] SirtOperator -- Task-{self.task_id}: Sent: row_id={row_id} stream={iteration_stream}")
+            print(f"[{now}] SirtOperator -- Task-{self.task_id}: Sent: row_id={row_id}({original_row_id}) stream={iteration_stream}")
             yield [row_id, dict(out_meta), bytes(out_bytes)]
 
 
@@ -1601,7 +1642,8 @@ def main():
 
                 # lambda r: Row(int(r[1]), int(r[0]), int(r[2]), str(r[3])),
                 # output_type=Types.ROW([Types.INT(), Types.LONG(), Types.INT(), Types.STRING()])
-                lambda r: Row(int(r[0]), int(r[1]), str(r[2])),
+                # lambda r: Row(int(r[0]), int(r[1]), str(r[2])),
+                lambda r: Row(int(r[0]), invhash_u32(int(r[1])), str(r[2])),
                 output_type=Types.ROW([Types.LONG(), Types.INT(), Types.STRING()])
             )
             .name("Tick+RowId")
