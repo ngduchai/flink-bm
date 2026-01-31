@@ -5,5 +5,6 @@ TOP=/lus/eagle/projects/Diaspora/ndhai/flink/failure-injection/periodic/D${DATE}
 mkdir -p $TOP
 echo $TOP > recent-run
 cd $TOP
-qsub -o $TOP $HOME/diaspora/src/flink/workloads/aps-mini-apps/polaris-test-failure.sh
+# qsub -o $TOP $HOME/diaspora/src/flink/workloads/aps-mini-apps/polaris-test-failure.sh
+bash $HOME/diaspora/src/flink/workloads/aps-mini-apps/polaris-test-failure.sh
 
