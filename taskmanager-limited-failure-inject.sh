@@ -34,7 +34,17 @@ restart_task() {
 
 }
 
+num_failures=2
+injected_failures=0
+
 while true; do
+
+  if (( injected_failures >= num_failures )); then
+    echo "[$(date '+%F %T')] Reached maximum number of injected failures ($num_failures). Exiting."
+    exit 0
+  fi
+  injected_failures=$(( injected_failures + 1 ))
+
   # sample an exponential delay:  delay = -mean * ln(U), U~Uniform(0,1)
   DELAY=$MEAN_INTERVAL
   # round to 3 decimal places

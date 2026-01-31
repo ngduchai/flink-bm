@@ -19,18 +19,21 @@ update_config_file() {
 # Directory where this script (and start-*.sh) resides
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
+if [[ $# -lt 2 ]]; then
+  echo "Usage: $0 <numTaskManagersPerNode> <HostFile>"
+  exit 1
+fi
+
 # Node list from PBS or fallback
-NODE_FILE=${PBS_NODEFILE:-nodes.txt}
+# NODE_FILE=${PBS_NODEFILE:-nodes.txt}
+NODE_FILE=$2
 nodes=( $(cat "$NODE_FILE") )
 
 # First node is JobManager
 jm_node=${nodes[0]}
 # All nodes run TaskManagers
 tm_nodes=( "${nodes[@]}" )
-if [[ $# -lt 1 ]]; then
-  echo "Usage: $0 <numTaskManagersPerNode>"
-  exit 1
-fi
+
 taskmanager_per_node=$1
 
 echo "JobManager node: $jm_node"

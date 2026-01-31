@@ -91,45 +91,6 @@ def fnv1a32(data) -> int:
         h = (h * 0x01000193) & 0xFFFFFFFF
     return h
 
-
-MASK32 = 0xFFFFFFFF
-
-def rotl(x, r):
-    return ((x << r) | (x >> (32 - r))) & MASK32
-
-def rotr(x, r):
-    return ((x >> r) | (x << (32 - r))) & MASK32
-
-def hash_u32(k):
-    k = (k * 0xcc9e2d51) & MASK32
-    k = rotl(k, 15)
-    k = (k * 0x1b873593) & MASK32
-    k = rotl(k, 13)
-    k = (k * 5 + 0xe6546b64) & MASK32
-    k ^= 4
-    k ^= (k >> 16)
-    k = (k * 0x85ebca6b) & MASK32
-    k ^= (k >> 13)
-    k = (k * 0xc2b2ae35) & MASK32
-    k ^= (k >> 16)
-    return k & MASK32
-
-def invhash_u32(k):
-    k ^= (k >> 16)
-    k = (k * 0x7ed1b41d) & MASK32
-    k ^= (k >> 13)
-    k ^= (k >> 26)
-    k = (k * 0xa5cb9243) & MASK32
-    k ^= (k >> 16)
-    k ^= 4
-    k = ((k - 0xe6546b64) * 0xcccccccd) & MASK32
-    k = rotr(k, 13)
-    k = (k * 0x56ed309b) & MASK32
-    k = rotr(k, 15)
-    k = (k * 0xdee13bb1) & MASK32
-    return k & MASK32
-
-
 # -------------------------
 # IO helpers
 # -------------------------
@@ -700,49 +661,51 @@ class DaqDistLight(FlatMapFunction):
         return os.path.join(root, f"row_{row_id}.json")
 
     def _maybe_load_progress(self, row_id: int):
-        """Load progress once we know row_id (first record for the key)."""
-        if self._progress_loaded:
-            return
-        self._row_id = int(row_id)
-        self._progress_path = self._progress_file_for_row(self._row_id)
-        try:
-            with open(self._progress_path, "r", encoding="utf-8") as f:
-                rec = json.load(f)
-            self._last_seq = int(rec.get("last_seq", -1))
-            print(f"[DaqDistLight] restore row={self._row_id} last_seq={self._last_seq} from {self._progress_path}")
-        except FileNotFoundError:
-            print(f"[DaqDistLight] no prior progress for row={self._row_id}; starting fresh")
-            self._last_seq = -1
-        except Exception as e:
-            print(f"[DaqDistLight] WARN: progress read failed for row={self._row_id}: {e}")
-        self._progress_loaded = True
-        self._last_save_ts = time.time()
-        self._emitted_since_save = 0
+        return
+        # """Load progress once we know row_id (first record for the key)."""
+        # if self._progress_loaded:
+        #     return
+        # self._row_id = int(row_id)
+        # self._progress_path = self._progress_file_for_row(self._row_id)
+        # try:
+        #     with open(self._progress_path, "r", encoding="utf-8") as f:
+        #         rec = json.load(f)
+        #     self._last_seq = int(rec.get("last_seq", -1))
+        #     print(f"[DaqDistLight] restore row={self._row_id} last_seq={self._last_seq} from {self._progress_path}")
+        # except FileNotFoundError:
+        #     print(f"[DaqDistLight] no prior progress for row={self._row_id}; starting fresh")
+        #     self._last_seq = -1
+        # except Exception as e:
+        #     print(f"[DaqDistLight] WARN: progress read failed for row={self._row_id}: {e}")
+        # self._progress_loaded = True
+        # self._last_save_ts = time.time()
+        # self._emitted_since_save = 0
 
     def _maybe_save_progress(self, force=False):
-        if not self._progress_loaded:
-            return
-        now = time.time()
-        if not force:
-            if self._emitted_since_save < self.SAVE_EVERY_RECORDS and (now - self._last_save_ts) < self.SAVE_EVERY_SECONDS:
-                return
-        try:
-            self._safe_mkdir_for_file(self._progress_path)
-            payload = {
-                "version": 1,
-                "ts": now,
-                "row_id": int(self._row_id),
-                "last_seq": int(self._last_seq),
-                "nmsgs": int(self.nmsgs),
-                "input": str(self.args.simulation_file),
-            }
-            self._atomic_write(self._progress_path, json.dumps(payload).encode("utf-8"))
-            self._last_save_ts = now
-            self._emitted_since_save = 0
-            # tiny log
-            print(f"[DaqDistLight] save row={self._row_id} last_seq={self._last_seq} -> {self._progress_path}")
-        except Exception as e:
-            print(f"[DaqDistLight] WARN: progress write failed for row={self._row_id}: {e}")
+        return
+        # if not self._progress_loaded:
+        #     return
+        # now = time.time()
+        # if not force:
+        #     if self._emitted_since_save < self.SAVE_EVERY_RECORDS and (now - self._last_save_ts) < self.SAVE_EVERY_SECONDS:
+        #         return
+        # try:
+        #     self._safe_mkdir_for_file(self._progress_path)
+        #     payload = {
+        #         "version": 1,
+        #         "ts": now,
+        #         "row_id": int(self._row_id),
+        #         "last_seq": int(self._last_seq),
+        #         "nmsgs": int(self.nmsgs),
+        #         "input": str(self.args.simulation_file),
+        #     }
+        #     self._atomic_write(self._progress_path, json.dumps(payload).encode("utf-8"))
+        #     self._last_save_ts = now
+        #     self._emitted_since_save = 0
+        #     # tiny log
+        #     print(f"[DaqDistLight] save row={self._row_id} last_seq={self._last_seq} -> {self._progress_path}")
+        # except Exception as e:
+        #     print(f"[DaqDistLight] WARN: progress write failed for row={self._row_id}: {e}")
 
     @staticmethod
     def _split_rows(total_rows, parts, k):
@@ -921,8 +884,7 @@ class DaqDistLight(FlatMapFunction):
                 sub[np.where(sub == np.inf)] = 0.0
 
             # split across num_sinograms and select ONLY this row_id's slice
-            for original_row_id in range(int(self.args.num_sinograms)):
-                row_id = invhash_u32(original_row_id)
+            for row_id in range(int(self.args.num_sinograms)):
                 # H, W = sub.shape[1], sub.shape[2]
                 # off, rows_here = self._split_rows(H, int(self.args.num_sinograms), row_id)
                 # if rows_here == 0:
@@ -970,7 +932,7 @@ class DaqDistLight(FlatMapFunction):
                 self._emitted_since_save += 1
                 self._maybe_save_progress()
 
-                print(f"[DaqDistLight.flat_map][{self.task_id}/{self.num_tasks}] emitting row_id={row_id}({original_row_id}) seq={seq} "
+                print(f"[DaqDistLight.flat_map][{self.task_id}/{self.num_tasks}] emitting row_id={row_id} seq={seq} "
                       f"proj_id={img.UniqueId()} theta={theta:.4f} center={center:.2f} "
                       f"size={len(out_bytes)} bytes")
                 yield [row_id, meta, out_bytes]
@@ -1071,63 +1033,64 @@ class SirtOperator(FlatMapFunction):
               f"thread_count={self.cfg['thread_count']}")
     
     def _maybe_restore(self, row_id):
-        # Try until we either restored bytes or confirmed there's nothing to restore.
-        if row_id in self._restored and self._restored[row_id] == True:
-            return
-        try:
-            print(f"SirtOperator: Task-{self.task_id}/{self.num_tasks} restoring state (row_id: {row_id})...")
-            raw = self.snap_state.value()   # keyed ValueState for the current key
-            cnt_state = self.count_state.value()
-            # print(f"[SirtOperator]: restoring from checkpoint: count = {cnt_state}")
-            # print(f"[SirtOperator]: restoring from checkpoint: self = {len(raw)}")
-            if raw:
-                raw_bytes = raw if isinstance(raw, (bytes, bytearray)) else bytes(raw)
-                print(f"[SirtOperator]: found previous state: {len(raw_bytes)} bytes. Restoring")
-                import sirt_ops
-                with sirt_ops.ostream_redirect(): 
-                    self.engine.restore(raw_bytes)
-                # also restore counter if present
-                # cnt = self.count_state.value()
-                # cnt = cnt_state
-                self.processed_local[row_id] = int(cnt_state) if cnt_state is not None else 0
-                print(f"[SirtOperator] Restored {len(raw_bytes)} bytes from state with processed_local = {cnt_state}")
-            else:
-                # No bytes yet for this key; don't flip the flag so we can retry
-                print(f"[SirtOperator] Cannot find previous state. Start from beginning")
-                self.processed_local[row_id] = 0
-            # cnt_state = self.count_state.value()
-            # self.processed_local = int(cnt_state) if cnt_state is not None else self.processed_local
-            # print(f"[SirtOperator] restored with processed_local = {self.processed_local}")
-        except Exception as e:
-            print("[SirtOperator] restore step failed:", e, file=sys.stderr)
-            traceback.print_exc()
-            # keep _restored = False to retry on the next element
-        self._restored[row_id] = True
+        # # Try until we either restored bytes or confirmed there's nothing to restore.
+        # if row_id in self._restored and self._restored[row_id] == True:
+        #     return
+        # try:
+        #     print(f"SirtOperator: Task-{self.task_id}/{self.num_tasks} restoring state (row_id: {row_id})...")
+        #     raw = self.snap_state.value()   # keyed ValueState for the current key
+        #     cnt_state = self.count_state.value()
+        #     # print(f"[SirtOperator]: restoring from checkpoint: count = {cnt_state}")
+        #     # print(f"[SirtOperator]: restoring from checkpoint: self = {len(raw)}")
+        #     if raw:
+        #         raw_bytes = raw if isinstance(raw, (bytes, bytearray)) else bytes(raw)
+        #         print(f"[SirtOperator]: found previous state: {len(raw_bytes)} bytes. Restoring")
+        #         import sirt_ops
+        #         with sirt_ops.ostream_redirect(): 
+        #             self.engine.restore(raw_bytes)
+        #         # also restore counter if present
+        #         # cnt = self.count_state.value()
+        #         # cnt = cnt_state
+        #         self.processed_local[row_id] = int(cnt_state) if cnt_state is not None else 0
+        #         print(f"[SirtOperator] Restored {len(raw_bytes)} bytes from state with processed_local = {cnt_state}")
+        #     else:
+        #         # No bytes yet for this key; don't flip the flag so we can retry
+        #         print(f"[SirtOperator] Cannot find previous state. Start from beginning")
+        #         self.processed_local[row_id] = 0
+        #     # cnt_state = self.count_state.value()
+        #     # self.processed_local = int(cnt_state) if cnt_state is not None else self.processed_local
+        #     # print(f"[SirtOperator] restored with processed_local = {self.processed_local}")
+        # except Exception as e:
+        #     print("[SirtOperator] restore step failed:", e, file=sys.stderr)
+        #     traceback.print_exc()
+        #     # keep _restored = False to retry on the next element
+        # self._restored[row_id] = True
+        return
 
 
     def _do_snapshot(self, row_id):
-        """Snapshot engine & persist to Flink state. Crash if it fails so Flink restores."""
-        try:
-            import sirt_ops
-            with sirt_ops.ostream_redirect(): 
-                snap = self.engine.snapshot(row_id)
-            snap_bytes = snap if isinstance(snap, (bytes, bytearray)) else bytes(snap)
-            self.snap_state.update(snap_bytes)
-            # self.snap_state.update(bytes([1, 2, 3]))
-            self.count_state.update(self.processed_local[row_id])
-            # raw = self.snap_state.value()
-            cnt = self.count_state.value()
-            # print(f"[SirtOperator] snapshot at {self.processed_local} tuples: {len(snap_bytes)} bytes: self = {len(raw)}, count = {cnt}")
-            print(f"[SirtOperator] snapshot at {self.processed_local[row_id]} tuples: count = {cnt}")
-        except Exception as e:
-            print("[SirtOperator] engine.snapshot failed:", e, file=sys.stderr)
-            traceback.print_exc()
-            return
+        # """Snapshot engine & persist to Flink state. Crash if it fails so Flink restores."""
+        # try:
+        #     import sirt_ops
+        #     with sirt_ops.ostream_redirect(): 
+        #         snap = self.engine.snapshot(row_id)
+        #     snap_bytes = snap if isinstance(snap, (bytes, bytearray)) else bytes(snap)
+        #     self.snap_state.update(snap_bytes)
+        #     # self.snap_state.update(bytes([1, 2, 3]))
+        #     self.count_state.update(self.processed_local[row_id])
+        #     # raw = self.snap_state.value()
+        #     cnt = self.count_state.value()
+        #     # print(f"[SirtOperator] snapshot at {self.processed_local} tuples: {len(snap_bytes)} bytes: self = {len(raw)}, count = {cnt}")
+        #     print(f"[SirtOperator] snapshot at {self.processed_local[row_id]} tuples: count = {cnt}")
+        # except Exception as e:
+        #     print("[SirtOperator] engine.snapshot failed:", e, file=sys.stderr)
+        #     traceback.print_exc()
+        #     return
+        return
 
     # def process_element(self, value, ctx):
     def flat_map(self, value):
         row_id, meta_in, payload = value
-        original_row_id = hash_u32(row_id)
         self._maybe_restore(row_id)
         print(f"SirtOperator: Received msg: {meta_in}, size {len(payload)} bytes")
 
@@ -1162,6 +1125,8 @@ class SirtOperator(FlatMapFunction):
             traceback.print_exc()
             return
 
+        if row_id not in self.processed_local:
+            self.processed_local[row_id] = 0
         self.processed_local[row_id] += 1
 
         # count-based snapshot
@@ -1175,7 +1140,7 @@ class SirtOperator(FlatMapFunction):
             row_id = out_meta["row_id"]
             import time
             now = time.time()
-            print(f"[{now}] SirtOperator -- Task-{self.task_id}: Sent: row_id={row_id}({original_row_id}) stream={iteration_stream}")
+            print(f"[{now}] SirtOperator -- Task-{self.task_id}: Sent: row_id={row_id} stream={iteration_stream}")
             yield [row_id, dict(out_meta), bytes(out_bytes)]
 
 
@@ -1513,20 +1478,21 @@ def main():
 
     env = StreamExecutionEnvironment.get_execution_environment(cfg)
 
-    env.set_runtime_mode(RuntimeExecutionMode.STREAMING)
+    # env.set_runtime_mode(RuntimeExecutionMode.STREAMING)
     
-    env.enable_checkpointing(10000, CheckpointingMode.EXACTLY_ONCE)
-    ck = env.get_checkpoint_config()
-    ck.set_checkpoint_timeout(15 * 60 * 1000)          # 15 min timeout
-    ck.set_max_concurrent_checkpoints(1)               # avoid overlaps
-    # ck.set_min_pause_between_checkpoints(5 * 1000)     # 5s pause
+    # env.enable_checkpointing(10000, CheckpointingMode.EXACTLY_ONCE)
+    # ck = env.get_checkpoint_config()
+    # ck.set_checkpoint_timeout(15 * 60 * 1000)          # 15 min timeout
+    # ck.set_max_concurrent_checkpoints(1)               # avoid overlaps
+    # # ck.set_min_pause_between_checkpoints(5 * 1000)     # 5s pause
 
-    # Comment out because we use custom partitioning
-    ck.enable_unaligned_checkpoints(True)              # helps under backpressure
-    # ck.set_aligned_checkpoint_timeout(Duration.of_seconds(0))        # switch to unaligned if align >3s
+    # # Comment out because we use custom partitioning
+    # ck.enable_unaligned_checkpoints(True)              # helps under backpressure
+    # # ck.set_aligned_checkpoint_timeout(Duration.of_seconds(0))        # switch to unaligned if align >3s
 
-    # env.disable_operator_chaining()
-    # env.set_buffer_timeout(100)
+    # # env.disable_operator_chaining()
+    # # env.set_buffer_timeout(100)
+    # env.get_checkpoint_config().disable_checkpointing()
 
     _ship_local_modules(env)
 
@@ -1642,8 +1608,7 @@ def main():
 
                 # lambda r: Row(int(r[1]), int(r[0]), int(r[2]), str(r[3])),
                 # output_type=Types.ROW([Types.INT(), Types.LONG(), Types.INT(), Types.STRING()])
-                # lambda r: Row(int(r[0]), int(r[1]), str(r[2])),
-                lambda r: Row(int(r[0]), invhash_u32(int(r[1])), str(r[2])),
+                lambda r: Row(int(r[0]), int(r[1]), str(r[2])),
                 output_type=Types.ROW([Types.LONG(), Types.INT(), Types.STRING()])
             )
             .name("Tick+RowId")
@@ -1737,9 +1702,8 @@ def main():
     # sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
     # sirt = daqdist.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
     # sirt = daqdist.key_by(lambda r: r[0], key_type=Types.INT()) \
-    sirt = daqdist.key_by(key_row_selector, key_type=Types.INT()) \
+    sirt = daqdist.partition_custom(TaskIdPartitioner(), key_row_selector) \
         .flat_map(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
-    # sirt = daqdist.flat_map(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
             output_type=Types.PICKLED_BYTE_ARRAY()) \
         .name("Sirt Operator") \
         .set_parallelism(max(1, args.ntask_sirt)) \

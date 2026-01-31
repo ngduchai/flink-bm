@@ -114,9 +114,9 @@ PYBIND11_MODULE(sirt_ops, m) {
             py::arg("config"), py::arg("metadata"), py::arg("payload"))
 
         .def("snapshot",
-            [](const SirtEngine& self) {
+            [](const SirtEngine& self, int selected_id) {
                 py::gil_scoped_release g;
-                auto v = self.snapshot();
+                auto v = self.snapshot(selected_id);
                 return py::bytes(reinterpret_cast<const char*>(v.data()), v.size());
             })
 
