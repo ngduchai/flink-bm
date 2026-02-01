@@ -1132,6 +1132,7 @@ class SirtOperator(FlatMapFunction):
             import sirt_ops
             with sirt_ops.ostream_redirect():  # RAII context from pybind11
                 if self.slowdown_time > 0:
+                    import time
                     time.sleep(self.slowdown_time/1000)
                 out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
         except Exception as e:
