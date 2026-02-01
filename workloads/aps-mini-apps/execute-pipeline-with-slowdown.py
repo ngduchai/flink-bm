@@ -31,6 +31,7 @@ from pyflink.table import StreamTableEnvironment
 from pyflink.datastream.functions import Partitioner
 
 import json
+import time
 
 
 # -------------------------
