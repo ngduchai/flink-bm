@@ -1130,7 +1130,7 @@ class SirtOperator(FlatMapFunction):
                 meta_in["checksum"] = "0"
             import sirt_ops
             with sirt_ops.ostream_redirect():  # RAII context from pybind11
-                if slowdown_time > 0:
+                if self.slowdown_time > 0:
                     time.sleep(self.slowdown_time/1000)
                 out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
         except Exception as e:
