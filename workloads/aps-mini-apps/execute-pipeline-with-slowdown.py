@@ -69,6 +69,7 @@ def parse_arguments():
     p.add_argument('--window_iter', type=str, default="1")
     p.add_argument('--thread_count', type=int, default=1)
     p.add_argument('--center', type=float, default=0.0)
+    p.add_argument('--slowdown', type=int, default=0)
     return p.parse_args()
 
 # Checksum
