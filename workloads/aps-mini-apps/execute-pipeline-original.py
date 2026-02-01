@@ -91,6 +91,7 @@ def fnv1a32(data) -> int:
         h = (h * 0x01000193) & 0xFFFFFFFF
     return h
 
+<<<<<<< HEAD
 
 MASK32 = 0xFFFFFFFF
 
@@ -130,6 +131,8 @@ def invhash_u32(k):
     return k & MASK32
 
 
+=======
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
 # -------------------------
 # IO helpers
 # -------------------------
@@ -679,9 +682,12 @@ class DaqDistLight(FlatMapFunction):
         self._sent_bytes = 0
         self._last_log = self._t0
 
+<<<<<<< HEAD
         self.task_id = -1
         self.num_tasks = 0
 
+=======
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
     # ---------- small utils ----------
     def _safe_mkdir_for_file(self, path):
         if not path: return
@@ -765,9 +771,12 @@ class DaqDistLight(FlatMapFunction):
             # serializer
             self.serializer = TraceSerializer.ImageSerializer()
 
+<<<<<<< HEAD
             self.task_id = ctx.get_index_of_this_subtask()
             self.num_tasks = ctx.get_number_of_parallel_subtasks()
 
+=======
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
             # # Identify row_id from subtask index
             # subtask_index = ctx.get_index_of_this_subtask()
             # total_subtasks = ctx.get_number_of_parallel_subtasks()
@@ -816,6 +825,7 @@ class DaqDistLight(FlatMapFunction):
         row: (seq, row_id, iteration, kind)
         """
         try:
+<<<<<<< HEAD
             # # seq, row_id, iteration, kind = row
             # row_id, seq, iteration, kind = row
             # row_id = int(row_id)
@@ -826,6 +836,13 @@ class DaqDistLight(FlatMapFunction):
 
             # print(f"[DaqDistLight.flat_map][{self.task_id}/{self.num_tasks}] received: row_id={row_id} seq={seq} iteration={iteration} kind={kind}")
             print(f"[DaqDistLight.flat_map][{self.task_id}/{self.num_tasks}] received: seq={seq} iteration={iteration} kind={kind}")
+=======
+            seq, row_id, iteration, kind = row
+            row_id = int(row_id)
+            seq = int(seq)
+
+            print(f"[DaqDistLight.flat_map] received: row_id={row_id} seq={seq} iteration={iteration} kind={kind}")
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
 
             # lazily load per-row progress
             # self._maybe_load_progress(row_id)
@@ -834,14 +851,22 @@ class DaqDistLight(FlatMapFunction):
             if kind == "WARMUP":
                 # Broadcast one WARMUP per row_id, in-order, from the single ordered source
                 for r in range(int(self.args.num_sinograms)):
+<<<<<<< HEAD
                     yield [row_id, {"Type": "WARMUP", "row_id": str(r)}, b""]
+=======
+                    yield [{"Type": "WARMUP", "row_id": str(r)}, b""]
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
                 return
 
             if kind == "FIN":
                 # Force a final save, then broadcast FIN to every row_id
                 self._maybe_save_progress(force=True)
                 for r in range(int(self.args.num_sinograms)):
+<<<<<<< HEAD
                     yield [row_id, {"Type": "FIN", "row_id": str(r)}, b""]
+=======
+                    yield [{"Type": "FIN", "row_id": str(r)}, b""]
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
                 return
 
             # DATA path
@@ -921,6 +946,7 @@ class DaqDistLight(FlatMapFunction):
                 sub[np.where(sub == np.inf)] = 0.0
 
             # split across num_sinograms and select ONLY this row_id's slice
+<<<<<<< HEAD
             for original_row_id in range(int(self.args.num_sinograms)):
                 row_id = invhash_u32(original_row_id)
                 # H, W = sub.shape[1], sub.shape[2]
@@ -943,6 +969,25 @@ class DaqDistLight(FlatMapFunction):
                 chunk = sub[:, row_id, :].astype(np.float32, copy=False).ravel()
                 theta = img.Rotation()
                 center = img.Center() or (float(sub.shape[2]) / 2.0)
+=======
+            for row_id in range(int(self.args.num_sinograms)):
+                H, W = sub.shape[1], sub.shape[2]
+                off, rows_here = self._split_rows(H, int(self.args.num_sinograms), row_id)
+                if rows_here == 0:
+                    # nothing for this key; still advance progress
+                    self._last_seq = seq
+                    self._emitted_since_save += 1
+                    self._maybe_save_progress()
+                    yield [{"Type": "WARMUP", "row_id": str(row_id)}, b""]
+                    return
+
+                chunk = sub[:, off:off+rows_here, :].astype(np.float32, copy=False).ravel()
+
+                # metadata expected downstream
+                theta = img.Rotation()
+                if self.args.degree_to_radian: theta *= math.pi / 180.0
+                center = img.Center() or (float(W) / 2.0)
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
 
                 meta = {
                     "Type": "MSG_DATA_REP",
@@ -952,9 +997,15 @@ class DaqDistLight(FlatMapFunction):
                     "theta": str(float(theta)),
                     "center": str(float(center)),
                     "dtype": "float32",
+<<<<<<< HEAD
                     # "rank_dims_0": "1",
                     # "rank_dims_1": str(int(rows_here)),
                     # "rank_dims_2": str(int(W)),
+=======
+                    "rank_dims_0": "1",
+                    "rank_dims_1": str(int(rows_here)),
+                    "rank_dims_2": str(int(W)),
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
                 }
                 if self.args.checksum:
                     meta["checksum"] = fnv1a32(chunk.view(np.uint8))
@@ -970,6 +1021,7 @@ class DaqDistLight(FlatMapFunction):
                 self._emitted_since_save += 1
                 self._maybe_save_progress()
 
+<<<<<<< HEAD
                 print(f"[DaqDistLight.flat_map][{self.task_id}/{self.num_tasks}] emitting row_id={row_id}({original_row_id}) seq={seq} "
                       f"proj_id={img.UniqueId()} theta={theta:.4f} center={center:.2f} "
                       f"size={len(out_bytes)} bytes")
@@ -977,6 +1029,12 @@ class DaqDistLight(FlatMapFunction):
 
         except Exception as e:
             print(f"[DaqDistLight][{self.task_id}/{self.num_tasks}] exception:", e, file=sys.stderr)
+=======
+                yield [meta, out_bytes]
+
+        except Exception as e:
+            print("[DaqDistLight] exception:", e, file=sys.stderr)
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
             traceback.print_exc()
             # If you want the job to restart on data errors, re-raise:
             # raise
@@ -1006,10 +1064,16 @@ class SirtOperator(FlatMapFunction):
         self.engine = None
         self.snap_state = None
         self.count_state = None
+<<<<<<< HEAD
         self.processed_local = {}
         self._restored = {}
         self.task_id = -1
         self.num_tasks = 0
+=======
+        self.processed_local = 0
+        self._restored = False
+        self.task_id = -1
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
 
     def open(self, ctx: RuntimeContext):
         print("SirtOperator initializing (keyed)...")
@@ -1025,7 +1089,11 @@ class SirtOperator(FlatMapFunction):
         # --- partitioning / setup ---
         try:
             self.task_id = ctx.get_index_of_this_subtask()
+<<<<<<< HEAD
             self.num_tasks = ctx.get_number_of_parallel_subtasks()
+=======
+            num_tasks = ctx.get_number_of_parallel_subtasks()
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
             # total_sinograms = int(self.cfg["num_sinograms"])
             total_sinograms = 1
             n_sinograms = 1
@@ -1070,12 +1138,20 @@ class SirtOperator(FlatMapFunction):
               f"restored_count=deferred, "
               f"thread_count={self.cfg['thread_count']}")
     
+<<<<<<< HEAD
     def _maybe_restore(self, row_id):
         # Try until we either restored bytes or confirmed there's nothing to restore.
         if row_id in self._restored and self._restored[row_id] == True:
             return
         try:
             print(f"SirtOperator: Task-{self.task_id}/{self.num_tasks} restoring state (row_id: {row_id})...")
+=======
+    def _maybe_restore(self):
+        # Try until we either restored bytes or confirmed there's nothing to restore.
+        if self._restored:
+            return
+        try:
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
             raw = self.snap_state.value()   # keyed ValueState for the current key
             cnt_state = self.count_state.value()
             # print(f"[SirtOperator]: restoring from checkpoint: count = {cnt_state}")
@@ -1089,12 +1165,20 @@ class SirtOperator(FlatMapFunction):
                 # also restore counter if present
                 # cnt = self.count_state.value()
                 # cnt = cnt_state
+<<<<<<< HEAD
                 self.processed_local[row_id] = int(cnt_state) if cnt_state is not None else 0
+=======
+                self.processed_local = int(cnt_state) if cnt_state is not None else self.processed_local
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
                 print(f"[SirtOperator] Restored {len(raw_bytes)} bytes from state with processed_local = {cnt_state}")
             else:
                 # No bytes yet for this key; don't flip the flag so we can retry
                 print(f"[SirtOperator] Cannot find previous state. Start from beginning")
+<<<<<<< HEAD
                 self.processed_local[row_id] = 0
+=======
+                return
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
             # cnt_state = self.count_state.value()
             # self.processed_local = int(cnt_state) if cnt_state is not None else self.processed_local
             # print(f"[SirtOperator] restored with processed_local = {self.processed_local}")
@@ -1102,14 +1186,22 @@ class SirtOperator(FlatMapFunction):
             print("[SirtOperator] restore step failed:", e, file=sys.stderr)
             traceback.print_exc()
             # keep _restored = False to retry on the next element
+<<<<<<< HEAD
         self._restored[row_id] = True
 
 
     def _do_snapshot(self, row_id):
+=======
+        self._restored = True
+
+
+    def _do_snapshot(self):
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
         """Snapshot engine & persist to Flink state. Crash if it fails so Flink restores."""
         try:
             import sirt_ops
             with sirt_ops.ostream_redirect(): 
+<<<<<<< HEAD
                 snap = self.engine.snapshot(row_id)
             snap_bytes = snap if isinstance(snap, (bytes, bytearray)) else bytes(snap)
             self.snap_state.update(snap_bytes)
@@ -1119,6 +1211,17 @@ class SirtOperator(FlatMapFunction):
             cnt = self.count_state.value()
             # print(f"[SirtOperator] snapshot at {self.processed_local} tuples: {len(snap_bytes)} bytes: self = {len(raw)}, count = {cnt}")
             print(f"[SirtOperator] snapshot at {self.processed_local[row_id]} tuples: count = {cnt}")
+=======
+                snap = self.engine.snapshot()
+            snap_bytes = snap if isinstance(snap, (bytes, bytearray)) else bytes(snap)
+            self.snap_state.update(snap_bytes)
+            # self.snap_state.update(bytes([1, 2, 3]))
+            self.count_state.update(self.processed_local)
+            # raw = self.snap_state.value()
+            cnt = self.count_state.value()
+            # print(f"[SirtOperator] snapshot at {self.processed_local} tuples: {len(snap_bytes)} bytes: self = {len(raw)}, count = {cnt}")
+            print(f"[SirtOperator] snapshot at {self.processed_local} tuples: count = {cnt}")
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
         except Exception as e:
             print("[SirtOperator] engine.snapshot failed:", e, file=sys.stderr)
             traceback.print_exc()
@@ -1126,9 +1229,14 @@ class SirtOperator(FlatMapFunction):
 
     # def process_element(self, value, ctx):
     def flat_map(self, value):
+<<<<<<< HEAD
         row_id, meta_in, payload = value
         original_row_id = hash_u32(row_id)
         self._maybe_restore(row_id)
+=======
+        meta_in, payload = value
+        self._maybe_restore()
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
         print(f"SirtOperator: Received msg: {meta_in}, size {len(payload)} bytes")
 
         # FIN: persist one final snapshot then pass through
@@ -1140,7 +1248,11 @@ class SirtOperator(FlatMapFunction):
             yield value
             return
         if isinstance(meta_in, dict) and meta_in.get("Type") == "FIN":
+<<<<<<< HEAD
             self._do_snapshot(row_id)
+=======
+            self._do_snapshot()
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
             yield value
             return
 
@@ -1152,8 +1264,11 @@ class SirtOperator(FlatMapFunction):
                 if checksum != meta_in["checksum"]:
                     print(f"SirtOperator: CORRUPTION -- checksum does not match: checksum = {checksum} --> {meta_in}, ")
                 meta_in["checksum"] = str(checksum)
+<<<<<<< HEAD
             else:
                 meta_in["checksum"] = "0"
+=======
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
             import sirt_ops
             with sirt_ops.ostream_redirect():  # RAII context from pybind11
                 out_bytes, out_meta = self.engine.process(self.cfg, meta_in or {}, payload)
@@ -1162,11 +1277,19 @@ class SirtOperator(FlatMapFunction):
             traceback.print_exc()
             return
 
+<<<<<<< HEAD
         self.processed_local[row_id] += 1
 
         # count-based snapshot
         if self.processed_local[row_id] % self.every_n == 0:
             self._do_snapshot(row_id)
+=======
+        self.processed_local += 1
+
+        # count-based snapshot
+        if self.processed_local % self.every_n == 0:
+            self._do_snapshot()
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
 
         if len(out_bytes):
             # print(f"SirtOperator: Emitting msg: {meta_in}, size {len(out_bytes)} bytes")
@@ -1175,8 +1298,13 @@ class SirtOperator(FlatMapFunction):
             row_id = out_meta["row_id"]
             import time
             now = time.time()
+<<<<<<< HEAD
             print(f"[{now}] SirtOperator -- Task-{self.task_id}: Sent: row_id={row_id}({original_row_id}) stream={iteration_stream}")
             yield [row_id, dict(out_meta), bytes(out_bytes)]
+=======
+            print(f"[{now}] SirtOperator -- Task-{self.task_id}: Sent: row_id={row_id} stream={iteration_stream}")
+            yield [dict(out_meta), bytes(out_bytes)]
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
 
 
 class SimplifiedSirtOperator(FlatMapFunction):
@@ -1224,7 +1352,11 @@ class SimplifiedSirtOperator(FlatMapFunction):
     #         return
 
     def flat_map(self, value):
+<<<<<<< HEAD
         row_id, meta_in, payload = value
+=======
+        meta_in, payload = value
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
         # self._maybe_restore()
         if self._restored == False:
             try:
@@ -1238,7 +1370,11 @@ class SimplifiedSirtOperator(FlatMapFunction):
         
         # rank = meta_in["row_id"]
         # yield [{"Type": "WARMUP", "row_id": str(rank)}, b""]
+<<<<<<< HEAD
         yield [row_id, {"Type": "WARMUP"}, b""]
+=======
+        yield [{"Type": "WARMUP"}, b""]
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
         
         self.processed_local += 1
 
@@ -1295,18 +1431,30 @@ class DenoiserOperator(FlatMapFunction):
     def flat_map(self, value):
         # self._maybe_restore()
         try:
+<<<<<<< HEAD
             row_id, meta, data = value
 
             if meta.get("Type") == "WARMUP":
                 print(f"DenoiserOperator: Received warm-up msg: {meta}, size {len(data)} bytes")
                 yield (row_id, meta, data)
+=======
+            meta, data = value
+
+            if meta.get("Type") == "WARMUP":
+                print(f"DenoiserOperator: Received warm-up msg: {meta}, size {len(data)} bytes")
+                yield (meta, data)
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
                 return
 
             # Handle FIN first (FIN arrives with empty payload)
             if isinstance(meta, dict) and meta.get("Type") == "FIN":
                 self.running = False
                 print("DenoiserOperator: stopping processing", meta)
+<<<<<<< HEAD
                 yield (row_id, "FIN", None)
+=======
+                yield ("FIN", None)
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
                 return
             # if not self.running:
             #     print("DenoiserOperator: stopped running, skip processing", meta)
@@ -1354,7 +1502,11 @@ class DenoiserOperator(FlatMapFunction):
                 self.count += 1
                 del self.waiting_metadata[iteration_stream]
                 del self.waiting_data[iteration_stream]
+<<<<<<< HEAD
                 yield (row_id, "DENOISED", str(iteration_stream))
+=======
+                yield ("DENOISED", str(iteration_stream))
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
         except Exception as e:
             import sys, traceback
             print("[DenoiserOperator] exception:", e, file=sys.stderr)
@@ -1416,6 +1568,7 @@ def task_key_selector(value):
         print(f"KeySelector: row_id not found, try random --> key = {tid}, num_keys={num_keys}")
         return tid
 
+<<<<<<< HEAD
 def key_row_selector(value):
     # try:
     #     print(f"KeyRowSelector: Received value: {value}")
@@ -1430,6 +1583,8 @@ def key_row_selector(value):
     row_id = value[0]
     return int(row_id)
 
+=======
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
 class TaskIdPartitioner(Partitioner):
     def partition(self, key, num_partitions: int):
         # route directly to the target subtask = key
@@ -1518,11 +1673,19 @@ def main():
     env.enable_checkpointing(10000, CheckpointingMode.EXACTLY_ONCE)
     ck = env.get_checkpoint_config()
     ck.set_checkpoint_timeout(15 * 60 * 1000)          # 15 min timeout
+<<<<<<< HEAD
     ck.set_max_concurrent_checkpoints(1)               # avoid overlaps
     # ck.set_min_pause_between_checkpoints(5 * 1000)     # 5s pause
 
     # Comment out because we use custom partitioning
     ck.enable_unaligned_checkpoints(True)              # helps under backpressure
+=======
+    # ck.set_max_concurrent_checkpoints(1)               # avoid overlaps
+    # ck.set_min_pause_between_checkpoints(5 * 1000)     # 5s pause
+
+    # Comment out because we use custom partitioning
+    # ck.enable_unaligned_checkpoints(True)              # helps under backpressure
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
     # ck.set_aligned_checkpoint_timeout(Duration.of_seconds(0))        # switch to unaligned if align >3s
 
     # env.disable_operator_chaining()
@@ -1556,6 +1719,7 @@ def main():
         .build()
     )
 
+<<<<<<< HEAD
     # # rows: row_id = 0..n-1 (exactly once each)
     # t_env.create_temporary_table(
     #     "rows_tbl",
@@ -1569,20 +1733,42 @@ def main():
     #     .option("fields.row_id.end", str(n - 1))
     #     .build()
     # )
+=======
+    # rows: row_id = 0..n-1 (exactly once each)
+    t_env.create_temporary_table(
+        "rows_tbl",
+        TableDescriptor.for_connector("datagen")
+        .schema(Schema.new_builder()
+                .column("row_id", DataTypes.INT())
+                .build())
+        .option("rows-per-second", str(max(1, n)))
+        .option("fields.row_id.kind", "sequence")
+        .option("fields.row_id.start", "0")
+        .option("fields.row_id.end", str(n - 1))
+        .build()
+    )
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
 
     # data_view: (seq, row_id, iter, kind='DATA')
     data_view = (
         t_env.from_path("tick_data")
             .add_columns(
+<<<<<<< HEAD
                 # # row_id = MOD(seq-1, n)
                 # E.call_sql(f"CAST(MOD(seq - 1, {n}) AS INT)").alias("row_id"),
                 # # iter = FLOOR((seq-1)/num_sinogram_projections)
+=======
+                # row_id = MOD(seq-1, n)
+                E.call_sql(f"CAST(MOD(seq - 1, {n}) AS INT)").alias("row_id"),
+                # iter = FLOOR((seq-1)/num_sinogram_projections)
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
                 E.call_sql(f"CAST(FLOOR((seq - 1) / {args.num_sinogram_projections}) AS INT)").alias("iter"),
                 E.lit("DATA").alias("kind"))
     )
 
     t_env.create_temporary_view("data_view", data_view)
 
+<<<<<<< HEAD
     # # warmup_view: one WARMUP per row_id
     # warmup_view = (
     #     t_env.from_path("rows_tbl")
@@ -1623,6 +1809,31 @@ def main():
     """)
     t_env.create_temporary_view("fin_view", fin_view)
 
+=======
+    # warmup_view: one WARMUP per row_id
+    warmup_view = (
+        t_env.from_path("rows_tbl")
+            .select(
+                E.lit(0).cast(DataTypes.BIGINT()).alias("seq"),
+                E.col("row_id"),
+                E.lit(0).cast(DataTypes.INT()).alias("iter"),
+                E.lit("WARMUP").alias("kind"))
+    )
+
+    t_env.create_temporary_view("warmup_view", warmup_view)
+
+    # fin_view: one FIN per row_id
+    fin_view = (
+        t_env.from_path("rows_tbl")
+            .select(
+                E.lit(total_rows - 1).cast(DataTypes.BIGINT()).alias("seq"),
+                E.col("row_id"),
+                E.lit(int(args.d_iteration)).cast(DataTypes.INT()).alias("iter"),
+                E.lit("FIN").alias("kind"))
+    )
+
+    t_env.create_temporary_view("fin_view", fin_view)
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
 
     # Union all three
     tick_src_all = (
@@ -1637,6 +1848,7 @@ def main():
     kick = (
         t_env.to_data_stream(t_env.from_path("tick_src_all"))
             .map(
+<<<<<<< HEAD
                 # lambda r: Row(int(r[0]), int(r[1]), int(r[2]), str(r[3])),
                 # output_type=Types.ROW([Types.LONG(), Types.INT(), Types.INT(), Types.STRING()])
 
@@ -1645,6 +1857,10 @@ def main():
                 # lambda r: Row(int(r[0]), int(r[1]), str(r[2])),
                 lambda r: Row(int(r[0]), invhash_u32(int(r[1])), str(r[2])),
                 output_type=Types.ROW([Types.LONG(), Types.INT(), Types.STRING()])
+=======
+                lambda r: Row(int(r[0]), int(r[1]), int(r[2]), str(r[3])),
+                output_type=Types.ROW([Types.LONG(), Types.INT(), Types.INT(), Types.STRING()])
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
             )
             .name("Tick+RowId")
     )
@@ -1677,6 +1893,7 @@ def main():
     #     # .disable_chaining().start_new_chain() \
     #     # .slot_sharing_group("daq")
 
+<<<<<<< HEAD
     # pre = kick.key_by(lambda r: r[0], key_type=Types.INT())
 
     # daqdist = pre.key_by(lambda r: r[0], key_type=Types.INT()) \
@@ -1688,6 +1905,16 @@ def main():
             output_type=Types.PICKLED_BYTE_ARRAY()
         # ).name("DaqDistLight").set_parallelism(1)
         ).name("DaqDistLight").set_parallelism(max(1, args.ntask_sirt))
+=======
+    pre = kick.key_by(lambda r: int(r[1]), key_type=Types.INT())
+
+    daqdist = pre.flat_map(
+    # daqdist = kick.flat_map(
+        DaqDistLight(args),
+        output_type=Types.PICKLED_BYTE_ARRAY()
+    # ).name("DaqDistLight").set_parallelism(1)
+    ).name("DaqDistLight").set_parallelism(max(1, args.ntask_sirt))
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
 
     # probe = daq.map(VersionProbe(), output_type=Types.PICKLED_BYTE_ARRAY()).name("Version Probe")
     # dist = probe.flat_map(
@@ -1735,9 +1962,13 @@ def main():
     # #         SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
     # #         output_type=Types.PICKLED_BYTE_ARRAY()) \
     # sirt = dist.key_by(task_key_selector, key_type=Types.INT()) \
+<<<<<<< HEAD
     # sirt = daqdist.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
     # sirt = daqdist.key_by(lambda r: r[0], key_type=Types.INT()) \
     sirt = daqdist.key_by(key_row_selector, key_type=Types.INT()) \
+=======
+    sirt = daqdist.key_by(key_selector=task_key_selector, key_type=Types.INT()) \
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
         .flat_map(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
     # sirt = daqdist.flat_map(SirtOperator(cfg=args, every_n=int(args.ckpt_freq)),
             output_type=Types.PICKLED_BYTE_ARRAY()) \
@@ -1749,6 +1980,7 @@ def main():
         # .slot_sharing_group("sirt")
 
 
+<<<<<<< HEAD
     # den = sirt.key_by(lambda r: r[0], key_type=Types.INT()) \
     den = sirt.key_by(key_row_selector, key_type=Types.INT()) \
         .flat_map(
@@ -1757,6 +1989,14 @@ def main():
         ).name("Denoiser Operator").set_parallelism(1) \
             # .disable_chaining().start_new_chain() \
             # .slot_sharing_group("den")
+=======
+    den = sirt.flat_map(
+        DenoiserOperator(args),
+        output_type=Types.PICKLED_BYTE_ARRAY()
+    ).name("Denoiser Operator").set_parallelism(1) \
+        # .disable_chaining().start_new_chain() \
+        # .slot_sharing_group("den")
+>>>>>>> 6b91dae2b8f6b03286f3776f09162495fe5690c4
 
     den.print().name("Denoiser Sink").set_parallelism(1)
 
