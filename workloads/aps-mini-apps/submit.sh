@@ -124,5 +124,5 @@ REMOTE=${REMOTE//__FLINK_BIN__/$(escape "$FLINK_BIN")}
 REMOTE=${REMOTE//__PYARGS__/$(escape "$PYARGS")}
 
 echo "[submit] Submitting from login node to JM host: $JM_HOST"
-ssh -o BatchMode=yes "$JM_HOST" "$REMOTE"
+time ssh -o BatchMode=yes "$JM_HOST" "$REMOTE"
 echo "[submit] Done. Check Flink UI on the JM (:8081) and logs if needed."
